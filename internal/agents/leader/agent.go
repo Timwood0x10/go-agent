@@ -4,10 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"styleagent/internal/agents/base"
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
-	"styleagent/internal/protocol/ahp"
+	"goagent/internal/agents/base"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
+	"goagent/internal/protocol/ahp"
 )
 
 // Agent represents the Leader Agent interface.

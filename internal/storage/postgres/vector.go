@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"styleagent/internal/core/errors"
+	"goagent/internal/core/errors"
 )
 
 // VectorSearcher handles vector similarity search.

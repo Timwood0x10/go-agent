@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
 )
 
 // Repository provides a unified interface for all data access.

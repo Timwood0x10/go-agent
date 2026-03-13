@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
 )
 
 // RecommendRepository handles recommendation persistence.

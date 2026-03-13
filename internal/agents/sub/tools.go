@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"styleagent/internal/core/errors"
+	"goagent/internal/core/errors"
 )
 
 // toolBinder binds and calls tools.

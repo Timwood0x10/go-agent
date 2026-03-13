@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"styleagent/internal/core/errors"
+	"goagent/internal/core/errors"
 )
 
 // MessageQueue represents an in-memory message queue for agent communication.

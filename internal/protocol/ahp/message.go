@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 // AHPMethod represents the type of AHP message.
@@ -20,14 +20,14 @@ const (
 
 // AHPMessage represents the message structure for Agent communication.
 type AHPMessage struct {
-	MessageID   string                 `json:"message_id"`
-	Method      AHPMethod              `json:"method"`
-	AgentID     string                 `json:"agent_id"`
-	TargetAgent string                 `json:"target_agent"`
-	TaskID      string                 `json:"task_id"`
-	SessionID   string                 `json:"session_id"`
-	Payload     map[string]any         `json:"payload"`
-	Timestamp   time.Time              `json:"timestamp"`
+	MessageID   string         `json:"message_id"`
+	Method      AHPMethod      `json:"method"`
+	AgentID     string         `json:"agent_id"`
+	TargetAgent string         `json:"target_agent"`
+	TaskID      string         `json:"task_id"`
+	SessionID   string         `json:"session_id"`
+	Payload     map[string]any `json:"payload"`
+	Timestamp   time.Time      `json:"timestamp"`
 }
 
 // NewMessage creates a new AHPMessage.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"styleagent/internal/core/models"
-	"styleagent/internal/protocol/ahp"
+	"goagent/internal/core/models"
+	"goagent/internal/protocol/ahp"
 )
 
 // Agent represents the base interface for all agents.

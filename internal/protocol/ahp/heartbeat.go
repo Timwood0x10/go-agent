@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 // HeartbeatConfig holds the configuration for heartbeat mechanism.

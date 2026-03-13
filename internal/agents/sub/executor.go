@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 // taskExecutor executes recommendation tasks.

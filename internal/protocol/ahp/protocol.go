@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
 )
 
 // Protocol represents the AHP protocol manager.

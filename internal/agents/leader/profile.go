@@ -3,7 +3,7 @@ package leader
 import (
 	"context"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 // profileParser parses user profile from natural language input.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"styleagent/internal/core/errors"
+	"goagent/internal/core/errors"
 )
 
 // Migrate runs database migrations.

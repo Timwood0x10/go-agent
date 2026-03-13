@@ -9,7 +9,7 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"styleagent/internal/core/errors"
+	"goagent/internal/core/errors"
 )
 
 // Pool represents a database connection pool with "get usage release" pattern.

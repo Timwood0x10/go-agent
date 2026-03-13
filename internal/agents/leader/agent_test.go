@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 func TestProfileParser_Parse(t *testing.T) {

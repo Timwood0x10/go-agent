@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"styleagent/internal/core/models"
-	"styleagent/internal/protocol/ahp"
+	"goagent/internal/core/models"
+	"goagent/internal/protocol/ahp"
 )
 
 func TestTaskExecutor_Execute(t *testing.T) {

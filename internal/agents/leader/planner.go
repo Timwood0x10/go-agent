@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
 )
 
 // taskPlanner creates tasks based on user profile.

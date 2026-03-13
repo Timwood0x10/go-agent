@@ -26,7 +26,7 @@ func DefaultConfig() *Config {
 		Port:            5432,
 		User:            "postgres",
 		Password:        "postgres",
-		Database:        "styleagent",
+		Database:        "goagent",
 		MaxOpenConns:    25,
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,

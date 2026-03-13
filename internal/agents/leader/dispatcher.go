@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"styleagent/internal/core/errors"
-	"styleagent/internal/core/models"
-	"styleagent/internal/protocol/ahp"
+	"goagent/internal/core/errors"
+	"goagent/internal/core/models"
+	"goagent/internal/protocol/ahp"
 )
 
 // taskDispatcher dispatches tasks to sub-agents.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"styleagent/internal/protocol/ahp"
+	"goagent/internal/protocol/ahp"
 )
 
 // heartbeatSender sends heartbeat to leader.

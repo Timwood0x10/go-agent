@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"styleagent/internal/core/models"
+	"goagent/internal/core/models"
 )
 
 // resultAggregator aggregates results from sub-agents.
