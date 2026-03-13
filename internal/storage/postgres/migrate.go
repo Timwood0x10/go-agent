@@ -1,0 +1,94 @@
+package postgres
+
+import (
+	"context"
+	"fmt"
+
+	"styleagent/internal/core/errors"
+)
+
+// Migrate runs database migrations.
+func Migrate(ctx context.Context, pool *Pool) error {
+	migrations := []string{
+		// User profiles table
+		`CREATE TABLE IF NOT EXISTS user_profiles (
+			user_id VARCHAR(255) PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			gender VARCHAR(50),
+			age INTEGER,
+			occupation VARCHAR(255),
+			style JSONB,
+			budget JSONB,
+			colors JSONB,
+			occasions JSONB,
+			body_type VARCHAR(100),
+			preferences JSONB,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW()
+		)`,
+
+		// Sessions table
+		`CREATE TABLE IF NOT EXISTS sessions (
+			session_id VARCHAR(255) PRIMARY KEY,
+			user_id VARCHAR(255) NOT NULL,
+			input TEXT,
+			status VARCHAR(50),
+			user_profile JSONB,
+			metadata JSONB,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
+			expired_at TIMESTAMP,
+			INDEX idx_sessions_user_id (user_id),
+			INDEX idx_sessions_expired_at (expired_at)
+		)`,
+
+		// Recommendations table
+		`CREATE TABLE IF NOT EXISTS recommendations (
+			id SERIAL PRIMARY KEY,
+			session_id VARCHAR(255) UNIQUE NOT NULL,
+			user_id VARCHAR(255) NOT NULL,
+			items JSONB,
+			reason TEXT,
+			total_price DECIMAL(10, 2),
+			match_score DECIMAL(5, 2),
+			occasion VARCHAR(100),
+			season VARCHAR(50),
+			feedback JSONB,
+			metadata JSONB,
+			created_at TIMESTAMP DEFAULT NOW(),
+			INDEX idx_recommendations_user_id (user_id),
+			INDEX idx_recommendations_created_at (created_at)
+		)`,
+
+		// Vector embeddings table (basic - requires pgvector extension)
+		`CREATE TABLE IF NOT EXISTS embeddings (
+			id VARCHAR(255) PRIMARY KEY,
+			table_name VARCHAR(100) NOT NULL,
+			embedding VECTOR(1536),
+			metadata JSONB,
+			created_at TIMESTAMP DEFAULT NOW(),
+			INDEX idx_embeddings_table_name (table_name)
+		)`,
+	}
+
+	for i, migration := range migrations {
+		if _, err := pool.Exec(ctx, migration); err != nil {
+			return fmt.Errorf("migration %d failed: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// RollbackLast rolls back the last migration.
+func RollbackLast(ctx context.Context, pool *Pool) error {
+	// Note: This is a simplified implementation
+	// In production, use a proper migration tool like golang-migrate
+	return errors.ErrQueryFailed
+}
+
+// Seed creates seed data for testing.
+func Seed(ctx context.Context, pool *Pool) error {
+	// Add sample data for testing
+	return nil
+}
