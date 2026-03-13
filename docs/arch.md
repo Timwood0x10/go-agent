@@ -217,12 +217,195 @@
 
 | 特性 | 实现方式 |
 |------|----------|
-| **并发模型** | `ThreadPoolExecutor` 派发任务到多个 Sub Agent |
+| **并发模型** | Worker Pool 派发任务到多个 Sub Agent |
 | **通信协议** | In-Memory Message Queue + AHP 自定义协议 |
-| **状态管理** | `SessionMemory` 短期会话 + `TaskMemory` 蒸馏 |
+| **状态管理** | SessionMemory 短期会话 + TaskMemory 蒸馏 |
 | **容错机制** | DLQ 存储失败消息，支持重试 |
 | **任务协调** | Phase 1 (并行) → Phase 2 (依赖感知) |
 | **扩展性** | 可动态注册新的 Agent 类型 |
+| **Agent 定义** | Markdown 文件配置，支持热加载 |
+| **工作流编排** | YAML/JSON DSL，用户自定义流程 |
+| **LLM 输出** | 四层保障机制确保输出一致性 |
+
+---
+
+## Agent 定义 (Markdown 配置)
+
+Agent 采用 Markdown 文件定义，允许非开发人员通过编辑配置文件调整 Agent 行为。
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Agent Definition (Markdown)                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ # agent_top.md                                               │
+├─────────────────────────────────────────────────────────────┤
+│ ## Metadata                                                 │
+│ name: agent_top                                             │
+│ version: 1.0.0                                             │
+│                                                             │
+│ ## Role                                                     │
+│ 你是一位专业的时尚穿搭顾问，专注于上衣搭配建议。              │
+│                                                             │
+│ ## Profile                                                  │
+│ expertise: 上衣搭配                                         │
+│ category: tops                                              │
+│ style_tags: [casual, formal, street]                        │
+│                                                             │
+│ ## Tools                                                    │
+│ - fashion_search                                            │
+│ - weather_check                                             │
+│ - style_recomm                                              │
+│                                                             │
+│ ## Instructions                                             │
+│ 1. 根据用户风格偏好推荐合适的款式                           │
+│ 2. 考虑当地天气因素                                         │
+│ 3. 匹配用户预算范围                                         │
+│                                                             │
+│ ## Output Format                                            │
+│ ```json                                                     │
+│ { "items": [...], "reason": "..." }                        │
+│ ```                                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 内置变量
+
+| 变量 | 说明 |
+|------|------|
+| {{.UserProfile}} | 用户画像 |
+| {{.SessionID}} | 会话 ID |
+| {{.Context}} | 上下文信息 |
+| {{.Input}} | 用户输入 |
+| {{.Results}} | 上游结果 |
+
+---
+
+## Workflow Engine (工作流编排)
+
+用户可以通过 YAML/JSON 文件自定义工作流，实现灵活的 Agent 编排。
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Workflow Engine                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  workflow.yaml                                                       │
+├─────────────────────────────────────────────────────────────────────┤
+│  name: "穿搭推荐流程"                                               │
+│                                                                     │
+│  agents:                                                            │
+│    - id: leader                                                     │
+│      type: leader                                                  │
+│      prompt_file: ./agents/agent_leader.md                         │
+│                                                                     │
+│    - id: agent_top                                                 │
+│      type: sub                                                     │
+│      prompt_file: ./agents/agent_top.md                            │
+│      depends_on: [leader]                                          │
+│                                                                     │
+│    - id: agent_shoes                                               │
+│      type: sub                                                     │
+│      prompt_file: ./agents/agent_shoes.md                          │
+│      depends_on: [leader, agent_top]                               │
+│                                                                     │
+│  execution:                                                         │
+│    phase1: [agent_top, agent_bottom]                             │
+│    phase2: [agent_shoes]                                          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 目录结构
+
+```
+workflows/
+├── default.yaml          # 默认工作流
+├── summer.yaml           # 夏季推荐
+├── winter.yaml           # 冬季推荐
+│
+├── agents/               # Agent Markdown 定义
+│   ├── agent_leader.md
+│   ├── agent_top.md
+│   ├── agent_bottom.md
+│   ├── agent_shoes.md
+│   └── agent_accessory.md
+│
+└── templates/           # 模板
+```
+
+---
+
+## LLM Output 标准化
+
+多 LLM 输出通过四层保障机制确保一致性。
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    LLM Output Standardization                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Layer 1: Prompt Template
+┌────────────────────────────────────────────────────────────────┐
+│ {{.Instructions}}                                                │
+│ Output Format:                                                   │
+│ ```json                                                          │
+│ { "items": [...], "reason": "..." }                            │
+│ ```                                                              │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+Layer 2: JSON Schema / Tool Calling
+┌────────────────────────────────────────────────────────────────┐
+│ {                                                                │
+│   "type": "object",                                             │
+│   "properties": {                                                │
+│     "items": { "type": "array" },                              │
+│     "reason": { "type": "string" }                             │
+│   }                                                              │
+│ }                                                                │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+Layer 3: Output Parser & Validator
+┌────────────────────┐    ┌────────────────────┐
+│  Parser (解析)    │───▶│  Validator (校验)  │
+│  - 提取 JSON      │    │  - Schema 验证     │
+│  - 修复破损 JSON  │    │  - 自动重试       │
+└────────────────────┘    └────────────────────┘
+                              │
+                              ▼
+Layer 4: LLM Adapter Layer
+┌────────────────────────────────────────────────────────────────┐
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                        │
+│  │ Ollama  │  │ OpenAI  │  │ Anthropic│                        │
+│  │ Adapter │  │ Adapter │  │ Adapter  │                        │
+│  └─────────┘  └─────────┘  └─────────┘                        │
+│                         (统一抽象，上层不依赖具体模型)            │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 完整调用流程
+
+```
+LLM 输出
+    │
+    ▼
+Parser 解析 ── 提取 JSON
+    │ 失败
+    ▼
+Fix JSON ── 修复破损
+    │ 失败
+    ▼
+Validator 校验 ── Schema 验证
+    │ 失败
+    ▼
+Retry (3次) ── 自动重试
+    │
+    ▼
+返回结构化结果
+```
 
 ---
 
@@ -231,21 +414,41 @@
 ```
 src/
 ├── agents/
-│   ├── leader_agent.py      # Coordinator Actor
-│   ├── sub_agent.py         # Worker Actor
-│   └── resources.py         # Tools (fashion_search, weather, style)
-├── protocol/
-│   └── ahp.py              # AHP Protocol (消息定义与队列)
+│   ├── leader/           # Leader Agent
+│   └── sub/             # Sub Agent
+│
+├── workflow/            # 工作流引擎
+│   ├── loader.go       # 加载工作流 (YAML/JSON)
+│   ├── executor.go     # 执行引擎 (DAG)
+│   └── registry.go     # Agent 注册表
+│
+├── agents/definition/  # Agent Markdown 定义
+│   ├── agent_leader.md
+│   ├── agent_top.md
+│   └── ...
+│
+├── protocol/ahp/       # AHP Protocol
+│
 ├── core/
-│   ├── models.py           # 数据模型
-│   ├── errors.py            # 错误定义
-│   └── registry.py          # Agent 注册表
-├── storage/
-│   └── postgres.py         # PostgreSQL + pgvector
-└── utils/
-    ├── llm.py              # LLM 封装 (支持 Ollama)
-    ├── context.py           # Memory System
-    └── config.py            # 配置管理
+│   ├── models/         # 数据模型
+│   ├── errors/         # 错误码
+│   └── registry/       # Agent 注册
+│
+├── llm/                # LLM 层
+│   ├── adapter/        # 多模型适配器
+│   ├── parser/         # Output Parser
+│   ├── validator/      # Schema Validator
+│   └── ollama/         # Ollama 实现
+│
+├── storage/postgres/   # PostgreSQL + pgvector
+│
+├── tools/resources/    # Tools
+│
+├── memory/context/     # Memory System
+│
+├── shutdown/           # 优雅退出
+│
+└── ratelimit/         # 限流/背压
 ```
 
 ---
@@ -408,6 +611,153 @@ type AppError struct {
 | 任务队列 | 队列长度限制 | 单队列最大 1000 条 |
 | LLM 请求 | 令牌桶 (Token Bucket) | 每秒 10 请求 |
 | 全局 QPS | 滑动窗口 | 系统最大 100 QPS |
+
+---
+
+## 数据库连接池设计
+
+采用"谁用谁连接，用完释放"的原则，避免长时间占用数据库连接资源。
+
+### 传统模式 vs 连接池模式
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    数据库连接管理模式对比                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+传统模式 (长连接):
+┌──────────┐         ┌──────────┐         ┌──────────┐
+│  Agent 1 │────────▶│   DB     │◀────────│  Agent 2 │
+│          │  占用    │  (长连接)│   占用   │          │
+└──────────┘         └──────────┘         └──────────┘
+                           │
+                           │ 连接一直保持，资源浪费
+                           ▼
+                    ┌──────────┐
+                    │  Agent 3 │────────▶ 等待...
+                    └──────────┘
+
+连接池模式 (用完释放):
+┌──────────┐         ┌──────────┐         ┌──────────┐
+│  Agent 1 │────────▶│         │◀────────│  Agent 2 │
+│  获取连接 │         │ Connection│         │ 获取连接  │
+│  使用归还 │         │   Pool   │         │ 使用归还  │
+└──────────┘         │         │         └──────────┘
+                     └──────────┘
+                           │
+                           │ 按需获取，资源高效利用
+                           ▼
+                    ┌──────────┐
+                    │  Agent 3 │────────▶ 立即获取
+                    └──────────┘
+```
+
+### 连接池设计
+
+```go
+// 连接池管理器
+type ConnectionPool struct {
+    maxOpen    int           // 最大打开连接数
+    maxIdle    int           // 最大空闲连接数
+    maxLifetime time.Duration // 连接最大生命周期
+    
+    mu         sync.Mutex
+    openCount  int           // 当前打开的连接数
+    idleCount  int           // 当前空闲的连接数
+    connections chan *DBConn  // 连接池队列
+}
+
+// 获取连接
+func (p *ConnectionPool) Get(ctx context.Context) (*DBConn, error) {
+    select {
+    case conn := <-p.connections:
+        // 从池中获取空闲连接
+        if conn.IsValid() {
+            return conn, nil
+        }
+        // 连接已过期，重新创建
+        return p.createConn()
+        
+    case <-ctx.Done():
+        return nil, ctx.Err()
+        
+    default:
+        // 池中没有空闲连接
+        if p.openCount >= p.maxOpen {
+            // 达到最大连接数，等待
+            return p.waitForConnection(ctx)
+        }
+        // 创建新连接
+        return p.createConn()
+    }
+}
+
+// 归还连接
+func (p *ConnectionPool) Put(conn *DBConn) error {
+    if !conn.IsValid() {
+        // 连接已失效，关闭
+        conn.Close()
+        p.mu.Lock()
+        p.openCount--
+        p.mu.Unlock()
+        return nil
+    }
+    
+    // 放回池中
+    select {
+    case p.connections <- conn:
+        return nil
+    default:
+        // 池已满，关闭连接
+        conn.Close()
+        p.mu.Lock()
+        p.openCount--
+        p.mu.Unlock()
+        return nil
+    }
+}
+```
+
+### Agent 使用模式
+
+```go
+// Agent 中使用连接池
+func (a *SubAgent) ExecuteTask(ctx context.Context, task *Task) (*TaskResult, error) {
+    // 从池中获取连接
+    conn, err := pool.Get(ctx)
+    if err != nil {
+        return nil, err
+    }
+    defer pool.Put(conn)  // 用完归还
+    
+    // 使用连接执行操作
+    result, err := a.doQuery(ctx, conn, task)
+    if err != nil {
+        return nil, err
+    }
+    
+    return result, nil
+}
+```
+
+### 连接池配置
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| max_open | 25 | 最大打开连接数 |
+| max_idle | 10 | 最大空闲连接数 |
+| conn_max_lifetime | 5m | 连接最大生命周期 |
+| conn_max_idle_time | 1m | 空闲连接最大存活时间 |
+| max_wait_time | 30s | 获取连接最大等待时间 |
+
+### 监控指标
+
+| 指标 | 说明 | 告警阈值 |
+|------|------|----------|
+| db_open_connections | 当前打开的连接数 | > 20 |
+| db_idle_connections | 当前空闲的连接数 | < 2 |
+| db_wait_count | 等待连接次数 | > 100 |
+| db_wait_duration | 等待连接总时长 | > 1s |
 
 ### 背压机制
 
