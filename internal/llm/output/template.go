@@ -16,13 +16,13 @@ type TemplateEngine struct {
 func NewTemplateEngine() *TemplateEngine {
 	return &TemplateEngine{
 		funcs: template.FuncMap{
-			"upper":    strings.ToUpper,
-			"lower":    strings.ToLower,
-			"title":    strings.Title,
-			"trim":     strings.TrimSpace,
-			"join":     strings.Join,
-			"json":     toJSON,
-			"to_yaml":  toYAML,
+			"upper":   strings.ToUpper,
+			"lower":   strings.ToLower,
+			"title":   strings.Title,
+			"trim":    strings.TrimSpace,
+			"join":    strings.Join,
+			"json":    toJSON,
+			"to_yaml": toYAML,
 		},
 	}
 }

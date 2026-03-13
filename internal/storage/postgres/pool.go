@@ -14,12 +14,12 @@ import (
 
 // Pool represents a database connection pool with "get usage release" pattern.
 type Pool struct {
-	cfg         *Config
-	db          *sql.DB
-	mu          sync.RWMutex
-	openCount   int
-	idleCount   int
-	waitCount   int
+	cfg          *Config
+	db           *sql.DB
+	mu           sync.RWMutex
+	openCount    int
+	idleCount    int
+	waitCount    int
 	waitDuration time.Duration
 }
 
@@ -115,9 +115,9 @@ func (p *Pool) Stats() *PoolStats {
 		OpenConnections:  stats.OpenConnections,
 		InUseConnections: stats.InUse,
 		IdleConnections:  stats.Idle,
-		WaitCount:       stats.WaitCount + int64(p.waitCount),
-		WaitDuration:    stats.WaitDuration + p.waitDuration,
-		MaxOpenConns:    p.cfg.MaxOpenConns,
+		WaitCount:        stats.WaitCount + int64(p.waitCount),
+		WaitDuration:     stats.WaitDuration + p.waitDuration,
+		MaxOpenConns:     p.cfg.MaxOpenConns,
 	}
 }
 
@@ -126,9 +126,9 @@ type PoolStats struct {
 	OpenConnections  int
 	InUseConnections int
 	IdleConnections  int
-	WaitCount       int64
-	WaitDuration    time.Duration
-	MaxOpenConns    int
+	WaitCount        int64
+	WaitDuration     time.Duration
+	MaxOpenConns     int
 }
 
 // IsHealthy checks if the pool is healthy.

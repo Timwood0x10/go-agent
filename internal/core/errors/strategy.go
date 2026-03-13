@@ -4,11 +4,11 @@ import "time"
 
 // ErrorStrategy defines retry and handling strategy for error codes.
 type ErrorStrategy struct {
-	Backoff       time.Duration
-	MaxRetries    int
-	DLQEnabled    bool
-	AlertEnabled  bool
-	AlertMessage  string
+	Backoff      time.Duration
+	MaxRetries   int
+	DLQEnabled   bool
+	AlertEnabled bool
+	AlertMessage string
 }
 
 // StrategyMap contains the error handling strategies.

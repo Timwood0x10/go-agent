@@ -11,10 +11,10 @@ func TestProfileParser_Parse(t *testing.T) {
 	parser := NewProfileParser()
 
 	tests := []struct {
-		name     string
-		input    string
-		wantErr  bool
-		checkFn  func(*models.UserProfile) bool
+		name    string
+		input   string
+		wantErr bool
+		checkFn func(*models.UserProfile) bool
 	}{
 		{
 			name:    "parse simple input",

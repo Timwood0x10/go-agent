@@ -5,13 +5,10 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"goagent/internal/core/models"
 )
 
 // Memory errors.
 var (
-	ErrUserNotFound    = errors.New("user not found")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrTaskNotFound    = errors.New("task not found")
 )
@@ -26,7 +23,7 @@ type SessionMemory struct {
 
 // SessionData holds session information.
 type SessionData struct {
-	SessionID   string
+	SessionID  string
 	UserID     string
 	Messages   []Message
 	Context    map[string]interface{}
@@ -36,8 +33,8 @@ type SessionData struct {
 
 // Message represents a chat message.
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string    `json:"role"`
+	Content string    `json:"content"`
 	Time    time.Time `json:"time"`
 }
 
@@ -78,7 +75,7 @@ func (m *SessionMemory) Set(ctx context.Context, sessionID, userID string, messa
 	}
 
 	session := &SessionData{
-		SessionID:   sessionID,
+		SessionID:  sessionID,
 		UserID:     userID,
 		Messages:   messages,
 		Context:    make(map[string]interface{}),
@@ -161,8 +158,3 @@ func (m *SessionMemory) evictOldest() {
 		delete(m.sessions, oldestID)
 	}
 }
-
-// SessionMemory errors.
-var (
-	ErrSessionNotFound = models.ErrSessionNotFound
-)

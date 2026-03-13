@@ -9,14 +9,14 @@ import (
 
 // Workflow errors.
 var (
-	ErrInvalidDependency        = errors.New("invalid dependency: step not found")
-	ErrCycleDetected            = errors.New("cycle detected in workflow")
-	ErrAgentTypeRegistered     = errors.New("agent type already registered")
-	ErrAgentTypeNotFound       = errors.New("agent type not found")
-	ErrAgentResultNil          = errors.New("agent returned nil result")
-	ErrWorkflowIncomplete      = errors.New("workflow incomplete")
-	ErrInvalidLoader           = errors.New("invalid loader type")
-	ErrDuplicateID             = errors.New("duplicate ID")
+	ErrInvalidDependency   = errors.New("invalid dependency: step not found")
+	ErrCycleDetected       = errors.New("cycle detected in workflow")
+	ErrAgentTypeRegistered = errors.New("agent type already registered")
+	ErrAgentTypeNotFound   = errors.New("agent type not found")
+	ErrAgentResultNil      = errors.New("agent returned nil result")
+	ErrWorkflowIncomplete  = errors.New("workflow incomplete")
+	ErrInvalidLoader       = errors.New("invalid loader type")
+	ErrDuplicateID         = errors.New("duplicate ID")
 )
 
 // WorkflowStatus represents the execution status of a workflow.
@@ -24,7 +24,7 @@ type WorkflowStatus string
 
 const (
 	WorkflowStatusPending   WorkflowStatus = "pending"
-	WorkflowStatusRunning  WorkflowStatus = "running"
+	WorkflowStatusRunning   WorkflowStatus = "running"
 	WorkflowStatusCompleted WorkflowStatus = "completed"
 	WorkflowStatusFailed    WorkflowStatus = "failed"
 	WorkflowStatusCancelled WorkflowStatus = "cancelled"
@@ -50,7 +50,7 @@ type Step struct {
 	DependsOn   []string          `json:"depends_on"`
 	Timeout     time.Duration     `json:"timeout"`
 	RetryPolicy *RetryPolicy      `json:"retry_policy,omitempty"`
-	Status      StepStatus       `json:"status"`
+	Status      StepStatus        `json:"status"`
 	Output      string            `json:"output,omitempty"`
 	Error       string            `json:"error,omitempty"`
 	StartedAt   time.Time         `json:"started_at,omitempty"`
@@ -60,10 +60,10 @@ type Step struct {
 
 // RetryPolicy defines retry behavior for a step.
 type RetryPolicy struct {
-	MaxAttempts int           `json:"max_attempts"`
-	InitialDelay time.Duration `json:"initial_delay"`
-	MaxDelay     time.Duration `json:"max_delay"`
-	BackoffMultiplier float64   `json:"backoff_multiplier"`
+	MaxAttempts       int           `json:"max_attempts"`
+	InitialDelay      time.Duration `json:"initial_delay"`
+	MaxDelay          time.Duration `json:"max_delay"`
+	BackoffMultiplier float64       `json:"backoff_multiplier"`
 }
 
 // Workflow represents a workflow definition.
@@ -94,13 +94,13 @@ type WorkflowExecution struct {
 
 // StepState represents the runtime state of a step.
 type StepState struct {
-	StepID    string     `json:"step_id"`
-	Status    StepStatus `json:"status"`
-	Output    string     `json:"output,omitempty"`
-	Error     string     `json:"error,omitempty"`
-	StartedAt time.Time  `json:"started_at,omitempty"`
-	FinishedAt time.Time `json:"finished_at,omitempty"`
-	Attempts  int        `json:"attempts"`
+	StepID     string     `json:"step_id"`
+	Status     StepStatus `json:"status"`
+	Output     string     `json:"output,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	StartedAt  time.Time  `json:"started_at,omitempty"`
+	FinishedAt time.Time  `json:"finished_at,omitempty"`
+	Attempts   int        `json:"attempts"`
 }
 
 // WorkflowResult represents the final result of a workflow execution.
@@ -116,13 +116,13 @@ type WorkflowResult struct {
 
 // StepResult represents the result of a step execution.
 type StepResult struct {
-	StepID   string                 `json:"step_id"`
-	Name     string                 `json:"name"`
-	Status   StepStatus             `json:"status"`
-	Output   string                 `json:"output,omitempty"`
-	Error    string                 `json:"error,omitempty"`
-	Duration time.Duration          `json:"duration"`
-	Metadata map[string]string      `json:"metadata,omitempty"`
+	StepID   string            `json:"step_id"`
+	Name     string            `json:"name"`
+	Status   StepStatus        `json:"status"`
+	Output   string            `json:"output,omitempty"`
+	Error    string            `json:"error,omitempty"`
+	Duration time.Duration     `json:"duration"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // DAG represents a directed acyclic graph of workflow steps.
@@ -133,8 +133,8 @@ type DAG struct {
 
 // DAGNode represents a node in the workflow DAG.
 type DAGNode struct {
-	StepID   string
-	InDegree int
+	StepID    string
+	InDegree  int
 	OutDegree int
 }
 
@@ -147,8 +147,8 @@ func NewDAG(steps []*Step) (*DAG, error) {
 
 	for _, step := range steps {
 		dag.Nodes[step.ID] = &DAGNode{
-			StepID:   step.ID,
-			InDegree: 0,
+			StepID:    step.ID,
+			InDegree:  0,
 			OutDegree: 0,
 		}
 	}

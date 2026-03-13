@@ -4,22 +4,22 @@ import "time"
 
 // Task represents a recommendation task.
 type Task struct {
-	TaskID     string                 `json:"task_id"`
-	TaskType   AgentType              `json:"task_type"`
-	AgentType  AgentType              `json:"agent_type"`
-	UserProfile *UserProfile         `json:"user_profile"`
-	Context    *TaskContext           `json:"context"`
-	Payload    map[string]any        `json:"payload"`
-	Priority   int                   `json:"priority"`
-	Deadline   time.Time              `json:"deadline"`
-	CreatedAt  time.Time              `json:"created_at"`
+	TaskID      string         `json:"task_id"`
+	TaskType    AgentType      `json:"task_type"`
+	AgentType   AgentType      `json:"agent_type"`
+	UserProfile *UserProfile   `json:"user_profile"`
+	Context     *TaskContext   `json:"context"`
+	Payload     map[string]any `json:"payload"`
+	Priority    int            `json:"priority"`
+	Deadline    time.Time      `json:"deadline"`
+	CreatedAt   time.Time      `json:"created_at"`
 }
 
 // TaskContext contains task dependencies and coordination data.
 type TaskContext struct {
-	Dependencies []string                 `json:"dependencies"`
+	Dependencies []string               `json:"dependencies"`
 	DepResults   map[string]*TaskResult `json:"dep_results"`
-	Coordination map[string]any        `json:"coordination"`
+	Coordination map[string]any         `json:"coordination"`
 }
 
 // NewTask creates a new Task.
@@ -27,7 +27,7 @@ func NewTask(taskID string, agentType AgentType, profile *UserProfile) *Task {
 	return &Task{
 		TaskID:      taskID,
 		AgentType:   agentType,
-		UserProfile:  profile,
+		UserProfile: profile,
 		Context:     &TaskContext{},
 		Payload:     make(map[string]any),
 		Priority:    0,
@@ -42,15 +42,15 @@ func (t *Task) IsExpired() bool {
 
 // TaskResult represents the result of a task execution.
 type TaskResult struct {
-	TaskID    string                 `json:"task_id"`
-	AgentType AgentType              `json:"agent_type"`
-	Success   bool                   `json:"success"`
-	Items     []*RecommendItem        `json:"items"`
-	Reason    string                 `json:"reason"`
-	Metadata  map[string]any        `json:"metadata"`
-	Error     string                 `json:"error"`
-	Duration  time.Duration          `json:"duration"`
-	CreatedAt time.Time              `json:"created_at"`
+	TaskID    string           `json:"task_id"`
+	AgentType AgentType        `json:"agent_type"`
+	Success   bool             `json:"success"`
+	Items     []*RecommendItem `json:"items"`
+	Reason    string           `json:"reason"`
+	Metadata  map[string]any   `json:"metadata"`
+	Error     string           `json:"error"`
+	Duration  time.Duration    `json:"duration"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 // NewTaskResult creates a new TaskResult.

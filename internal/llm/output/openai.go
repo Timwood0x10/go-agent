@@ -86,7 +86,7 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, schema string) (*models.RecommendResult, error) {
 	messages := []map[string]interface{}{
 		{
-			"role": "user",
+			"role":    "user",
 			"content": prompt + "\n\nRespond with valid JSON only, matching this schema:\n" + schema,
 		},
 	}
@@ -156,9 +156,9 @@ type OpenAIChatResponse struct {
 
 // Choice represents a chat completion choice.
 type Choice struct {
-	Index        int         `json:"index"`
-	Message      Message     `json:"message"`
-	FinishReason string      `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
 }
 
 // Message represents a chat message.
@@ -171,5 +171,5 @@ type Message struct {
 type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens     int `json:"total_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }

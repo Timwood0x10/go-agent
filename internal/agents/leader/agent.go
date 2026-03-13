@@ -37,17 +37,17 @@ type ResultAggregator interface {
 
 // leaderAgent implements the Leader Agent.
 type leaderAgent struct {
-	mu            sync.RWMutex
-	id            string
-	agentType     models.AgentType
-	status        models.AgentStatus
-	config        *LeaderAgentConfig
-	parser        ProfileParser
-	planner       TaskPlanner
-	dispatcher    TaskDispatcher
-	aggregator    ResultAggregator
-	messageQueue  *ahp.MessageQueue
-	heartbeatMon  *ahp.HeartbeatMonitor
+	mu           sync.RWMutex
+	id           string
+	agentType    models.AgentType
+	status       models.AgentStatus
+	config       *LeaderAgentConfig
+	parser       ProfileParser
+	planner      TaskPlanner
+	dispatcher   TaskDispatcher
+	aggregator   ResultAggregator
+	messageQueue *ahp.MessageQueue
+	heartbeatMon *ahp.HeartbeatMonitor
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
@@ -93,7 +93,7 @@ func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 	return &LeaderAgentConfig{
 		Config:           *base.DefaultConfig(models.AgentTypeLeader),
 		MaxParallelTasks: 10,
-		EnableCache:     true,
+		EnableCache:      true,
 	}
 }
 

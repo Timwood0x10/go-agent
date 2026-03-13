@@ -11,27 +11,25 @@ import (
 
 // Memory errors.
 var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrSessionNotFound = errors.New("session not found")
-	ErrTaskNotFound    = errors.New("task not found")
+	ErrUserNotFound = errors.New("user not found")
 )
 
 // UserMemory stores long-term user preferences and history.
 type UserMemory struct {
-	users  map[string]*UserData
-	mu     sync.RWMutex
+	users   map[string]*UserData
+	mu      sync.RWMutex
 	maxSize int
 }
 
 // UserData holds user information.
 type UserData struct {
-	UserID          string
-	Profile         *models.UserProfile
-	Preferences     []Preference
-	History         []Interaction
-	StyleEvolution  []StyleEntry
+	UserID         string
+	Profile        *models.UserProfile
+	Preferences    []Preference
+	History        []Interaction
+	StyleEvolution []StyleEntry
 	LastUpdated    time.Time
-	CreatedAt       time.Time
+	CreatedAt      time.Time
 }
 
 // Preference represents a user preference.
@@ -54,17 +52,17 @@ type Interaction struct {
 
 // StyleEntry represents a style preference change over time.
 type StyleEntry struct {
-	Style      []string    `json:"style"`
-	Occasion   string      `json:"occasion"`
-	Confidence float64     `json:"confidence"`
-	Time       time.Time   `json:"time"`
+	Style      []string  `json:"style"`
+	Occasion   string    `json:"occasion"`
+	Confidence float64   `json:"confidence"`
+	Time       time.Time `json:"time"`
 }
 
 // NewUserMemory creates a new UserMemory.
 func NewUserMemory(maxSize int) *UserMemory {
 	return &UserMemory{
-		users:    make(map[string]*UserData),
-		maxSize:  maxSize,
+		users:   make(map[string]*UserData),
+		maxSize: maxSize,
 	}
 }
 
@@ -87,13 +85,13 @@ func (m *UserMemory) Set(ctx context.Context, userID string, profile *models.Use
 	}
 
 	user := &UserData{
-		UserID:          userID,
-		Profile:         profile,
-		LastUpdated:     time.Now(),
-		CreatedAt:       time.Now(),
-		Preferences:     make([]Preference, 0),
-		History:         make([]Interaction, 0),
-		StyleEvolution:  make([]StyleEntry, 0),
+		UserID:         userID,
+		Profile:        profile,
+		LastUpdated:    time.Now(),
+		CreatedAt:      time.Now(),
+		Preferences:    make([]Preference, 0),
+		History:        make([]Interaction, 0),
+		StyleEvolution: make([]StyleEntry, 0),
 	}
 
 	m.users[userID] = user
@@ -248,8 +246,3 @@ func (m *UserMemory) evictLeastUsed() {
 		delete(m.users, oldestID)
 	}
 }
-
-// UserMemory errors.
-var (
-	ErrUserNotFound = models.ErrUserNotFound
-)

@@ -11,12 +11,12 @@ import (
 
 // Protocol represents the AHP protocol manager.
 type Protocol struct {
-	mu          sync.RWMutex
-	registry    *QueueRegistry
-	dlq         *DLQ
-	codec       Codec
-	heartbeat   *HeartbeatMonitor
-	config      *ProtocolConfig
+	mu        sync.RWMutex
+	registry  *QueueRegistry
+	dlq       *DLQ
+	codec     Codec
+	heartbeat *HeartbeatMonitor
+	config    *ProtocolConfig
 }
 
 // ProtocolConfig holds the configuration for the protocol.
@@ -143,9 +143,9 @@ func (p *Protocol) DecodeMessage(data []byte) (*AHPMessage, error) {
 // Stats returns protocol statistics.
 func (p *Protocol) Stats() *ProtocolStats {
 	return &ProtocolStats{
-		TotalQueues:    len(p.registry.ListAgents()),
-		TotalMessages:  p.registry.Size(),
-		DLQSize:        p.dlq.Size(),
+		TotalQueues:     len(p.registry.ListAgents()),
+		TotalMessages:   p.registry.Size(),
+		DLQSize:         p.dlq.Size(),
 		MonitoredAgents: len(p.heartbeat.ListAgents()),
 	}
 }

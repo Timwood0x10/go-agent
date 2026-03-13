@@ -9,21 +9,21 @@ import (
 
 // Repository provides a unified interface for all data access.
 type Repository struct {
-	Session    *SessionRepository
-	Recommend  *RecommendRepository
-	Profile    *ProfileRepository
-	Vector     *VectorSearcher
-	pool       *Pool
+	Session   *SessionRepository
+	Recommend *RecommendRepository
+	Profile   *ProfileRepository
+	Vector    *VectorSearcher
+	pool      *Pool
 }
 
 // NewRepository creates a new Repository with all sub-repositories.
 func NewRepository(pool *Pool) *Repository {
 	return &Repository{
-		Session:    NewSessionRepository(pool),
-		Recommend:  NewRecommendRepository(pool),
-		Profile:    NewProfileRepository(pool),
-		Vector:     NewVectorSearcher(pool),
-		pool:       pool,
+		Session:   NewSessionRepository(pool),
+		Recommend: NewRecommendRepository(pool),
+		Profile:   NewProfileRepository(pool),
+		Vector:    NewVectorSearcher(pool),
+		pool:      pool,
 	}
 }
 
@@ -48,9 +48,9 @@ func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) 
 	txRepo := &Repository{
 		Session:   NewSessionRepository(r.pool),
 		Recommend: NewRecommendRepository(r.pool),
-		Profile:  NewProfileRepository(r.pool),
-		Vector:   NewVectorSearcher(r.pool),
-		pool:     r.pool,
+		Profile:   NewProfileRepository(r.pool),
+		Vector:    NewVectorSearcher(r.pool),
+		pool:      r.pool,
 	}
 
 	if err := fn(txRepo); err != nil {
@@ -73,9 +73,9 @@ func (r *Repository) WithTransaction(ctx context.Context) (*Repository, error) {
 	txRepo := &Repository{
 		Session:   NewSessionRepository(r.pool),
 		Recommend: NewRecommendRepository(r.pool),
-		Profile:  NewProfileRepository(r.pool),
-		Vector:   NewVectorSearcher(r.pool),
-		pool:     r.pool,
+		Profile:   NewProfileRepository(r.pool),
+		Vector:    NewVectorSearcher(r.pool),
+		pool:      r.pool,
 	}
 
 	// Execute in transaction

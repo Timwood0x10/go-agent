@@ -10,9 +10,9 @@ import (
 
 // HeartbeatConfig holds the configuration for heartbeat mechanism.
 type HeartbeatConfig struct {
-	Interval    time.Duration
-	Timeout     time.Duration
-	MaxMissed   int
+	Interval  time.Duration
+	Timeout   time.Duration
+	MaxMissed int
 }
 
 // DefaultHeartbeatConfig returns the default heartbeat configuration.
@@ -123,13 +123,13 @@ func (m *HeartbeatMonitor) ListAgents() []string {
 
 // HeartbeatSender sends periodic heartbeats.
 type HeartbeatSender struct {
-	agentID    string
-	interval   time.Duration
-	queue      *MessageQueue
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	stopped    bool
+	agentID  string
+	interval time.Duration
+	queue    *MessageQueue
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	stopped  bool
 }
 
 // NewHeartbeatSender creates a new HeartbeatSender.

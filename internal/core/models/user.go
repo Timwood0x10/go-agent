@@ -7,19 +7,19 @@ import (
 
 // UserProfile represents user profile information.
 type UserProfile struct {
-	UserID      string            `json:"user_id"`
-	Name        string            `json:"name"`
-	Gender      Gender            `json:"gender"`
-	Age         int               `json:"age"`
-	Occupation  string            `json:"occupation"`
-	Style       []StyleTag        `json:"style"`
-	Budget      *PriceRange       `json:"budget"`
-	Colors      []string          `json:"colors"`
-	Occasions   []Occasion        `json:"occasions"`
-	BodyType    string            `json:"body_type"`
-	Preferences map[string]any    `json:"preferences"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Gender      Gender         `json:"gender"`
+	Age         int            `json:"age"`
+	Occupation  string         `json:"occupation"`
+	Style       []StyleTag     `json:"style"`
+	Budget      *PriceRange    `json:"budget"`
+	Colors      []string       `json:"colors"`
+	Occasions   []Occasion     `json:"occasions"`
+	BodyType    string         `json:"body_type"`
+	Preferences map[string]any `json:"preferences"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // NewUserProfile creates a new UserProfile.

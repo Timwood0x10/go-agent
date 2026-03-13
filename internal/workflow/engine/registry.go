@@ -127,7 +127,7 @@ type StepOutput struct {
 // OutputStore stores step outputs.
 type OutputStore struct {
 	outputs map[string]*StepOutput
-	mu       sync.RWMutex
+	mu      sync.RWMutex
 }
 
 // NewOutputStore creates a new OutputStore.

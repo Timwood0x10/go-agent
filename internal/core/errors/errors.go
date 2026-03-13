@@ -19,11 +19,11 @@ var (
 
 // Sentinel errors for Protocol module.
 var (
-	ErrInvalidMessage   = errors.New("invalid message format")
-	ErrMessageTimeout   = errors.New("message send timeout")
-	ErrHeartbeatMissed  = errors.New("heartbeat missed")
-	ErrQueueFull        = errors.New("message queue is full")
-	ErrQueueEmpty       = errors.New("message queue is empty")
+	ErrInvalidMessage  = errors.New("invalid message format")
+	ErrMessageTimeout  = errors.New("message send timeout")
+	ErrHeartbeatMissed = errors.New("heartbeat missed")
+	ErrQueueFull       = errors.New("message queue is full")
+	ErrQueueEmpty      = errors.New("message queue is empty")
 )
 
 // Sentinel errors for Storage module.
@@ -31,17 +31,17 @@ var (
 	ErrDBConnectionFailed = errors.New("database connection failed")
 	ErrQueryFailed        = errors.New("query execution failed")
 	ErrVectorSearchFailed = errors.New("vector search failed")
-	ErrRecordNotFound    = errors.New("record not found")
-	ErrTransactionFailed = errors.New("transaction failed")
+	ErrRecordNotFound     = errors.New("record not found")
+	ErrTransactionFailed  = errors.New("transaction failed")
 )
 
 // Sentinel errors for LLM module.
 var (
-	ErrLLMRequestFailed = errors.New("LLM request failed")
-	ErrLLMTimeout       = errors.New("LLM response timeout")
-	ErrLLMQuotaExceeded = errors.New("LLM quota exceeded")
-	ErrLLMInvalidResponse = errors.New("LLM invalid response")
-	ErrLLMParserFailed  = errors.New("LLM output parsing failed")
+	ErrLLMRequestFailed    = errors.New("LLM request failed")
+	ErrLLMTimeout          = errors.New("LLM response timeout")
+	ErrLLMQuotaExceeded    = errors.New("LLM quota exceeded")
+	ErrLLMInvalidResponse  = errors.New("LLM invalid response")
+	ErrLLMParserFailed     = errors.New("LLM output parsing failed")
 	ErrLLMValidationFailed = errors.New("LLM output validation failed")
 )
 
@@ -65,15 +65,15 @@ var ModelValidationErrors = map[string]error{
 
 // Sentinel errors for Workflow module.
 var (
-	ErrWorkflowNotFound    = errors.New("workflow not found")
-	ErrWorkflowLoadFailed  = errors.New("workflow load failed")
-	ErrWorkflowCyclicDAG   = errors.New("workflow has cyclic dependency")
+	ErrWorkflowNotFound     = errors.New("workflow not found")
+	ErrWorkflowLoadFailed   = errors.New("workflow load failed")
+	ErrWorkflowCyclicDAG    = errors.New("workflow has cyclic dependency")
 	ErrWorkflowInvalidPhase = errors.New("invalid workflow phase")
 )
 
 // Sentinel errors for Rate Limiter.
 var (
-	ErrRateLimitExceeded   = errors.New("rate limit exceeded")
+	ErrRateLimitExceeded     = errors.New("rate limit exceeded")
 	ErrBackpressureTriggered = errors.New("backpressure triggered")
-	ErrTokenBucketExhausted = errors.New("token bucket exhausted")
+	ErrTokenBucketExhausted  = errors.New("token bucket exhausted")
 )

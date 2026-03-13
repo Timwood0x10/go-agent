@@ -4,24 +4,24 @@ import "time"
 
 // ErrorCode represents a structured error code.
 type ErrorCode struct {
-	Code      string        `json:"code"`
-	Message   string        `json:"message"`
-	Module    string        `json:"module"`
-	Retry     bool          `json:"retry"`
-	RetryMax  int           `json:"retry_max"`
-	Backoff   time.Duration `json:"backoff"`
-	HTTPStatus int          `json:"http_status"`
+	Code       string        `json:"code"`
+	Message    string        `json:"message"`
+	Module     string        `json:"module"`
+	Retry      bool          `json:"retry"`
+	RetryMax   int           `json:"retry_max"`
+	Backoff    time.Duration `json:"backoff"`
+	HTTPStatus int           `json:"http_status"`
 }
 
 // NewErrorCode creates a new ErrorCode.
 func NewErrorCode(code, message, module string, retry bool, retryMax int, backoff time.Duration, httpStatus int) *ErrorCode {
 	return &ErrorCode{
-		Code:      code,
-		Message:   message,
-		Module:    module,
-		Retry:     retry,
-		RetryMax:  retryMax,
-		Backoff:   backoff,
+		Code:       code,
+		Message:    message,
+		Module:     module,
+		Retry:      retry,
+		RetryMax:   retryMax,
+		Backoff:    backoff,
 		HTTPStatus: httpStatus,
 	}
 }

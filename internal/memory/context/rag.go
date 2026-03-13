@@ -1,0 +1,194 @@
+package context
+
+import (
+	"context"
+	"sync"
+)
+
+// KnowledgeEntry represents a knowledge base entry.
+type KnowledgeEntry struct {
+	ID        string
+	Content   string
+	Embedding []float64
+	Metadata  map[string]interface{}
+}
+
+// RAG provides retrieval-augmented generation capabilities.
+type RAG struct {
+	entries map[string]*KnowledgeEntry
+	index   *VectorIndex
+	mu      sync.RWMutex
+	maxSize int
+}
+
+// VectorIndex is a simple in-memory vector index.
+type VectorIndex struct {
+	entries []*KnowledgeEntry
+	mu      sync.RWMutex
+}
+
+// NewRAG creates a new RAG instance.
+func NewRAG(maxSize int) *RAG {
+	return &RAG{
+		entries: make(map[string]*KnowledgeEntry),
+		index:   NewVectorIndex(),
+		maxSize: maxSize,
+	}
+}
+
+// NewVectorIndex creates a new VectorIndex.
+func NewVectorIndex() *VectorIndex {
+	return &VectorIndex{
+		entries: make([]*KnowledgeEntry, 0),
+	}
+}
+
+// Add adds a knowledge entry.
+func (r *RAG) Add(ctx context.Context, entry *KnowledgeEntry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.entries) >= r.maxSize {
+		r.evictOldest()
+	}
+
+	r.entries[entry.ID] = entry
+	r.index.entries = append(r.index.entries, entry)
+
+	return nil
+}
+
+// Get retrieves a knowledge entry by ID.
+func (r *RAG) Get(ctx context.Context, id string) (*KnowledgeEntry, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	entry, exists := r.entries[id]
+	return entry, exists
+}
+
+// Search searches for similar entries using simple cosine similarity.
+func (r *RAG) Search(ctx context.Context, query []float64, topK int) ([]*KnowledgeEntry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(r.index.entries) == 0 {
+		return nil, nil
+	}
+
+	scores := make([]struct {
+		entry *KnowledgeEntry
+		score float64
+	}, 0, len(r.index.entries))
+
+	for _, entry := range r.index.entries {
+		score := cosineSimilarity(query, entry.Embedding)
+		scores = append(scores, struct {
+			entry *KnowledgeEntry
+			score float64
+		}{entry, score})
+	}
+
+	// Sort by score descending
+	for i := 0; i < len(scores)-1; i++ {
+		for j := i + 1; j < len(scores); j++ {
+			if scores[j].score > scores[i].score {
+				scores[i], scores[j] = scores[j], scores[i]
+			}
+		}
+	}
+
+	result := make([]*KnowledgeEntry, 0, topK)
+	for i := 0; i < topK && i < len(scores); i++ {
+		result = append(result, scores[i].entry)
+	}
+
+	return result, nil
+}
+
+// SearchByText searches for entries matching text content.
+func (r *RAG) SearchByText(ctx context.Context, query string, topK int) ([]*KnowledgeEntry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	matches := make([]*KnowledgeEntry, 0)
+
+	for _, entry := range r.entries {
+		if contains(entry.Content, query) {
+			matches = append(matches, entry)
+		}
+	}
+
+	if len(matches) > topK {
+		matches = matches[:topK]
+	}
+
+	return matches, nil
+}
+
+// Delete removes a knowledge entry.
+func (r *RAG) Delete(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.entries, id)
+
+	// Rebuild index
+	r.index.entries = make([]*KnowledgeEntry, 0)
+	for _, entry := range r.entries {
+		r.index.entries = append(r.index.entries, entry)
+	}
+
+	return nil
+}
+
+// Size returns the number of entries.
+func (r *RAG) Size() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return len(r.entries)
+}
+
+// evictOldest removes entries when capacity is reached.
+func (r *RAG) evictOldest() {
+	// Simple eviction: remove first entry
+	for id := range r.entries {
+		delete(r.entries, id)
+		break
+	}
+}
+
+// cosineSimilarity calculates cosine similarity between two vectors.
+func cosineSimilarity(a, b []float64) float64 {
+	if len(a) != len(b) {
+		return 0
+	}
+
+	var dotProduct, normA, normB float64
+	for i := 0; i < len(a); i++ {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	return dotProduct / (normA * normB)
+}
+
+// contains checks if text contains substring (simple implementation).
+func contains(text, substr string) bool {
+	return len(text) >= len(substr) && (text == substr || len(text) > 0 && containsHelper(text, substr))
+}
+
+func containsHelper(text, substr string) bool {
+	for i := 0; i <= len(text)-len(substr); i++ {
+		if text[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

@@ -8,7 +8,7 @@ type Gender string
 const (
 	GenderMale   Gender = "male"
 	GenderFemale Gender = "female"
-	GenderOther Gender = "other"
+	GenderOther  Gender = "other"
 )
 
 // StyleTag represents fashion style tags.
@@ -17,24 +17,24 @@ type StyleTag string
 const (
 	StyleCasual     StyleTag = "casual"
 	StyleFormal     StyleTag = "formal"
-	StyleStreet    StyleTag = "street"
-	Sporty         StyleTag = "sporty"
+	StyleStreet     StyleTag = "street"
+	Sporty          StyleTag = "sporty"
 	StyleMinimalist StyleTag = "minimalist"
-	StyleVintage   StyleTag = "vintage"
-	StyleBohemian  StyleTag = "bohemian"
+	StyleVintage    StyleTag = "vintage"
+	StyleBohemian   StyleTag = "bohemian"
 )
 
 // Occasion represents usage scenarios.
 type Occasion string
 
 const (
-	OccasionDaily      Occasion = "daily"
-	OccasionWork       Occasion = "work"
-	OccasionParty      Occasion = "party"
-	OccasionDate       Occasion = "date"
-	OccasionSports     Occasion = "sports"
-	OccasionFormal     Occasion = "formal"
-	OccasionVacation   Occasion = "vacation"
+	OccasionDaily    Occasion = "daily"
+	OccasionWork     Occasion = "work"
+	OccasionParty    Occasion = "party"
+	OccasionDate     Occasion = "date"
+	OccasionSports   Occasion = "sports"
+	OccasionFormal   Occasion = "formal"
+	OccasionVacation Occasion = "vacation"
 )
 
 // SessionStatus represents session state.
@@ -43,9 +43,9 @@ type SessionStatus string
 const (
 	SessionStatusPending    SessionStatus = "pending"
 	SessionStatusProcessing SessionStatus = "processing"
-	SessionStatusCompleted SessionStatus = "completed"
-	SessionStatusFailed    SessionStatus = "failed"
-	SessionStatusExpired   SessionStatus = "expired"
+	SessionStatusCompleted  SessionStatus = "completed"
+	SessionStatusFailed     SessionStatus = "failed"
+	SessionStatusExpired    SessionStatus = "expired"
 )
 
 // AgentType represents agent types.
@@ -55,7 +55,7 @@ const (
 	AgentTypeLeader    AgentType = "leader"
 	AgentTypeTop       AgentType = "agent_top"
 	AgentTypeBottom    AgentType = "agent_bottom"
-	AgentTypeShoes    AgentType = "agent_shoes"
+	AgentTypeShoes     AgentType = "agent_shoes"
 	AgentTypeHead      AgentType = "agent_head"
 	AgentTypeAccessory AgentType = "agent_accessory"
 )
@@ -66,9 +66,9 @@ type AgentStatus string
 const (
 	AgentStatusStarting AgentStatus = "starting"
 	AgentStatusReady    AgentStatus = "ready"
-	AgentStatusBusy    AgentStatus = "busy"
+	AgentStatusBusy     AgentStatus = "busy"
 	AgentStatusStopping AgentStatus = "stopping"
-	AgentStatusOffline AgentStatus = "offline"
+	AgentStatusOffline  AgentStatus = "offline"
 )
 
 // PriceRange represents budget range.

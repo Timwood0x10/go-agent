@@ -4,22 +4,22 @@ import "encoding/json"
 
 // Schema represents a JSON Schema.
 type Schema struct {
-	Type         string          `json:"type,omitempty"`
-	Properties   map[string]*Schema `json:"properties,omitempty"`
-	Items        *Schema          `json:"items,omitempty"`
-	Required     []string        `json:"required,omitempty"`
-	Minimum      *float64        `json:"minimum,omitempty"`
-	Maximum      *float64        `json:"maximum,omitempty"`
-	MinLength    *int            `json:"minLength,omitempty"`
-	MaxLength    *int            `json:"maxLength,omitempty"`
-	Pattern      string          `json:"pattern,omitempty"`
-	Enum         []interface{}   `json:"enum,omitempty"`
-	Nullable     bool            `json:"nullable,omitempty"`
-	MinItems     *int            `json:"minItems,omitempty"`
-	MaxItems     *int            `json:"maxItems,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	Format       string          `json:"format,omitempty"`
-	Ref          string          `json:"$ref,omitempty"`
+	Type        string             `json:"type,omitempty"`
+	Properties  map[string]*Schema `json:"properties,omitempty"`
+	Items       *Schema            `json:"items,omitempty"`
+	Required    []string           `json:"required,omitempty"`
+	Minimum     *float64           `json:"minimum,omitempty"`
+	Maximum     *float64           `json:"maximum,omitempty"`
+	MinLength   *int               `json:"minLength,omitempty"`
+	MaxLength   *int               `json:"maxLength,omitempty"`
+	Pattern     string             `json:"pattern,omitempty"`
+	Enum        []interface{}      `json:"enum,omitempty"`
+	Nullable    bool               `json:"nullable,omitempty"`
+	MinItems    *int               `json:"minItems,omitempty"`
+	MaxItems    *int               `json:"maxItems,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Format      string             `json:"format,omitempty"`
+	Ref         string             `json:"$ref,omitempty"`
 }
 
 // GetRecommendResultSchema returns the schema for RecommendResult.
@@ -44,13 +44,13 @@ func GetRecommendResultSchema() *Schema {
 				Type: "string",
 			},
 			"total_price": {
-				Type:     "number",
-				Minimum:  pointerToFloat64(0),
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
 			},
 			"match_score": {
-				Type:     "number",
-				Minimum:  pointerToFloat64(0),
-				Maximum:  pointerToFloat64(1),
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
+				Maximum: pointerToFloat64(1),
 			},
 			"occasion": {
 				Type: "string",
@@ -95,8 +95,8 @@ func GetRecommendItemSchema() *Schema {
 				Type: "string",
 			},
 			"price": {
-				Type:     "number",
-				Minimum:  pointerToFloat64(0),
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
 			},
 			"url": {
 				Type:   "string",
@@ -146,9 +146,9 @@ func GetUserProfileSchema() *Schema {
 				Enum: []interface{}{"male", "female", "other"},
 			},
 			"age": {
-				Type:     "integer",
-				Minimum:  pointerToFloat64(0),
-				Maximum:  pointerToFloat64(150),
+				Type:    "integer",
+				Minimum: pointerToFloat64(0),
+				Maximum: pointerToFloat64(150),
 			},
 			"style_preferences": {
 				Type: "array",
@@ -160,12 +160,12 @@ func GetUserProfileSchema() *Schema {
 				Type: "object",
 				Properties: map[string]*Schema{
 					"min": {
-						Type:     "number",
-						Minimum:  pointerToFloat64(0),
+						Type:    "number",
+						Minimum: pointerToFloat64(0),
 					},
 					"max": {
-						Type:     "number",
-						Minimum:  pointerToFloat64(0),
+						Type:    "number",
+						Minimum: pointerToFloat64(0),
 					},
 				},
 			},

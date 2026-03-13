@@ -35,16 +35,16 @@ type ToolBinder interface {
 
 // subAgent implements a Sub Agent.
 type subAgent struct {
-	mu            sync.RWMutex
-	id            string
-	agentType     models.AgentType
-	status        models.AgentStatus
-	config        *SubAgentConfig
-	executor      TaskExecutor
-	handler       MessageHandler
-	tools         map[string]func(ctx context.Context, args map[string]any) (any, error)
-	messageQueue  *ahp.MessageQueue
-	heartbeatMon  *ahp.HeartbeatMonitor
+	mu           sync.RWMutex
+	id           string
+	agentType    models.AgentType
+	status       models.AgentStatus
+	config       *SubAgentConfig
+	executor     TaskExecutor
+	handler      MessageHandler
+	tools        map[string]func(ctx context.Context, args map[string]any) (any, error)
+	messageQueue *ahp.MessageQueue
+	heartbeatMon *ahp.HeartbeatMonitor
 }
 
 // SubAgentConfig holds configuration for SubAgent.
@@ -85,7 +85,7 @@ func New(
 // DefaultSubAgentConfig returns default configuration.
 func DefaultSubAgentConfig(agentType models.AgentType) *SubAgentConfig {
 	return &SubAgentConfig{
-		Config:       *base.DefaultConfig(agentType),
+		Config:      *base.DefaultConfig(agentType),
 		EnableTools: true,
 	}
 }

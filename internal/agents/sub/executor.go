@@ -63,21 +63,21 @@ func (e *taskExecutor) executeByType(ctx context.Context, task *models.Task) ([]
 func (e *taskExecutor) executeTopRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
-			ItemID:     "top_001",
-			Name:       "Cotton T-Shirt",
-			Category:   "top",
-			Price:      299.00,
-			ImageURL:   "https://example.com/images/top_001.jpg",
-			Style:      []models.StyleTag{models.StyleCasual},
+			ItemID:      "top_001",
+			Name:        "Cotton T-Shirt",
+			Category:    "top",
+			Price:       299.00,
+			ImageURL:    "https://example.com/images/top_001.jpg",
+			Style:       []models.StyleTag{models.StyleCasual},
 			MatchReason: "Comfortable cotton material, perfect for daily wear",
 		},
 		{
-			ItemID:     "top_002",
-			Name:       "Linen Shirt",
-			Category:   "top",
-			Price:      459.00,
-			ImageURL:   "https://example.com/images/top_002.jpg",
-			Style:      []models.StyleTag{models.StyleCasual, models.StyleMinimalist},
+			ItemID:      "top_002",
+			Name:        "Linen Shirt",
+			Category:    "top",
+			Price:       459.00,
+			ImageURL:    "https://example.com/images/top_002.jpg",
+			Style:       []models.StyleTag{models.StyleCasual, models.StyleMinimalist},
 			MatchReason: "Breathable linen, minimalist design",
 		},
 	}
@@ -87,12 +87,12 @@ func (e *taskExecutor) executeTopRecommendation(ctx context.Context, task *model
 func (e *taskExecutor) executeBottomRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
-			ItemID:     "bottom_001",
-			Name:       "Slim Fit Jeans",
-			Category:   "bottom",
-			Price:      399.00,
-			ImageURL:   "https://example.com/images/bottom_001.jpg",
-			Style:      []models.StyleTag{models.StyleCasual},
+			ItemID:      "bottom_001",
+			Name:        "Slim Fit Jeans",
+			Category:    "bottom",
+			Price:       399.00,
+			ImageURL:    "https://example.com/images/bottom_001.jpg",
+			Style:       []models.StyleTag{models.StyleCasual},
 			MatchReason: "Classic slim fit, versatile for any occasion",
 		},
 	}
@@ -102,12 +102,12 @@ func (e *taskExecutor) executeBottomRecommendation(ctx context.Context, task *mo
 func (e *taskExecutor) executeShoesRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
-			ItemID:     "shoes_001",
-			Name:       "Casual Sneakers",
-			Category:   "shoes",
-			Price:      599.00,
-			ImageURL:   "https://example.com/images/shoes_001.jpg",
-			Style:      []models.StyleTag{models.StyleCasual},
+			ItemID:      "shoes_001",
+			Name:        "Casual Sneakers",
+			Category:    "shoes",
+			Price:       599.00,
+			ImageURL:    "https://example.com/images/shoes_001.jpg",
+			Style:       []models.StyleTag{models.StyleCasual},
 			MatchReason: "Comfortable sole, easy to match",
 		},
 	}
@@ -117,12 +117,12 @@ func (e *taskExecutor) executeShoesRecommendation(ctx context.Context, task *mod
 func (e *taskExecutor) executeHeadRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
-			ItemID:     "head_001",
-			Name:       "Baseball Cap",
-			Category:   "head",
-			Price:      129.00,
-			ImageURL:   "https://example.com/images/head_001.jpg",
-			Style:      []models.StyleTag{models.StyleStreet},
+			ItemID:      "head_001",
+			Name:        "Baseball Cap",
+			Category:    "head",
+			Price:       129.00,
+			ImageURL:    "https://example.com/images/head_001.jpg",
+			Style:       []models.StyleTag{models.StyleStreet},
 			MatchReason: "Street style accessory",
 		},
 	}
@@ -132,12 +132,12 @@ func (e *taskExecutor) executeHeadRecommendation(ctx context.Context, task *mode
 func (e *taskExecutor) executeAccessoryRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
-			ItemID:     "acc_001",
-			Name:       "Leather Belt",
-			Category:   "accessory",
-			Price:      199.00,
-			ImageURL:   "https://example.com/images/acc_001.jpg",
-			Style:      []models.StyleTag{models.StyleFormal},
+			ItemID:      "acc_001",
+			Name:        "Leather Belt",
+			Category:    "accessory",
+			Price:       199.00,
+			ImageURL:    "https://example.com/images/acc_001.jpg",
+			Style:       []models.StyleTag{models.StyleFormal},
 			MatchReason: "Genuine leather, classic design",
 		},
 	}

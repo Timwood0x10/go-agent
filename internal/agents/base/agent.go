@@ -42,19 +42,19 @@ type Heartbeater interface {
 
 // Config holds common agent configuration.
 type Config struct {
-	ID            string
-	Type          models.AgentType
+	ID                string
+	Type              models.AgentType
 	HeartbeatInterval time.Duration
-	MaxRetries    int
-	Timeout       time.Duration
+	MaxRetries        int
+	Timeout           time.Duration
 }
 
 // DefaultConfig returns default agent configuration.
 func DefaultConfig(agentType models.AgentType) *Config {
 	return &Config{
-		Type:            agentType,
+		Type:              agentType,
 		HeartbeatInterval: 30 * time.Second,
-		MaxRetries:      3,
-		Timeout:         5 * time.Minute,
+		MaxRetries:        3,
+		Timeout:           5 * time.Minute,
 	}
 }

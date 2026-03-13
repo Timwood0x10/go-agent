@@ -41,9 +41,9 @@ func NewOllamaAdapter(config *Config) *OllamaAdapter {
 // Generate generates text from prompt.
 func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, error) {
 	reqBody := map[string]interface{}{
-		"model":      a.config.Model,
-		"prompt":     prompt,
-		"stream":     false,
+		"model":       a.config.Model,
+		"prompt":      prompt,
+		"stream":      false,
 		"temperature": a.config.Temperature,
 	}
 

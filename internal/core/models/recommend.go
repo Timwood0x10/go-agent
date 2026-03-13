@@ -4,43 +4,43 @@ import "time"
 
 // RecommendResult represents the final recommendation output.
 type RecommendResult struct {
-	SessionID    string            `json:"session_id"`
-	UserID       string            `json:"user_id"`
-	Items        []*RecommendItem  `json:"items"`
-	Reason       string            `json:"reason"`
-	TotalPrice   float64           `json:"total_price"`
-	MatchScore   float64           `json:"match_score"`
-	Occasion     Occasion          `json:"occasion"`
-	Season       string            `json:"season"`
-	Feedback     *UserFeedback     `json:"feedback"`
-	Metadata     map[string]any    `json:"metadata"`
-	CreatedAt    time.Time        `json:"created_at"`
+	SessionID  string           `json:"session_id"`
+	UserID     string           `json:"user_id"`
+	Items      []*RecommendItem `json:"items"`
+	Reason     string           `json:"reason"`
+	TotalPrice float64          `json:"total_price"`
+	MatchScore float64          `json:"match_score"`
+	Occasion   Occasion         `json:"occasion"`
+	Season     string           `json:"season"`
+	Feedback   *UserFeedback    `json:"feedback"`
+	Metadata   map[string]any   `json:"metadata"`
+	CreatedAt  time.Time        `json:"created_at"`
 }
 
 // RecommendItem represents a single recommended item.
 type RecommendItem struct {
-	ItemID     string                 `json:"item_id"`
-	Category   string                 `json:"category"`
-	Name       string                 `json:"name"`
-	Brand      string                 `json:"brand"`
-	Price      float64                `json:"price"`
-	URL        string                 `json:"url"`
-	ImageURL   string                 `json:"image_url"`
-	Style      []StyleTag             `json:"style"`
-	Colors     []string               `json:"colors"`
-	Description string                `json:"description"`
-	MatchReason string                `json:"match_reason"`
-	Metadata   map[string]any         `json:"metadata"`
+	ItemID      string         `json:"item_id"`
+	Category    string         `json:"category"`
+	Name        string         `json:"name"`
+	Brand       string         `json:"brand"`
+	Price       float64        `json:"price"`
+	URL         string         `json:"url"`
+	ImageURL    string         `json:"image_url"`
+	Style       []StyleTag     `json:"style"`
+	Colors      []string       `json:"colors"`
+	Description string         `json:"description"`
+	MatchReason string         `json:"match_reason"`
+	Metadata    map[string]any `json:"metadata"`
 }
 
 // NewRecommendResult creates a new RecommendResult.
 func NewRecommendResult(sessionID, userID string) *RecommendResult {
 	return &RecommendResult{
-		SessionID:  sessionID,
-		UserID:     userID,
-		Items:      make([]*RecommendItem, 0),
-		Metadata:   make(map[string]any),
-		CreatedAt:  time.Now(),
+		SessionID: sessionID,
+		UserID:    userID,
+		Items:     make([]*RecommendItem, 0),
+		Metadata:  make(map[string]any),
+		CreatedAt: time.Now(),
 	}
 }
 

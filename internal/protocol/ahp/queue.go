@@ -126,8 +126,8 @@ func (q *MessageQueue) Close() {
 
 // QueueRegistry manages multiple message queues for different agents.
 type QueueRegistry struct {
-	mu      sync.RWMutex
-	queues  map[string]*MessageQueue
+	mu          sync.RWMutex
+	queues      map[string]*MessageQueue
 	defaultOpts *QueueOptions
 }
 
