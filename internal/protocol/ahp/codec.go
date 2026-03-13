@@ -1,0 +1,118 @@
+package ahp
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// Codec handles serialization and deserialization of AHP messages.
+type Codec interface {
+	Encode(msg *AHPMessage) ([]byte, error)
+	Decode(data []byte) (*AHPMessage, error)
+	EncodeMultiple(msgs []*AHPMessage) ([]byte, error)
+	DecodeMultiple(data []byte) ([]*AHPMessage, error)
+}
+
+// JSONCodec is a JSON-based codec for AHP messages.
+type JSONCodec struct{}
+
+// NewJSONCodec creates a new JSONCodec.
+func NewJSONCodec() *JSONCodec {
+	return &JSONCodec{}
+}
+
+// Encode encodes a message to JSON bytes.
+func (c *JSONCodec) Encode(msg *AHPMessage) ([]byte, error) {
+	if msg == nil {
+		return nil, fmt.Errorf("nil message")
+	}
+	return json.Marshal(msg)
+}
+
+// Decode decodes JSON bytes to a message.
+func (c *JSONCodec) Decode(data []byte) (*AHPMessage, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty data")
+	}
+
+	msg := &AHPMessage{}
+	if err := json.Unmarshal(data, msg); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+	return msg, nil
+}
+
+// EncodeMultiple encodes multiple messages to JSON bytes.
+func (c *JSONCodec) EncodeMultiple(msgs []*AHPMessage) ([]byte, error) {
+	if msgs == nil {
+		return nil, fmt.Errorf("nil messages")
+	}
+	return json.Marshal(msgs)
+}
+
+// DecodeMultiple decodes JSON bytes to multiple messages.
+func (c *JSONCodec) DecodeMultiple(data []byte) ([]*AHPMessage, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty data")
+	}
+
+	var msgs []*AHPMessage
+	if err := json.Unmarshal(data, &msgs); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+	return msgs, nil
+}
+
+// MustEncode encodes a message and panics on error.
+func (c *JSONCodec) MustEncode(msg *AHPMessage) []byte {
+	data, err := c.Encode(msg)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+// MustDecode decodes data and panics on error.
+func (c *JSONCodec) MustDecode(data []byte) *AHPMessage {
+	msg, err := c.Decode(data)
+	if err != nil {
+		panic(err)
+	}
+	return msg
+}
+
+// CodecRegistry manages available codecs.
+type CodecRegistry struct {
+	codecs map[string]Codec
+}
+
+// NewCodecRegistry creates a new CodecRegistry.
+func NewCodecRegistry() *CodecRegistry {
+	return &CodecRegistry{
+		codecs: make(map[string]Codec),
+	}
+}
+
+// Register registers a codec with a name.
+func (r *CodecRegistry) Register(name string, codec Codec) {
+	r.codecs[name] = codec
+}
+
+// Get returns a codec by name.
+func (r *CodecRegistry) Get(name string) (Codec, bool) {
+	codec, ok := r.codecs[name]
+	return codec, ok
+}
+
+// Default returns the default JSON codec.
+func (r *CodecRegistry) Default() Codec {
+	if c, ok := r.codecs["json"]; ok {
+		return c
+	}
+	return NewJSONCodec()
+}
+
+// InitDefaultCodecs registers the default codecs.
+func (r *CodecRegistry) InitDefaultCodecs() {
+	r.Register("json", NewJSONCodec())
+}

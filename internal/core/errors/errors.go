@@ -1,0 +1,75 @@
+package errors
+
+import "errors"
+
+// Sentinel errors for Agent module.
+var (
+	ErrAgentNotFound     = errors.New("agent not found")
+	ErrAgentTimeout      = errors.New("agent execution timeout")
+	ErrAgentPanic       = errors.New("agent internal panic")
+	ErrTaskQueueFull    = errors.New("task queue is full")
+	ErrDependencyCycle  = errors.New("task dependency cycle detected")
+	ErrAgentNotReady    = errors.New("agent not ready")
+	ErrAgentBusy        = errors.New("agent is busy")
+)
+
+// Sentinel errors for Protocol module.
+var (
+	ErrInvalidMessage   = errors.New("invalid message format")
+	ErrMessageTimeout   = errors.New("message send timeout")
+	ErrHeartbeatMissed  = errors.New("heartbeat missed")
+	ErrQueueFull        = errors.New("message queue is full")
+	ErrQueueEmpty       = errors.New("message queue is empty")
+)
+
+// Sentinel errors for Storage module.
+var (
+	ErrDBConnectionFailed = errors.New("database connection failed")
+	ErrQueryFailed        = errors.New("query execution failed")
+	ErrVectorSearchFailed = errors.New("vector search failed")
+	ErrRecordNotFound    = errors.New("record not found")
+	ErrTransactionFailed = errors.New("transaction failed")
+)
+
+// Sentinel errors for LLM module.
+var (
+	ErrLLMRequestFailed = errors.New("LLM request failed")
+	ErrLLMTimeout       = errors.New("LLM response timeout")
+	ErrLLMQuotaExceeded = errors.New("LLM quota exceeded")
+	ErrLLMInvalidResponse = errors.New("LLM invalid response")
+	ErrLLMParserFailed  = errors.New("LLM output parsing failed")
+	ErrLLMValidationFailed = errors.New("LLM output validation failed")
+)
+
+// Sentinel errors for Parameter validation.
+var (
+	ErrInvalidUserID = errors.New("invalid user ID")
+	ErrInvalidAge    = errors.New("invalid age")
+	ErrInvalidBudget = errors.New("invalid budget range")
+	ErrInvalidInput  = errors.New("invalid input parameter")
+	ErrNilPointer    = errors.New("nil pointer error")
+)
+
+// ModelValidationErrors returns validation errors for models package.
+var ModelValidationErrors = map[string]error{
+	"ErrInvalidUserID": ErrInvalidUserID,
+	"ErrInvalidAge":    ErrInvalidAge,
+	"ErrInvalidBudget": ErrInvalidBudget,
+	"ErrInvalidInput":  ErrInvalidInput,
+	"ErrNilPointer":    ErrNilPointer,
+}
+
+// Sentinel errors for Workflow module.
+var (
+	ErrWorkflowNotFound    = errors.New("workflow not found")
+	ErrWorkflowLoadFailed  = errors.New("workflow load failed")
+	ErrWorkflowCyclicDAG   = errors.New("workflow has cyclic dependency")
+	ErrWorkflowInvalidPhase = errors.New("invalid workflow phase")
+)
+
+// Sentinel errors for Rate Limiter.
+var (
+	ErrRateLimitExceeded   = errors.New("rate limit exceeded")
+	ErrBackpressureTriggered = errors.New("backpressure triggered")
+	ErrTokenBucketExhausted = errors.New("token bucket exhausted")
+)
