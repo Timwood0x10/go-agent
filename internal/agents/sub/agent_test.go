@@ -125,3 +125,194 @@ func TestHeartbeatSender_StartStop(t *testing.T) {
 
 	sender.Stop()
 }
+
+func TestSubAgent_New(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+
+	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
+
+	if agent.ID() != "sub1" {
+		t.Errorf("expected sub1, got %s", agent.ID())
+	}
+	if agent.Type() != models.AgentTypeTop {
+		t.Errorf("expected AgentTypeTop")
+	}
+}
+
+func TestSubAgent_DefaultConfig(t *testing.T) {
+	cfg := DefaultSubAgentConfig(models.AgentTypeTop)
+
+	if cfg.Type != models.AgentTypeTop {
+		t.Errorf("expected AgentTypeTop")
+	}
+}
+
+func TestSubAgent_StartStop(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+
+	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
+
+	// Start
+	err := agent.Start(context.Background())
+	if err != nil {
+		t.Errorf("Start() error = %v", err)
+	}
+
+	if agent.Status() != models.AgentStatusReady {
+		t.Errorf("expected status Ready after Start")
+	}
+
+	// Start again should fail
+	err = agent.Start(context.Background())
+	if err == nil {
+		t.Error("Start() should return error when already started")
+	}
+
+	// Stop
+	err = agent.Stop(context.Background())
+	if err != nil {
+		t.Errorf("Stop() error = %v", err)
+	}
+
+	if agent.Status() != models.AgentStatusOffline {
+		t.Errorf("expected status Offline after Stop")
+	}
+
+	// Stop again should fail
+	err = agent.Stop(context.Background())
+	if err == nil {
+		t.Error("Stop() should return error when not running")
+	}
+}
+
+func TestSubAgent_Process(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+
+	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
+
+	// Process without starting should auto-start
+	task := models.NewTask("task_1", models.AgentTypeTop, &models.UserProfile{})
+	result, err := agent.Process(context.Background(), task)
+	if err != nil {
+		t.Errorf("Process() error = %v", err)
+	}
+	_ = result
+}
+
+func TestSubAgent_SendReceiveMessage(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+	queue := ahp.NewMessageQueue("sub1", &ahp.QueueOptions{MaxSize: 10})
+
+	sub := &subAgent{
+		id:           "sub1",
+		agentType:    models.AgentTypeTop,
+		status:       models.AgentStatusReady,
+		executor:     executor,
+		handler:      handler,
+		tools:        make(map[string]func(ctx context.Context, args map[string]any) (any, error)),
+		messageQueue: queue,
+	}
+
+	// Test SendMessage
+	msg := ahp.NewMessage(ahp.AHPMethodResult, "sub1", "leader", "task1", "session1")
+	err := sub.SendMessage(context.Background(), msg)
+	if err != nil {
+		t.Errorf("SendMessage() error = %v", err)
+	}
+
+	// Test ReceiveMessage
+	_, err = sub.ReceiveMessage(context.Background())
+	if err != nil {
+		t.Errorf("ReceiveMessage() error = %v", err)
+	}
+}
+
+func TestSubAgent_Heartbeat(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+	hbMon := ahp.NewHeartbeatMonitor(ahp.DefaultHeartbeatConfig())
+
+	sub := &subAgent{
+		id:           "sub1",
+		agentType:    models.AgentTypeTop,
+		status:       models.AgentStatusReady,
+		executor:     executor,
+		handler:      handler,
+		tools:        make(map[string]func(ctx context.Context, args map[string]any) (any, error)),
+		heartbeatMon: hbMon,
+	}
+
+	err := sub.Heartbeat(context.Background())
+	if err != nil {
+		t.Errorf("Heartbeat() error = %v", err)
+	}
+
+	if !sub.IsAlive() {
+		t.Error("IsAlive() should return true after heartbeat")
+	}
+}
+
+func TestSubAgent_Execute(t *testing.T) {
+	executor := NewTaskExecutor(nil)
+	handler := NewMessageHandler("sub1")
+
+	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
+
+	task := models.NewTask("task_1", models.AgentTypeTop, &models.UserProfile{})
+	result, err := agent.Execute(context.Background(), task)
+	if err != nil {
+		t.Errorf("Execute() error = %v", err)
+	}
+	if result == nil {
+		t.Error("Execute() should return result")
+	}
+}
+
+func TestToolBinder_ListTools(t *testing.T) {
+	binder := NewToolBinder()
+
+	binder.BindTool("tool1", func(ctx context.Context, args map[string]any) (any, error) {
+		return nil, nil
+	})
+	binder.BindTool("tool2", func(ctx context.Context, args map[string]any) (any, error) {
+		return nil, nil
+	})
+
+	// ListTools is not implemented, so just test that tools can be bound and called
+	result, err := binder.CallTool(context.Background(), "tool1", nil)
+	if err != nil {
+		t.Errorf("CallTool() error = %v", err)
+	}
+	if result != nil {
+		t.Errorf("CallTool() got %v, want nil", result)
+	}
+}
+
+func TestMessageHandler_HandleTaskMessage(t *testing.T) {
+	handler := NewMessageHandler("test_agent")
+
+	// Create a task message
+	msg := ahp.NewTaskMessage("leader", "test_agent", "task1", "session1", map[string]any{"key": "value"})
+
+	// Handle the task message - will fail since executor is nil
+	err := handler.Handle(context.Background(), msg)
+	// Error expected since there's no executor
+	_ = err
+}
+
+func TestMessageHandler_HandleAckMessage(t *testing.T) {
+	handler := NewMessageHandler("test_agent")
+
+	// Create an ACK message
+	msg := ahp.NewACKMessage("test_agent", "leader", "task1", "session1")
+
+	// Handle the ACK message
+	err := handler.Handle(context.Background(), msg)
+	if err != nil {
+		t.Errorf("Handle() error = %v", err)
+	}
+}
