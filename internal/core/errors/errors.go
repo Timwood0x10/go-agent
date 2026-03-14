@@ -55,6 +55,16 @@ var (
 	ErrNilPointer    = errors.New("nil pointer error")
 )
 
+// Sentinel errors for parsing and retry.
+var (
+	ErrProfileParsingFailed    = errors.New("profile parsing failed")
+	ErrProfileValidationFailed = errors.New("profile validation failed")
+	ErrMaxRetriesExceeded      = errors.New("max retries exceeded")
+	ErrTaskExecutionFailed     = errors.New("task execution failed")
+	ErrPromptRenderFailed      = errors.New("prompt render failed")
+	ErrLLMGenerateFailed       = errors.New("LLM generate failed")
+)
+
 // ModelValidationErrors returns validation errors for models package.
 var ModelValidationErrors = map[string]error{
 	"ErrInvalidUserID": ErrInvalidUserID,

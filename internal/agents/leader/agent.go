@@ -2,6 +2,7 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"goagent/internal/agents/base"
@@ -28,6 +29,7 @@ type TaskPlanner interface {
 // TaskDispatcher dispatches tasks to sub-agents.
 type TaskDispatcher interface {
 	Dispatch(ctx context.Context, tasks []*models.Task) ([]*models.TaskResult, error)
+	RegisterExecutor(agentType models.AgentType, fn func(ctx context.Context, task *models.Task) (*models.TaskResult, error))
 }
 
 // ResultAggregator aggregates results from sub-agents.
@@ -194,6 +196,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("[DEBUG Leader] Created %d tasks\n", len(tasks))
 
 	// Step 3: Dispatch tasks
 	a.stepCount++
@@ -201,9 +204,14 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.ErrMaxStepsExceeded
 	}
 
+	fmt.Printf("[DEBUG Leader] Dispatching tasks...\n")
 	results, err := a.dispatcher.Dispatch(ctx, tasks)
 	if err != nil {
 		return nil, err
+	}
+	fmt.Printf("[DEBUG Leader] Dispatch returned %d results\n", len(results))
+	for i, r := range results {
+		fmt.Printf("[DEBUG Leader] Result %d: success=%v, items=%d, error=%s\n", i, r.Success, len(r.Items), r.Error)
 	}
 
 	// Step 4: Aggregate results

@@ -2,6 +2,7 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"goagent/internal/core/errors"
@@ -9,9 +10,13 @@ import (
 	"goagent/internal/protocol/ahp"
 )
 
+// TaskExecutorFunc is a function type for executing tasks directly.
+type TaskExecutorFunc func(ctx context.Context, task *models.Task) (*models.TaskResult, error)
+
 // taskDispatcher dispatches tasks to sub-agents.
 type taskDispatcher struct {
 	agentRegistry map[models.AgentType]string
+	executorFuncs map[models.AgentType]TaskExecutorFunc
 	maxParallel   int
 	timeout       int
 }
@@ -24,11 +29,18 @@ func NewTaskDispatcher(agentRegistry map[models.AgentType]string, maxParallel in
 	if timeout <= 0 {
 		timeout = 300
 	}
-	return &taskDispatcher{
+	d := &taskDispatcher{
 		agentRegistry: agentRegistry,
+		executorFuncs: make(map[models.AgentType]TaskExecutorFunc),
 		maxParallel:   maxParallel,
 		timeout:       timeout,
 	}
+	return d
+}
+
+// RegisterExecutor registers an executor function for a specific agent type.
+func (d *taskDispatcher) RegisterExecutor(agentType models.AgentType, fn func(ctx context.Context, task *models.Task) (*models.TaskResult, error)) {
+	d.executorFuncs[agentType] = fn
 }
 
 // Dispatch dispatches tasks to sub-agents in parallel.
@@ -55,7 +67,7 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 				errCh <- ctx.Err()
 				return
 			default:
-				// Simulate task dispatch
+				// Execute task
 				result := d.executeTask(ctx, t)
 				results[idx] = result
 			}
@@ -82,23 +94,37 @@ func (d *taskDispatcher) executeTask(ctx context.Context, task *models.Task) *mo
 		return result
 	}
 
-	// Get session ID from task context
+	fmt.Printf("[DEBUG Dispatcher] Executing task %s for agent type %s (addr: %s)\n", task.TaskID, task.AgentType, agentAddr)
+
+	// Check if we have a direct executor registered
+	if fn, exists := d.executorFuncs[task.AgentType]; exists {
+		// Call the executor directly
+		fmt.Printf("[DEBUG Dispatcher] Calling executor for %s\n", task.AgentType)
+		execResult, err := fn(ctx, task)
+		if err != nil {
+			fmt.Printf("[DEBUG Dispatcher] Executor error: %v\n", err)
+			result.SetError(err.Error())
+			return result
+		}
+		fmt.Printf("[DEBUG Dispatcher] Executor returned %d items, success=%v\n", len(execResult.Items), execResult.Success)
+		return execResult
+	}
+
+	// Fallback: create AHP message and send via queue
 	sessionID := ""
 	if task.Context != nil && len(task.Context.Dependencies) > 0 {
 		sessionID = task.Context.Dependencies[0]
 	}
 
-	// Create AHP message using helper function
 	msg := ahp.NewTaskMessage(d.getAgentID(), agentAddr, task.TaskID, sessionID, task.Payload)
 	_ = msg // Message would be sent via message queue in real implementation
 
-	// Simulate task dispatch
+	// Simulate task dispatch (for backward compatibility)
 	result.SetSuccess(nil, "task dispatched to "+agentAddr)
 
 	return result
 }
 
 func (d *taskDispatcher) getAgentID() string {
-	// Return a default leader ID or make it configurable
 	return "leader"
 }

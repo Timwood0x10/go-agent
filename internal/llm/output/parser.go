@@ -29,23 +29,60 @@ func (p *Parser) ParseRecommendResult(output string) (*models.RecommendResult, e
 		return nil, ErrInvalidJSON
 	}
 
+	// Try to detect if it's an array or object
+	jsonStr = strings.TrimSpace(jsonStr)
+
+	// If it's an array, wrap it in an object
+	if strings.HasPrefix(jsonStr, "[") {
+		return p.parseArrayFormat(jsonStr)
+	}
+
+	// Try parsing as object first
 	var result models.RecommendResult
-	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		if !p.fixJSON {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
-		}
+	if err := json.Unmarshal([]byte(jsonStr), &result); err == nil {
+		return &result, nil
+	}
 
+	// If object parsing fails, try to fix JSON
+	if p.fixJSON {
 		fixed, fixErr := p.fixJSONString(jsonStr)
-		if fixErr != nil {
-			return nil, fmt.Errorf("%w: %w (tried fix: %v)", ErrInvalidJSON, err, fixErr)
-		}
-
-		if err := json.Unmarshal([]byte(fixed), &result); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+		if fixErr == nil {
+			if err := json.Unmarshal([]byte(fixed), &result); err == nil {
+				return &result, nil
+			}
 		}
 	}
 
-	return &result, nil
+	// Try array format as fallback
+	return p.parseArrayFormat(jsonStr)
+}
+
+// parseArrayFormat handles JSON array format.
+func (p *Parser) parseArrayFormat(jsonStr string) (*models.RecommendResult, error) {
+	// Ensure it's a valid array
+	if !strings.HasPrefix(jsonStr, "[") {
+		jsonStr = "[" + jsonStr + "]"
+	}
+
+	var items []*models.RecommendItem
+	if err := json.Unmarshal([]byte(jsonStr), &items); err != nil {
+		// Try to fix JSON
+		if p.fixJSON {
+			fixed, fixErr := p.fixJSONString(jsonStr)
+			if fixErr == nil {
+				if err := json.Unmarshal([]byte(fixed), &items); err == nil {
+					return &models.RecommendResult{
+						Items: items,
+					}, nil
+				}
+			}
+		}
+		return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+	}
+
+	return &models.RecommendResult{
+		Items: items,
+	}, nil
 }
 
 // extractJSON extracts JSON from output.
@@ -56,26 +93,48 @@ func (p *Parser) extractJSON(output string) string {
 	markdownPattern := regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
 	matches := markdownPattern.FindStringSubmatch(output)
 	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
+		result := strings.TrimSpace(matches[1])
+		// Check if it's a valid JSON (object or array)
+		if strings.HasPrefix(result, "{") || strings.HasPrefix(result, "[") {
+			return result
+		}
 	}
 
 	// Try to find JSON object directly
 	start := strings.Index(output, "{")
-	if start == -1 {
-		return ""
-	}
-
-	// Find matching closing brace
-	depth := 0
 	end := -1
-	for i := start; i < len(output); i++ {
-		if output[i] == '{' {
-			depth++
-		} else if output[i] == '}' {
-			depth--
-			if depth == 0 {
-				end = i + 1
-				break
+
+	// If no object found, try array
+	if start == -1 {
+		start = strings.Index(output, "[")
+		if start == -1 {
+			return ""
+		}
+		// Find matching closing bracket
+		depth := 0
+		for i := start; i < len(output); i++ {
+			if output[i] == '[' {
+				depth++
+			} else if output[i] == ']' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+	} else {
+		// Find matching closing brace
+		depth := 0
+		for i := start; i < len(output); i++ {
+			if output[i] == '{' {
+				depth++
+			} else if output[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
 			}
 		}
 	}
@@ -141,6 +200,32 @@ func (p *Parser) ParseGeneric(output string, target interface{}) error {
 	}
 
 	return nil
+}
+
+// ParseJSON parses LLM output into a generic map.
+func (p *Parser) ParseJSON(output string) (map[string]interface{}, error) {
+	jsonStr := p.extractJSON(output)
+	if jsonStr == "" {
+		return nil, ErrInvalidJSON
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		if !p.fixJSON {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+		}
+
+		fixed, fixErr := p.fixJSONString(jsonStr)
+		if fixErr != nil {
+			return nil, fmt.Errorf("%w: %w (tried fix: %v)", ErrInvalidJSON, err, fixErr)
+		}
+
+		if err := json.Unmarshal([]byte(fixed), &result); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+		}
+	}
+
+	return result, nil
 }
 
 // ParseArray parses JSON array output.

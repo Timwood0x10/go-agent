@@ -2,20 +2,43 @@ package sub
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/llm/output"
 )
 
 // taskExecutor executes recommendation tasks.
 type taskExecutor struct {
 	toolBinder ToolBinder
+	llmAdapter output.LLMAdapter
+	template   *output.TemplateEngine
+	promptTpl  string
+	validator  *output.Validator
+	maxRetries int
 }
 
-// NewTaskExecutor creates a new TaskExecutor.
-func NewTaskExecutor(toolBinder ToolBinder) TaskExecutor {
+// NewTaskExecutor creates a new TaskExecutor with LLM support.
+func NewTaskExecutor(
+	toolBinder ToolBinder,
+	llmAdapter output.LLMAdapter,
+	template *output.TemplateEngine,
+	promptTpl string,
+	validator *output.Validator,
+	maxRetries int,
+) TaskExecutor {
+	if maxRetries <= 0 {
+		maxRetries = 3
+	}
 	return &taskExecutor{
 		toolBinder: toolBinder,
+		llmAdapter: llmAdapter,
+		template:   template,
+		promptTpl:  promptTpl,
+		validator:  validator,
+		maxRetries: maxRetries,
 	}
 }
 
@@ -23,27 +46,113 @@ func NewTaskExecutor(toolBinder ToolBinder) TaskExecutor {
 func (e *taskExecutor) Execute(ctx context.Context, task *models.Task) (*models.TaskResult, error) {
 	result := models.NewTaskResult("", models.AgentTypeTop)
 	if task == nil {
-		result.SetError("nil task received")
+		result.SetError(apperrors.ErrInvalidInput.Error())
 		return result, nil
 	}
 
 	result = models.NewTaskResult(task.TaskID, task.AgentType)
 	startTime := time.Now()
 
-	// Execute based on agent type
-	items, reason, err := e.executeByType(ctx, task)
-	if err != nil {
-		result.SetError(err.Error())
+	// If no LLM adapter, use fallback execution
+	if e.llmAdapter == nil {
+		items, reason, err := e.executeByType(ctx, task)
+		if err != nil {
+			result.SetError(err.Error())
+			return result, nil
+		}
+		result.SetSuccess(items, reason)
+		result.Duration = time.Since(startTime)
 		return result, nil
 	}
 
-	result.SetSuccess(items, reason)
-	result.Duration = time.Since(startTime)
+	// Get profile from task (either from UserProfile field or Payload)
+	var profile *models.UserProfile
+	if task.UserProfile != nil {
+		profile = task.UserProfile
+	} else if p, ok := task.Payload["profile"].(*models.UserProfile); ok {
+		profile = p
+	}
 
+	if profile == nil {
+		// Fallback to type-specific execution
+		items, reason, err := e.executeByType(ctx, task)
+		if err != nil {
+			result.SetError(err.Error())
+			return result, nil
+		}
+		result.SetSuccess(items, reason)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	// Execute LLM-based recommendation
+	items, err := e.executeWithLLM(ctx, task, profile)
+	if err != nil {
+		fmt.Printf("[DEBUG] LLM execution failed: %v\n", err)
+		// Fallback to type-specific execution
+		fallbackItems, reason, fallbackErr := e.executeByType(ctx, task)
+		if fallbackErr != nil {
+			fmt.Printf("[DEBUG] Fallback also failed: %v\n", fallbackErr)
+			result.SetError(err.Error())
+			return result, nil
+		}
+		fmt.Printf("[DEBUG] Using fallback, got %d items\n", len(fallbackItems))
+		result.SetSuccess(fallbackItems, reason)
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
+	result.SetSuccess(items, "LLM recommendation completed")
+	result.Duration = time.Since(startTime)
 	return result, nil
 }
 
+func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, profile *models.UserProfile) ([]*models.RecommendItem, error) {
+	// Render prompt
+	promptData := map[string]any{
+		"style":    profile.Style,
+		"occasion": profile.Occasions,
+		"budget":   formatBudget(profile.Budget),
+		"category": string(task.AgentType),
+	}
+	prompt, err := e.template.Render(e.promptTpl, promptData)
+	if err != nil {
+		return nil, fmt.Errorf("render prompt: %w", err)
+	}
+	fmt.Printf("[DEBUG] Prompt: %s\n", prompt[:min(200, len(prompt))])
+
+	// Call LLM
+	response, err := e.llmAdapter.Generate(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("LLM call failed: %w", err)
+	}
+	fmt.Printf("[DEBUG] LLM Response: %s\n", response[:min(200, len(response))])
+
+	// Parse response
+	parser := output.NewParser()
+	result, err := parser.ParseRecommendResult(response)
+	if err != nil {
+		return nil, fmt.Errorf("parse result: %w", err)
+	}
+
+	if result == nil || result.Items == nil {
+		return nil, fmt.Errorf("empty result from LLM")
+	}
+
+	fmt.Printf("[DEBUG] Got %d items\n", len(result.Items))
+	return result.Items, nil
+}
+
+func formatBudget(budget *models.PriceRange) string {
+	if budget == nil {
+		return "0 - 10000"
+	}
+	return fmt.Sprintf("%.0f - %.0f", budget.Min, budget.Max)
+}
+
+// executeByType dispatches to type-specific handlers.
 func (e *taskExecutor) executeByType(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
+	fmt.Printf("[DEBUG] executeByType called for agent type: %s\n", task.AgentType)
 	switch task.AgentType {
 	case models.AgentTypeTop:
 		return e.executeTopRecommendation(ctx, task)
@@ -60,6 +169,7 @@ func (e *taskExecutor) executeByType(ctx context.Context, task *models.Task) ([]
 	}
 }
 
+// Legacy methods - kept for backward compatibility.
 func (e *taskExecutor) executeTopRecommendation(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
 	items := []*models.RecommendItem{
 		{
@@ -70,15 +180,6 @@ func (e *taskExecutor) executeTopRecommendation(ctx context.Context, task *model
 			ImageURL:    "https://example.com/images/top_001.jpg",
 			Style:       []models.StyleTag{models.StyleCasual},
 			MatchReason: "Comfortable cotton material, perfect for daily wear",
-		},
-		{
-			ItemID:      "top_002",
-			Name:        "Linen Shirt",
-			Category:    "top",
-			Price:       459.00,
-			ImageURL:    "https://example.com/images/top_002.jpg",
-			Style:       []models.StyleTag{models.StyleCasual, models.StyleMinimalist},
-			MatchReason: "Breathable linen, minimalist design",
 		},
 	}
 	return items, "top recommendation completed", nil

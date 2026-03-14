@@ -5,11 +5,19 @@ import (
 	"testing"
 
 	"goagent/internal/core/models"
+	"goagent/internal/llm/output"
 	"goagent/internal/protocol/ahp"
 )
 
 func TestTaskExecutor_Execute(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,                        // toolBinder
+		nil,                        // llmAdapter
+		output.NewTemplateEngine(), // template
+		"{{.category}}",            // promptTpl
+		output.NewValidator(),      // validator
+		3,                          // maxRetries
+	)
 
 	task := models.NewTask("task_1", models.AgentTypeTop, &models.UserProfile{})
 
@@ -28,7 +36,14 @@ func TestTaskExecutor_Execute(t *testing.T) {
 }
 
 func TestTaskExecutor_ExecuteNilTask(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 
 	result, err := executor.Execute(context.Background(), nil)
 	if err != nil {
@@ -41,13 +56,20 @@ func TestTaskExecutor_ExecuteNilTask(t *testing.T) {
 }
 
 func TestTaskExecutor_ExecuteByType(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 
 	tests := []struct {
 		agentType models.AgentType
 		wantItems int
 	}{
-		{models.AgentTypeTop, 2},
+		{models.AgentTypeTop, 1},
 		{models.AgentTypeBottom, 1},
 		{models.AgentTypeShoes, 1},
 		{models.AgentTypeHead, 1},
@@ -127,7 +149,14 @@ func TestHeartbeatSender_StartStop(t *testing.T) {
 }
 
 func TestSubAgent_New(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 
 	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
@@ -149,7 +178,14 @@ func TestSubAgent_DefaultConfig(t *testing.T) {
 }
 
 func TestSubAgent_StartStop(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 
 	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
@@ -188,7 +224,14 @@ func TestSubAgent_StartStop(t *testing.T) {
 }
 
 func TestSubAgent_Process(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 
 	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)
@@ -203,7 +246,14 @@ func TestSubAgent_Process(t *testing.T) {
 }
 
 func TestSubAgent_SendReceiveMessage(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 	queue := ahp.NewMessageQueue("sub1", &ahp.QueueOptions{MaxSize: 10})
 
@@ -232,7 +282,14 @@ func TestSubAgent_SendReceiveMessage(t *testing.T) {
 }
 
 func TestSubAgent_Heartbeat(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 	hbMon := ahp.NewHeartbeatMonitor(ahp.DefaultHeartbeatConfig())
 
@@ -257,7 +314,14 @@ func TestSubAgent_Heartbeat(t *testing.T) {
 }
 
 func TestSubAgent_Execute(t *testing.T) {
-	executor := NewTaskExecutor(nil)
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
 	handler := NewMessageHandler("sub1")
 
 	agent := New("sub1", models.AgentTypeTop, executor, handler, nil, nil, nil)

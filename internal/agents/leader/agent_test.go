@@ -5,11 +5,18 @@ import (
 	"testing"
 
 	"goagent/internal/core/models"
+	"goagent/internal/llm/output"
 	"goagent/internal/protocol/ahp"
 )
 
 func TestProfileParser_Parse(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,                        // llmAdapter
+		output.NewTemplateEngine(), // template
+		"{{.input}}",               // promptTpl
+		output.NewValidator(),      // validator
+		3,                          // maxRetries
+	)
 
 	tests := []struct {
 		name    string
@@ -208,7 +215,13 @@ func TestTaskDispatcher_DispatchEmpty(t *testing.T) {
 }
 
 func TestLeaderAgent_New(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{
 		models.AgentTypeTop: "agent_top",
@@ -238,7 +251,13 @@ func TestLeaderAgent_DefaultConfig(t *testing.T) {
 }
 
 func TestLeaderAgent_StartStop(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
 	dispatcher := NewTaskDispatcher(registry, 2, 30)
@@ -280,7 +299,13 @@ func TestLeaderAgent_StartStop(t *testing.T) {
 }
 
 func TestLeaderAgent_Process(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
 	dispatcher := NewTaskDispatcher(registry, 2, 30)
@@ -297,7 +322,13 @@ func TestLeaderAgent_Process(t *testing.T) {
 }
 
 func TestLeaderAgent_ProcessNotReady(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
 	dispatcher := NewTaskDispatcher(registry, 2, 30)
@@ -319,7 +350,13 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 }
 
 func TestLeaderAgent_SendReceiveMessage(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
 	dispatcher := NewTaskDispatcher(registry, 2, 30)
@@ -354,7 +391,13 @@ func TestLeaderAgent_SendReceiveMessage(t *testing.T) {
 }
 
 func TestLeaderAgent_Heartbeat(t *testing.T) {
-	parser := NewProfileParser()
+	parser := NewProfileParser(
+		nil,
+		output.NewTemplateEngine(),
+		"{{.input}}",
+		output.NewValidator(),
+		3,
+	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
 	dispatcher := NewTaskDispatcher(registry, 2, 30)
