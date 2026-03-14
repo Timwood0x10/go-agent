@@ -13,15 +13,32 @@ import (
 // Validator validates data against schemas.
 type Validator struct {
 	customValidators map[string]ValidatorFunc
+	schemaType       string // "fashion", "travel"
 }
 
 // ValidatorFunc is a custom validation function.
 type ValidatorFunc func(interface{}) error
 
+// ValidatorOption is a functional option for Validator.
+type ValidatorOption func(*Validator)
+
+// WithSchemaType sets the schema type for validation.
+func WithSchemaType(schemaType string) ValidatorOption {
+	return func(v *Validator) {
+		v.schemaType = schemaType
+	}
+}
+
 // NewValidator creates a new Validator.
-func NewValidator() *Validator {
+func NewValidator(opts ...ValidatorOption) *Validator {
 	v := &Validator{
 		customValidators: make(map[string]ValidatorFunc),
+		schemaType:       "fashion", // default
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(v)
 	}
 
 	v.registerDefaults()
@@ -248,8 +265,155 @@ func (v *Validator) ValidateRecommendResult(result *models.RecommendResult) erro
 		return errors.New("result is nil")
 	}
 
-	schema := GetRecommendResultSchema()
-	return v.Validate(result, schema)
+	// Convert RecommendResult items to []interface{} for validation
+	itemsInterface := make([]interface{}, len(result.Items))
+	for i, item := range result.Items {
+		// Convert Style []StyleTag to []interface{}
+		styleInterface := make([]interface{}, len(item.Style))
+		for j, s := range item.Style {
+			styleInterface[j] = string(s)
+		}
+		// Convert Colors []string to []interface{}
+		colorsInterface := make([]interface{}, len(item.Colors))
+		for j, c := range item.Colors {
+			colorsInterface[j] = c
+		}
+
+		itemsInterface[i] = map[string]interface{}{
+			"item_id":      item.ItemID,
+			"name":         item.Name,
+			"category":     item.Category,
+			"description":  item.Description,
+			"price":        item.Price,
+			"url":          item.URL,
+			"image_url":    item.ImageURL,
+			"style":        styleInterface,
+			"colors":       colorsInterface,
+			"match_reason": item.MatchReason,
+			"brand":        item.Brand,
+			"metadata":     item.Metadata,
+		}
+	}
+
+	// Convert RecommendResult to map[string]interface{} for validation
+	resultMap := map[string]interface{}{
+		"session_id":  result.SessionID,
+		"user_id":     result.UserID,
+		"items":       itemsInterface,
+		"reason":      result.Reason,
+		"total_price": result.TotalPrice,
+		"match_score": result.MatchScore,
+		"occasion":    result.Occasion,
+		"season":      result.Season,
+		"metadata":    result.Metadata,
+	}
+
+	schema := v.getSchema()
+	return v.Validate(resultMap, schema)
+}
+
+// getSchema returns the appropriate schema based on schemaType.
+func (v *Validator) getSchema() *Schema {
+	switch v.schemaType {
+	case "travel":
+		return GetTravelResultSchema()
+	case "fashion":
+		return GetRecommendResultSchema()
+	default:
+		return GetRecommendResultSchema()
+	}
+}
+
+// GetTravelResultSchema returns the schema for travel recommendation results.
+func GetTravelResultSchema() *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"session_id": {
+				Type: "string",
+			},
+			"user_id": {
+				Type: "string",
+			},
+			"items": {
+				Type:     "array",
+				MinItems: pointerToInt(1),
+				Items:    GetTravelItemSchema(),
+			},
+			"reason": {
+				Type: "string",
+			},
+			"total_price": {
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
+			},
+			"match_score": {
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
+				Maximum: pointerToFloat64(1),
+			},
+			"metadata": {
+				Type: "object",
+			},
+		},
+		Required: []string{"items"},
+	}
+}
+
+// GetTravelItemSchema returns the schema for travel recommendation items.
+func GetTravelItemSchema() *Schema {
+	return &Schema{
+		Type: "object",
+		Properties: map[string]*Schema{
+			"item_id": {
+				Type:      "string",
+				MinLength: pointerToInt(1),
+			},
+			"category": {
+				Type: "string",
+				Enum: []interface{}{
+					"destination", "food", "hotel", "itinerary", "transport", "activity",
+				},
+			},
+			"name": {
+				Type:      "string",
+				MinLength: pointerToInt(1),
+			},
+			"brand": {
+				Type: "string",
+			},
+			"description": {
+				Type: "string",
+			},
+			"price": {
+				Type:    "number",
+				Minimum: pointerToFloat64(0),
+			},
+			"url": {
+				Type:   "string",
+				Format: "uri",
+			},
+			"image_url": {
+				Type:   "string",
+				Format: "uri",
+			},
+			"style": {
+				Type:  "array",
+				Items: &Schema{Type: "string"},
+			},
+			"colors": {
+				Type:  "array",
+				Items: &Schema{Type: "string"},
+			},
+			"match_reason": {
+				Type: "string",
+			},
+			"metadata": {
+				Type: "object",
+			},
+		},
+		Required: []string{"item_id", "name", "category"},
+	}
 }
 
 // Helper functions.

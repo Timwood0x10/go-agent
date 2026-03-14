@@ -101,12 +101,22 @@ func (p *profileParser) parseOnce(ctx context.Context, input string) (*models.Us
 }
 
 func (p *profileParser) parseResponse(response string) (*models.UserProfile, error) {
+	// Debug: print raw response
+	fmt.Printf("[DEBUG ProfileParser] Raw LLM response: %s\n", response[:min(500, len(response))])
+
 	// Try to parse as JSON
 	parser := output.NewParser()
 	data, err := parser.ParseJSON(response)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", apperrors.ErrLLMParserFailed, err)
 	}
+
+	// Debug: print parsed data
+	fmt.Printf("[DEBUG ProfileParser] Parsed data keys: ")
+	for k := range data {
+		fmt.Printf("%s ", k)
+	}
+	fmt.Println()
 
 	// Extract fields
 	profile := &models.UserProfile{}
@@ -133,9 +143,14 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 		}
 	}
 
-	// Parse budget
-	if budget, ok := data["budget"]; ok {
-		if b, ok := budget.(map[string]interface{}); ok {
+	// Parse budget - support both number (e.g., 10000) and object (e.g., {"min": 5000, "max": 10000})
+	if budget, ok := data["budget"]; ok && budget != nil {
+		switch b := budget.(type) {
+		case float64:
+			// Budget is a number like 10000
+			profile.Budget = models.NewPriceRange(0, b)
+		case map[string]interface{}:
+			// Budget is an object like {"min": 5000, "max": 10000}
 			min := 0.0
 			max := 10000.0
 			if v, ok := b["min"]; ok {
@@ -161,6 +176,25 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 	}
 	if profile.Budget == nil {
 		profile.Budget = models.NewPriceRange(0, 10000)
+	}
+
+	// Initialize Preferences map if nil
+	if profile.Preferences == nil {
+		profile.Preferences = make(map[string]any)
+	}
+
+	// Dynamically extract ALL fields from JSON response into Preferences
+	// This makes the parser flexible for any scenario (travel, fashion, etc.)
+	// The TaskPlanner then decides which agents to call based on triggers
+	for key, value := range data {
+		// Skip fields already parsed into dedicated fields
+		if key == "style" || key == "occasions" || key == "budget" {
+			continue
+		}
+		// Store all other fields in Preferences for trigger-based matching
+		if value != nil {
+			profile.Preferences[key] = value
+		}
 	}
 
 	return profile, nil

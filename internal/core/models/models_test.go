@@ -85,6 +85,11 @@ func TestAgentType(t *testing.T) {
 		{"shoes", AgentTypeShoes, "agent_shoes"},
 		{"head", AgentTypeHead, "agent_head"},
 		{"accessory", AgentTypeAccessory, "agent_accessory"},
+		// Travel agent types
+		{"destination", AgentTypeDestination, "destination"},
+		{"food", AgentTypeFood, "food"},
+		{"hotel", AgentTypeHotel, "hotel"},
+		{"itinerary", AgentTypeItinerary, "itinerary"},
 	}
 
 	for _, tt := range tests {

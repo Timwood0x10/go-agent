@@ -58,6 +58,12 @@ const (
 	AgentTypeShoes     AgentType = "agent_shoes"
 	AgentTypeHead      AgentType = "agent_head"
 	AgentTypeAccessory AgentType = "agent_accessory"
+
+	// Travel agent types
+	AgentTypeDestination AgentType = "destination"
+	AgentTypeFood        AgentType = "food"
+	AgentTypeHotel       AgentType = "hotel"
+	AgentTypeItinerary   AgentType = "itinerary"
 )
 
 // AgentStatus represents agent running state.

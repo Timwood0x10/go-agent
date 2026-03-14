@@ -127,3 +127,36 @@ workflow:
   definition_path: "./configs/workflow.yaml"
   auto_reload: false
   reload_interval: 60
+
+# Storage configuration (PostgreSQL/pgvector)
+storage:
+  enabled: false               # Enable storage (set to true to use DB)
+  type: "postgres"            # "postgres" or "sqlite"
+  host: "localhost"
+  port: 5433                 # Use 5433 to avoid conflict with local PostgreSQL
+  username: "postgres"
+  password: "postgres"
+  database: "styleagent"
+  ssl_mode: "disable"
+  pgvector:
+    enabled: false            # Enable vector similarity search
+    dimension: 1536           # Embedding dimension (1536 for OpenAI, 384 for all-MiniLM-L6-v2)
+    table_name: "embeddings"  # Table name for vector storage
+
+# Memory and distillation configuration
+memory:
+  enabled: false             # Enable memory system
+  session:
+    enabled: true
+    max_history: 50           # Max conversation turns to keep in memory
+  user_profile:
+    enabled: false           # Enable persistent user profile
+    storage: "postgres"       # "memory" or "postgres" (requires storage.enabled=true)
+    vector_db: false         # Store profile as vectors for similarity search
+  task_distillation:
+    enabled: false           # Enable task distillation (extract key info after each task)
+    storage: "postgres"       # "memory" or "postgres" (requires storage.enabled=true)
+    vector_store: false      # Store distilled results in pgvector for cross-session retrieval
+    prompt: |                # Custom prompt for distillation
+      请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。
+      只需返回JSON对象：{"user_needs": "...", "preferences": "...", "budget": "..."}

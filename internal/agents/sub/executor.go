@@ -12,12 +12,23 @@ import (
 
 // taskExecutor executes recommendation tasks.
 type taskExecutor struct {
-	toolBinder ToolBinder
-	llmAdapter output.LLMAdapter
-	template   *output.TemplateEngine
-	promptTpl  string
-	validator  *output.Validator
-	maxRetries int
+	toolBinder  ToolBinder
+	llmAdapter  output.LLMAdapter
+	template    *output.TemplateEngine
+	promptTpl   string
+	validator   *output.Validator
+	maxRetries  int
+	retryOnFail bool // Retry LLM call when validation fails
+	strictMode  bool // Return error on validation failure
+}
+
+// ValidationConfig holds validation configuration for executor.
+type ValidationConfig struct {
+	Enabled     bool
+	SchemaType  string
+	RetryOnFail bool
+	MaxRetries  int
+	StrictMode  bool
 }
 
 // NewTaskExecutor creates a new TaskExecutor with LLM support.
@@ -29,16 +40,32 @@ func NewTaskExecutor(
 	validator *output.Validator,
 	maxRetries int,
 ) TaskExecutor {
+	return NewTaskExecutorWithValidation(toolBinder, llmAdapter, template, promptTpl, validator, maxRetries, false, false)
+}
+
+// NewTaskExecutorWithValidation creates a new TaskExecutor with validation config.
+func NewTaskExecutorWithValidation(
+	toolBinder ToolBinder,
+	llmAdapter output.LLMAdapter,
+	template *output.TemplateEngine,
+	promptTpl string,
+	validator *output.Validator,
+	maxRetries int,
+	retryOnFail bool,
+	strictMode bool,
+) TaskExecutor {
 	if maxRetries <= 0 {
 		maxRetries = 3
 	}
 	return &taskExecutor{
-		toolBinder: toolBinder,
-		llmAdapter: llmAdapter,
-		template:   template,
-		promptTpl:  promptTpl,
-		validator:  validator,
-		maxRetries: maxRetries,
+		toolBinder:  toolBinder,
+		llmAdapter:  llmAdapter,
+		template:    template,
+		promptTpl:   promptTpl,
+		validator:   validator,
+		maxRetries:  maxRetries,
+		retryOnFail: retryOnFail,
+		strictMode:  strictMode,
 	}
 }
 
@@ -108,13 +135,71 @@ func (e *taskExecutor) Execute(ctx context.Context, task *models.Task) (*models.
 }
 
 func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, profile *models.UserProfile) ([]*models.RecommendItem, error) {
-	// Render prompt
-	promptData := map[string]any{
-		"style":    profile.Style,
-		"occasion": profile.Occasions,
-		"budget":   formatBudget(profile.Budget),
-		"category": string(task.AgentType),
+	// Retry loop
+	var lastErr error
+	for attempt := 0; attempt < e.maxRetries; attempt++ {
+		if attempt > 0 {
+			fmt.Printf("[DEBUG] Retry attempt %d/%d\n", attempt+1, e.maxRetries)
+		}
+
+		// Execute LLM call
+		items, err := e.executeWithLLMSingle(ctx, task, profile)
+		if err != nil {
+			lastErr = err
+			fmt.Printf("[DEBUG] Attempt %d failed: %v\n", attempt+1, err)
+			continue
+		}
+
+		// Validate results using validator
+		if e.validator != nil {
+			if err := e.validator.ValidateRecommendResult(&models.RecommendResult{Items: items}); err != nil {
+				fmt.Printf("[DEBUG] Result validation failed: %v\n", err)
+				// Retry if enabled and not already at max retries
+				if e.retryOnFail && attempt < e.maxRetries-1 {
+					fmt.Printf("[DEBUG] Will retry LLM call (attempt %d/%d)...\n", attempt+2, e.maxRetries)
+					continue
+				}
+				// Strict mode: return error
+				if e.strictMode {
+					return nil, fmt.Errorf("validation failed: %w", err)
+				}
+				// Non-strict mode: log and continue with whatever we got
+				fmt.Printf("[DEBUG] Continuing with unvalidated result (strict_mode=false)\n")
+			} else {
+				fmt.Printf("[DEBUG] Result validation passed\n")
+			}
+		}
+
+		fmt.Printf("[DEBUG] Got %d items\n", len(items))
+		return items, nil
 	}
+
+	return nil, fmt.Errorf("all retries failed: %w", lastErr)
+}
+
+func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Task, profile *models.UserProfile) ([]*models.RecommendItem, error) {
+	// Render prompt - support both fashion and travel profiles
+	// Use lowercase keys to match template's {{index . "key"}} syntax
+	promptData := map[string]any{
+		"Category": string(task.AgentType), // Uppercase to match template
+	}
+
+	// Check if this is a travel request - use Preferences map
+	if profile.Preferences != nil && len(profile.Preferences) > 0 {
+		// Copy all preferences to promptData (lowercase keys)
+		for k, v := range profile.Preferences {
+			promptData[k] = v
+		}
+	}
+
+	// Always include budget from profile.Budget (for fashion/travel compatibility)
+	promptData["budget"] = formatBudget(profile.Budget)
+
+	// Also set style from profile
+	if len(profile.Style) > 0 {
+		promptData["style"] = profile.Style
+	}
+
 	prompt, err := e.template.Render(e.promptTpl, promptData)
 	if err != nil {
 		return nil, fmt.Errorf("render prompt: %w", err)
