@@ -98,9 +98,9 @@ func TestAgentType(t *testing.T) {
 
 func TestSessionStatus(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    SessionStatus
-		expected  string
+		name     string
+		status   SessionStatus
+		expected string
 	}{
 		{"pending", SessionStatusPending, "pending"},
 		{"processing", SessionStatusProcessing, "processing"},
@@ -120,9 +120,9 @@ func TestSessionStatus(t *testing.T) {
 
 func TestAgentStatus(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    AgentStatus
-		expected  string
+		name     string
+		status   AgentStatus
+		expected string
 	}{
 		{"starting", AgentStatusStarting, "starting"},
 		{"ready", AgentStatusReady, "ready"},

@@ -4,18 +4,18 @@ import "errors"
 
 // Sentinel errors for Agent module.
 var (
-	ErrAgentNotFound        = errors.New("agent not found")
-	ErrAgentTimeout         = errors.New("agent execution timeout")
-	ErrAgentPanic           = errors.New("agent internal panic")
+	ErrAgentNotFound       = errors.New("agent not found")
+	ErrAgentTimeout        = errors.New("agent execution timeout")
+	ErrAgentPanic          = errors.New("agent internal panic")
 	ErrTaskQueueFull       = errors.New("task queue is full")
-	ErrDependencyCycle      = errors.New("task dependency cycle detected")
+	ErrDependencyCycle     = errors.New("task dependency cycle detected")
 	ErrAgentNotReady       = errors.New("agent not ready")
-	ErrAgentBusy            = errors.New("agent is busy")
-	ErrAgentAlreadyStarted  = errors.New("agent already started")
-	ErrAgentNotRunning      = errors.New("agent not running")
-	ErrQueueNotInitialized  = errors.New("message queue not initialized")
-	ErrToolNotFound         = errors.New("tool not found")
-	ErrMaxStepsExceeded     = errors.New("agent max steps exceeded")
+	ErrAgentBusy           = errors.New("agent is busy")
+	ErrAgentAlreadyStarted = errors.New("agent already started")
+	ErrAgentNotRunning     = errors.New("agent not running")
+	ErrQueueNotInitialized = errors.New("message queue not initialized")
+	ErrToolNotFound        = errors.New("tool not found")
+	ErrMaxStepsExceeded    = errors.New("agent max steps exceeded")
 )
 
 // Sentinel errors for Protocol module.

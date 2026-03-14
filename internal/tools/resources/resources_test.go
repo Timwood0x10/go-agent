@@ -8,7 +8,7 @@ import (
 func TestToolRegistry(t *testing.T) {
 	t.Run("register and get tool", func(t *testing.T) {
 		registry := NewRegistry()
-		
+
 		// Use ToolFunc which implements Tool interface
 		tool := NewToolFunc(
 			"test_tool",

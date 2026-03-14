@@ -362,15 +362,15 @@ func TestLeaderAgent_Heartbeat(t *testing.T) {
 	hbMon := ahp.NewHeartbeatMonitor(ahp.DefaultHeartbeatConfig())
 
 	leader := &leaderAgent{
-		id:            "leader1",
-		agentType:     models.AgentTypeLeader,
-		status:        models.AgentStatusReady,
-		config:        DefaultLeaderAgentConfig(),
-		parser:        parser,
-		planner:       planner,
-		dispatcher:    dispatcher,
-		aggregator:    aggregator,
-		heartbeatMon:  hbMon,
+		id:           "leader1",
+		agentType:    models.AgentTypeLeader,
+		status:       models.AgentStatusReady,
+		config:       DefaultLeaderAgentConfig(),
+		parser:       parser,
+		planner:      planner,
+		dispatcher:   dispatcher,
+		aggregator:   aggregator,
+		heartbeatMon: hbMon,
 	}
 
 	err := leader.Heartbeat(context.Background())
