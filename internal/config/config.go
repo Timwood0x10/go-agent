@@ -13,6 +13,7 @@ type Config struct {
 	LLM      LLMConfig      `yaml:"llm"`
 	Agents   AgentsConfig   `yaml:"agents"`
 	Prompts  PromptsConfig  `yaml:"prompts"`
+	Output   OutputConfig   `yaml:"output"`
 	Workflow WorkflowConfig `yaml:"workflow"`
 }
 
@@ -54,6 +55,7 @@ type SubAgentConfig struct {
 	Category   string `yaml:"category"`
 	MaxRetries int    `yaml:"max_retries"`
 	Timeout    int    `yaml:"timeout"` // seconds
+	Model      string `yaml:"model"`   // Model for this agent (overrides global LLM model)
 }
 
 // PromptsConfig holds prompt templates.
@@ -61,6 +63,13 @@ type PromptsConfig struct {
 	ProfileExtraction string `yaml:"profile_extraction"`
 	Recommendation    string `yaml:"recommendation"`
 	StyleAnalysis     string `yaml:"style_analysis"`
+}
+
+// OutputConfig holds output formatting configuration.
+type OutputConfig struct {
+	Format          string `yaml:"format"`           // "table", "json", "simple"
+	ItemTemplate    string `yaml:"item_template"`    // Template for each item
+	SummaryTemplate string `yaml:"summary_template"` // Template for summary
 }
 
 // WorkflowConfig holds workflow configuration.
@@ -140,5 +149,14 @@ func (c *Config) setDefaults() {
 	}
 	if c.Agents.Leader.MaxValidationRetry == 0 {
 		c.Agents.Leader.MaxValidationRetry = 3
+	}
+	if c.Output.Format == "" {
+		c.Output.Format = "simple"
+	}
+	if c.Output.ItemTemplate == "" {
+		c.Output.ItemTemplate = "{{.ItemID}}: {{.Name}} ({{.Price}})"
+	}
+	if c.Output.SummaryTemplate == "" {
+		c.Output.SummaryTemplate = "Got {{.Count}} recommendations"
 	}
 }

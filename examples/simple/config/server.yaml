@@ -28,30 +28,35 @@ agents:
       category: "上衣"
       max_retries: 3
       timeout: 30
+      model: "llama3.2"
 
     - id: "sub-bottom-1"
       type: "agent_bottom"
       category: "下装"
       max_retries: 3
       timeout: 30
+      model: "llama3.2"
 
     - id: "sub-shoes-1"
       type: "agent_shoes"
       category: "鞋子"
       max_retries: 3
       timeout: 30
+      model: "llama3.2"
 
     - id: "sub-head-1"
       type: "agent_head"
       category: "头部配饰"
       max_retries: 3
       timeout: 30
+      model: "llama3.2"
 
     - id: "sub-accessory-1"
       type: "agent_accessory"
       category: "配饰"
       max_retries: 3
       timeout: 30
+      model: "llama3.2"
 
 # 用户自定义 Prompt 模板
 prompts:
@@ -89,7 +94,6 @@ prompts:
           "name": "商品名称",
           "category": "类别",
           "price": 价格,
-          "image_url": "图片URL",
           "match_reason": "推荐理由"
         }
       ]
@@ -112,6 +116,12 @@ prompts:
       "key_elements": ["关键元素"]
     }
     ```
+
+# User-configurable output format
+output:
+  format: "simple"           # "table", "json", "simple"
+  item_template: "{{.ItemID}}: {{.Name}} ({{.Price}})"
+  summary_template: "Got {{.Count}} recommendations"
 
 workflow:
   definition_path: "./configs/workflow.yaml"

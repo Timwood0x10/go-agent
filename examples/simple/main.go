@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"text/template"
 	"time"
 
 	"goagent/internal/agents/base"
@@ -86,13 +89,15 @@ func main() {
 	}()
 
 	// Process a sample request
-	processSampleRequest(leaderAgent)
+	processSampleRequest(leaderAgent, cfg)
 
 	log.Println("Example completed successfully")
 }
 
 type components struct {
 	llmAdapter   output.LLMAdapter
+	llmFactory   *output.Factory
+	llmConfig    *output.Config
 	tracer       observability.Tracer
 	messageQueue *ahp.MessageQueue
 	validator    *output.Validator
@@ -102,12 +107,13 @@ type components struct {
 func initializeComponents(cfg *config.Config) (*components, error) {
 	// Create LLM adapter based on user configuration
 	llmFactory := output.NewFactory()
-	llmAdapter, err := llmFactory.Create(cfg.LLM.Provider, &output.Config{
+	llmCfg := &output.Config{
 		APIKey:  cfg.LLM.APIKey,
 		BaseURL: cfg.LLM.BaseURL,
 		Model:   cfg.LLM.Model,
 		Timeout: cfg.LLM.Timeout,
-	})
+	}
+	llmAdapter, err := llmFactory.Create(cfg.LLM.Provider, llmCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create LLM adapter: %w", err)
 	}
@@ -126,11 +132,32 @@ func initializeComponents(cfg *config.Config) (*components, error) {
 
 	return &components{
 		llmAdapter:   llmAdapter,
+		llmFactory:   llmFactory,
+		llmConfig:    llmCfg,
 		tracer:       tracer,
 		messageQueue: messageQueue,
 		validator:    validator,
 		template:     template,
 	}, nil
+}
+
+// getLLMAdapter returns the appropriate LLM adapter for the given agent config.
+// If the agent specifies a model, it creates a new adapter with that model.
+// Otherwise, returns the default global adapter.
+func getLLMAdapter(comps *components, agentModel string) output.LLMAdapter {
+	if agentModel == "" {
+		return comps.llmAdapter
+	}
+
+	// Create a new adapter with the specified model
+	cfg := *comps.llmConfig
+	cfg.Model = agentModel
+	adapter, err := comps.llmFactory.Create("ollama", &cfg)
+	if err != nil {
+		log.Printf("Warning: failed to create adapter for model %s: %v, using default", agentModel, err)
+		return comps.llmAdapter
+	}
+	return adapter
 }
 
 func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
@@ -161,9 +188,11 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 	// Register executor functions for each sub-agent type
 	for _, subCfg := range cfg.Agents.Sub {
 		agentType := models.AgentType(subCfg.Type)
+		// Get LLM adapter for this agent (uses agent-specific model if configured)
+		agentLLM := getLLMAdapter(comps, subCfg.Model)
 		executor := sub.NewTaskExecutor(
 			nil, // Tool binder (not needed for simple example)
-			comps.llmAdapter,
+			agentLLM,
 			comps.template,
 			cfg.Prompts.Recommendation,
 			comps.validator,
@@ -209,10 +238,13 @@ func createSubAgents(cfg *config.Config, comps *components) []sub.Agent {
 		// Create ToolBinder (for future tool integration)
 		toolBinder := sub.NewToolBinder()
 
+		// Get LLM adapter for this agent (uses agent-specific model if configured)
+		agentLLM := getLLMAdapter(comps, subCfg.Model)
+
 		// Create TaskExecutor with user-configured prompts
 		executor := sub.NewTaskExecutor(
 			toolBinder,
-			comps.llmAdapter,
+			agentLLM,
 			comps.template,
 			cfg.Prompts.Recommendation,
 			comps.validator,
@@ -250,7 +282,7 @@ func createSubAgents(cfg *config.Config, comps *components) []sub.Agent {
 	return agents
 }
 
-func processSampleRequest(agent leader.Agent) {
+func processSampleRequest(agent leader.Agent, cfg *config.Config) {
 	ctx := context.Background()
 
 	// Sample user input
@@ -265,11 +297,82 @@ func processSampleRequest(agent leader.Agent) {
 	}
 
 	if recommendResult, ok := result.(*models.RecommendResult); ok {
-		log.Printf("Got %d recommendations", len(recommendResult.Items))
-		for _, item := range recommendResult.Items {
-			log.Printf("  - %s: %s (%.2f)", item.ItemID, item.Name, item.Price)
-		}
+		formatOutput(cfg.Output, recommendResult.Items)
 	} else {
 		log.Printf("Result: %+v", result)
 	}
+}
+
+// formatOutput formats recommendations according to user configuration.
+func formatOutput(outputCfg config.OutputConfig, items []*models.RecommendItem) {
+	switch outputCfg.Format {
+	case "json":
+		// JSON format
+		jsonBytes, err := json.MarshalIndent(items, "", "  ")
+		if err != nil {
+			log.Printf("JSON format error: %v", err)
+			return
+		}
+		fmt.Println(string(jsonBytes))
+
+	case "table":
+		// Table format with headers
+		fmt.Println("+--------+---------------------------+-------------+---------+")
+		fmt.Println("| ID     | Name                      | Category    | Price   |")
+		fmt.Println("+--------+---------------------------+-------------+---------+")
+		for _, item := range items {
+			name := item.Name
+			if len(name) > 23 {
+				name = name[:20] + "..."
+			}
+			category := item.Category
+			if len(category) > 11 {
+				category = category[:8] + "..."
+			}
+			fmt.Printf("| %-6s | %-25s | %-11s | %7.2f |\n",
+				truncate(item.ItemID, 6),
+				name,
+				category,
+				item.Price,
+			)
+		}
+		fmt.Println("+--------+---------------------------+-------------+---------+")
+
+	default:
+		// Simple format using templates
+		// Render summary
+		summaryTmpl, err := template.New("summary").Parse(outputCfg.SummaryTemplate)
+		if err != nil {
+			log.Printf("Template error: %v", err)
+			return
+		}
+		summaryData := map[string]interface{}{"Count": len(items)}
+		var summaryBuf strings.Builder
+		if err := summaryTmpl.Execute(&summaryBuf, summaryData); err != nil {
+			log.Printf("Template execute error: %v", err)
+			return
+		}
+		log.Println(summaryBuf.String())
+
+		// Render each item
+		itemTmpl, err := template.New("item").Parse(outputCfg.ItemTemplate)
+		if err != nil {
+			log.Printf("Template error: %v", err)
+			return
+		}
+		for _, item := range items {
+			var itemBuf strings.Builder
+			if err := itemTmpl.Execute(&itemBuf, item); err != nil {
+				continue
+			}
+			fmt.Println("  - " + itemBuf.String())
+		}
+	}
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }
