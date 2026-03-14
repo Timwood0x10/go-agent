@@ -15,7 +15,7 @@ func TestNoopTracer_RecordLLMCall(t *testing.T) {
 		TraceID:    "test-123",
 		Model:      "gpt-4",
 		Prompt:     "test prompt",
-		Response:  "test response",
+		Response:   "test response",
 		TokensUsed: 100,
 		Duration:   time.Second,
 	}
@@ -108,7 +108,7 @@ func TestLogTracer_RecordLLMCall(t *testing.T) {
 		TraceID:    "test-123",
 		Model:      "gpt-4",
 		Prompt:     "test prompt",
-		Response:  "test response",
+		Response:   "test response",
 		TokensUsed: 100,
 		Duration:   time.Second,
 	}
@@ -251,7 +251,7 @@ func TestLogTracer_JSON_Format(t *testing.T) {
 		TraceID:    "test-123",
 		Model:      "gpt-4",
 		Prompt:     "test prompt",
-		Response:  "test response",
+		Response:   "test response",
 		TokensUsed: 100,
 		Duration:   time.Second,
 	}

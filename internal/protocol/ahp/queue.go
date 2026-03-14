@@ -79,6 +79,9 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 
 // Peek returns the first message without removing it.
 func (q *MessageQueue) Peek() *AHPMessage {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	select {
 	case msg := <-q.messages:
 		// Put it back

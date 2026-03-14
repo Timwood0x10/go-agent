@@ -14,12 +14,19 @@ import (
 // ReloadCallback is called when workflows are reloaded.
 type ReloadCallback func(workflows map[string]*Workflow)
 
+// callbackWithID wraps a ReloadCallback with an ID.
+type callbackWithID struct {
+	id string
+	fn ReloadCallback
+}
+
 // FileWatcher watches files for changes.
 type FileWatcher struct {
 	watcher      *fsnotify.Watcher
 	workflows    map[string]*Workflow
 	loader       WorkflowLoader
-	callbacks    []ReloadCallback
+	callbacks    []callbackWithID
+	callbackID   uint64
 	mu           sync.RWMutex
 	pollInterval time.Duration
 }
@@ -29,7 +36,7 @@ func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *File
 	return &FileWatcher{
 		loader:       loader,
 		workflows:    workflows,
-		callbacks:    make([]ReloadCallback, 0),
+		callbacks:    make([]callbackWithID, 0),
 		pollInterval: 5 * time.Second,
 	}
 }
@@ -122,29 +129,36 @@ func (w *FileWatcher) notifyCallbacks() {
 	callbacks := w.callbacks
 	w.mu.RUnlock()
 
-	for _, callback := range callbacks {
-		callback(workflows)
+	for _, cb := range callbacks {
+		cb.fn(workflows)
 	}
 }
 
-// RegisterCallback registers a callback for reload events.
-func (w *FileWatcher) RegisterCallback(callback ReloadCallback) {
+// RegisterCallback registers a callback for reload events and returns the callback ID.
+func (w *FileWatcher) RegisterCallback(callback ReloadCallback) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.callbacks = append(w.callbacks, callback)
+	w.callbackID++
+	id := fmt.Sprintf("callback-%d", w.callbackID)
+	w.callbacks = append(w.callbacks, callbackWithID{
+		id: id,
+		fn: callback,
+	})
+	return id
 }
 
-// UnregisterCallback removes a callback by setting it to nil.
-// Note: Comparison of functions is not supported in Go, this is a placeholder.
-func (w *FileWatcher) UnregisterCallback(callback ReloadCallback) {
+// UnregisterCallback removes a callback by ID.
+func (w *FileWatcher) UnregisterCallback(callbackID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// In Go, functions cannot be compared.
-	// This method is a placeholder for future implementation.
-	// For now, use ClearCallbacks to remove all callbacks.
-	_ = callback // suppress unused warning
+	for i, cb := range w.callbacks {
+		if cb.id == callbackID {
+			w.callbacks = append(w.callbacks[:i], w.callbacks[i+1:]...)
+			return
+		}
+	}
 }
 
 // WorkflowReloader manages workflow hot reloading.

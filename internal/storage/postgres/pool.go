@@ -156,16 +156,40 @@ func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 }
 
 // Query executes a query and returns rows.
-func (p *Pool) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	var rows *sql.Rows
-	var err error
+// The connection is released when rows are closed.
+func (p *Pool) Query(ctx context.Context, query string, args ...any) (*ManagedRows, error) {
+	conn, err := p.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	p.WithConnection(ctx, func(conn *sql.Conn) error {
-		rows, err = conn.QueryContext(ctx, query, args...)
-		return err
-	})
+	rows, err := conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		p.Release(conn)
+		return nil, err
+	}
 
-	return rows, err
+	return &ManagedRows{
+		Rows: rows,
+		conn: conn,
+		pool: p,
+	}, nil
+}
+
+// ManagedRows wraps sql.Rows and manages connection lifecycle.
+type ManagedRows struct {
+	*sql.Rows
+	conn *sql.Conn
+	pool *Pool
+}
+
+// Close closes the rows and releases the connection.
+func (m *ManagedRows) Close() error {
+	if m.conn != nil {
+		m.pool.Release(m.conn)
+		m.conn = nil
+	}
+	return m.Rows.Close()
 }
 
 // QueryRow executes a query and returns a single row.

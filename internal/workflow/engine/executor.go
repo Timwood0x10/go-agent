@@ -128,6 +128,7 @@ func (e *Executor) runSteps(
 	var mu sync.Mutex
 
 	for {
+		// Submit new steps while we have capacity
 		for stepIndex < len(executionOrder) && len(stepChan) < e.maxParallel {
 			stepID := executionOrder[stepIndex]
 			step := e.findStep(workflow.Steps, stepID)
@@ -152,11 +153,13 @@ func (e *Executor) runSteps(
 			}(stepID)
 		}
 
+		// Check if workflow is complete
 		if len(completed) == len(workflow.Steps) {
 			close(resultChan)
 			return
 		}
 
+		// Check for incomplete workflow
 		if stepIndex >= len(executionOrder) && len(completed) < len(workflow.Steps) {
 			pending := false
 			for _, sid := range executionOrder {
@@ -175,7 +178,21 @@ func (e *Executor) runSteps(
 			}
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		// Event-driven: wait for result or context done
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case result := <-resultChan:
+			// Update completed status from result
+			if result.Status == StepStatusCompleted {
+				mu.Lock()
+				completed[result.StepID] = true
+				mu.Unlock()
+			}
+		case <-time.After(10 * time.Millisecond):
+			// Timeout to re-check pending steps
+		}
 	}
 }
 

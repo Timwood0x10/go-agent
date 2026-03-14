@@ -87,17 +87,26 @@ func (bp *Backpressure) Submit(ctx context.Context, key string, weight int) (*Ba
 	// Try to queue
 	bp.metrics.Queued++
 
+	resultChan := make(chan *BackpressureResult, 1)
+
 	select {
 	case bp.queue <- &BackpressureRequest{
 		Ctx:    ctx,
 		Key:    key,
 		Weight: weight,
-		Result: make(chan *BackpressureResult, 1),
+		Result: resultChan,
 	}:
-		// Wait for processing - the request is already in the queue,
-		// but we need a different mechanism to get the result
-		result.Allowed = true
-		return result, nil
+		// Wait for actual processing result
+		select {
+		case bpResult := <-resultChan:
+			return bpResult, bpResult.Error
+		case <-ctx.Done():
+			bp.mu.Lock()
+			bp.metrics.Rejected++
+			bp.mu.Unlock()
+			result.Error = ErrQueueFull
+			return result, result.Error
+		}
 	case <-ctx.Done():
 		bp.mu.Lock()
 		bp.metrics.Rejected++
