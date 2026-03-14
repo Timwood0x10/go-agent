@@ -48,12 +48,14 @@ type leaderAgent struct {
 	aggregator   ResultAggregator
 	messageQueue *ahp.MessageQueue
 	heartbeatMon *ahp.HeartbeatMonitor
+	stepCount    int
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
 type LeaderAgentConfig struct {
 	base.Config
 	MaxParallelTasks int
+	MaxSteps         int
 	EnableCache      bool
 }
 
@@ -93,6 +95,7 @@ func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 	return &LeaderAgentConfig{
 		Config:           *base.DefaultConfig(models.AgentTypeLeader),
 		MaxParallelTasks: 10,
+		MaxSteps:         10,
 		EnableCache:      true,
 	}
 }
@@ -155,6 +158,13 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		}
 	}
 
+	// Reset step count for new request
+	a.stepCount = 0
+	maxSteps := a.config.MaxSteps
+	if maxSteps <= 0 {
+		maxSteps = 10
+	}
+
 	a.setStatus(models.AgentStatusBusy)
 	defer a.setStatus(models.AgentStatusReady)
 
@@ -163,9 +173,21 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.ErrInvalidInput
 	}
 
+	// Step 1: Parse profile
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
+	}
+
 	profile, err := a.parser.Parse(ctx, strInput)
 	if err != nil {
 		return nil, err
+	}
+
+	// Step 2: Plan tasks
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
 	}
 
 	tasks, err := a.planner.Plan(ctx, profile)
@@ -173,9 +195,21 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, err
 	}
 
+	// Step 3: Dispatch tasks
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
+	}
+
 	results, err := a.dispatcher.Dispatch(ctx, tasks)
 	if err != nil {
 		return nil, err
+	}
+
+	// Step 4: Aggregate results
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
 	}
 
 	result, err := a.aggregator.Aggregate(ctx, results)
