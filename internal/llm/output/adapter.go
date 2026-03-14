@@ -18,6 +18,7 @@ type LLMAdapter interface {
 
 // Config holds LLM configuration.
 type Config struct {
+	Provider    string
 	Model       string
 	BaseURL     string
 	APIKey      string

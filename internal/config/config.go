@@ -56,6 +56,7 @@ type SubAgentConfig struct {
 	MaxRetries int    `yaml:"max_retries"`
 	Timeout    int    `yaml:"timeout"` // seconds
 	Model      string `yaml:"model"`   // Model for this agent (overrides global LLM model)
+	Provider   string `yaml:"provider"` // Provider for this agent (overrides global LLM provider)
 }
 
 // PromptsConfig holds prompt templates.
@@ -110,6 +111,10 @@ func LoadFromEnv(cfg *Config) error {
 		}
 	}
 	if v := os.Getenv("LLM_API_KEY"); v != "" {
+		cfg.LLM.APIKey = v
+	}
+	// Also support OPENROUTER_API_KEY as alternative
+	if v := os.Getenv("OPENROUTER_API_KEY"); v != "" && cfg.LLM.APIKey == "" {
 		cfg.LLM.APIKey = v
 	}
 	if v := os.Getenv("LLM_PROVIDER"); v != "" {

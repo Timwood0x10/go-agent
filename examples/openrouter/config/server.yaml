@@ -1,66 +1,62 @@
-# Example Configuration
-# This file demonstrates all user-configurable options
+# OpenRouter Example Configuration
+# This example uses OpenRouter to access various LLM models
 
 server:
   host: "localhost"
   port: 8080
 
 llm:
-  provider: "ollama"           # "openai", "ollama", or "openrouter"
-  api_key: ""                 # API key (required for openai/openrouter)
-  base_url: "http://localhost:11434"  # Ollama: http://localhost:11434, OpenAI: https://api.openai.com/v1, OpenRouter: https://openrouter.ai/api/v1
-  model: "llama3.2"          # Model name (e.g., llama3.2, gpt-4o, anthropic/claude-3.5-sonnet)
+  provider: "openrouter"       # Uses OpenRouter API
+  api_key: "sk-or-v1-xxxx" # Replace with your OpenRouter API key
+  base_url: "https://openrouter.ai/api/v1"
+  model: "minimax/minimax-m2-her"  # Model available on OpenRouter
   timeout: 60                 # Request timeout in seconds
 
 agents:
   leader:
     id: "leader-1"
-    max_steps: 10               # Maximum steps per request
-    max_parallel_tasks: 5       # Maximum parallel sub-tasks
-    max_validation_retry: 3     # Maximum retries on validation failure
-    enable_cache: true          # Enable result caching
+    max_steps: 10
+    max_parallel_tasks: 5
+    max_validation_retry: 3
+    enable_cache: true
 
-  # User defines Agent数量和类型
-  # Here we define 5 sub-agents, 用户可以自由添加更多
   sub:
     - id: "sub-top-1"
       type: "agent_top"
       category: "上衣"
       max_retries: 3
       timeout: 30
-      model: "llama3.2"
+      model: "minimax/minimax-m2-her"
 
     - id: "sub-bottom-1"
       type: "agent_bottom"
       category: "下装"
       max_retries: 3
       timeout: 30
-      model: "llama3.2"
+      model: "minimax/minimax-m2-her"
 
     - id: "sub-shoes-1"
       type: "agent_shoes"
       category: "鞋子"
       max_retries: 3
       timeout: 30
-      model: "llama3.2"
+      model: "minimax/minimax-m2-her"
 
     - id: "sub-head-1"
       type: "agent_head"
       category: "头部配饰"
       max_retries: 3
       timeout: 30
-      model: "llama3.2"
+      model: "minimax/minimax-m2-her"
 
     - id: "sub-accessory-1"
       type: "agent_accessory"
       category: "配饰"
       max_retries: 3
       timeout: 30
-      model: "llama3.2"
+      model: "minimax/minimax-m2-her"
 
-# 用户自定义 Prompt 模板
 prompts:
-  # Prompt for extracting user profile from natural language
   profile_extraction: |
     从以下用户输入中提取穿搭偏好信息：
 
@@ -77,7 +73,6 @@ prompts:
     }
     ```
 
-  # Prompt for generating recommendations
   recommendation: |
     基于以下信息推荐 {{.category}} 类别的服装：
 
@@ -100,7 +95,6 @@ prompts:
     }
     ```
 
-  # Prompt for style analysis
   style_analysis: |
     分析以下风格描述，识别关键特征：
 
@@ -117,9 +111,8 @@ prompts:
     }
     ```
 
-# User-configurable output format
 output:
-  format: "simple"           # "table", "json", "simple"
+  format: "simple"
   item_template: "{{.ItemID}}: {{.Name}} ({{.Price}})"
   summary_template: "Got {{.Count}} recommendations"
 

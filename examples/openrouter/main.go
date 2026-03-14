@@ -30,12 +30,12 @@ import (
 // All through configuration files.
 
 func main() {
-	log.Println("Starting Style Agent Example...")
+	log.Println("Starting Style Agent (OpenRouter Example)...")
 
 	// Load configuration from file
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "./examples/simple/config/server.yaml"
+		configPath = "./examples/openrouter/config/server.yaml"
 	}
 
 	cfg, err := config.Load(configPath)
@@ -145,30 +145,30 @@ func initializeComponents(cfg *config.Config) (*components, error) {
 // getLLMAdapter returns the appropriate LLM adapter for the given agent config.
 // If the agent specifies a model or provider, it creates a new adapter with those values.
 // Otherwise, returns the default global adapter.
-func getLLMAdapter(comps *components, agentModel string, agentProvider string) output.LLMAdapter {
+func getLLMAdapter(comps *components, agentModel string, provider string) output.LLMAdapter {
 	// Determine which provider and model to use
-	provider := agentProvider
+	agentProvider := provider
 	model := agentModel
 
-	if provider == "" {
-		provider = comps.llmConfig.Provider
+	if agentProvider == "" {
+		agentProvider = comps.llmConfig.Provider
 	}
 	if model == "" {
 		model = comps.llmConfig.Model
 	}
 
 	// If nothing changed from global config, return default adapter
-	if provider == comps.llmConfig.Provider && model == comps.llmConfig.Model {
+	if agentProvider == comps.llmConfig.Provider && model == comps.llmConfig.Model {
 		return comps.llmAdapter
 	}
 
 	// Create a new adapter with the specified model and/or provider
 	cfg := *comps.llmConfig
 	cfg.Model = model
-	cfg.Provider = provider
-	adapter, err := comps.llmFactory.Create(provider, &cfg)
+	cfg.Provider = agentProvider
+	adapter, err := comps.llmFactory.Create(agentProvider, &cfg)
 	if err != nil {
-		log.Printf("Warning: failed to create adapter for provider=%s model=%s: %v, using default", provider, model, err)
+		log.Printf("Warning: failed to create adapter for provider=%s model=%s: %v, using default", agentProvider, model, err)
 		return comps.llmAdapter
 	}
 	return adapter
