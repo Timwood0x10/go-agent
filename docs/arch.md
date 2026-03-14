@@ -457,7 +457,7 @@ src/
 
 | 层级 | 技术选型 |
 |------|----------|
-| 语言 | Python 3.13 |
+| 语言 | golang |
 | LLM | Ollama (gpt-oss:20b / llama3.2:3b) |
 | 协议 | AHP (自定义) |
 | 存储 | PostgreSQL + pgvector |

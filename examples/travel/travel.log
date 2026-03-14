@@ -1,0 +1,117 @@
+2026/03/14 19:57:58 Starting Travel Planning Agent Example...
+2026/03/14 19:57:58 Initialized 4 Travel Agents
+2026/03/14 19:57:58 
+=== Request 1: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
+[DEBUG] Parsing profile with LLM for input: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物
+[DEBUG ProfileParser] Raw LLM response: ```json
+{
+  "destination": "东京",
+  "duration": "5天4晚",
+  "budget": 10000,
+  "preferences": ["美食", "购物"],
+  "travel_style": "休闲"
+}
+```
+[DEBUG ProfileParser] Parsed data keys: destination duration budget preferences travel_style 
+[DEBUG] Profile parsed: &{UserID: Name: Gender: Age:0 Occupation: Style:[casual] Budget:0x1f043b494440 Colors:[] Occasions:[daily] BodyType: Preferences:map[destination:东京 duration:5天4晚 preferences:[美食 购物] travel_style:休闲] CreatedAt:0001-01-01 00:00:00 +0000 UTC UpdatedAt:0001-01-01 00:00:00 +0000 UTC}
+[DEBUG Leader] Created 2 tasks
+[DEBUG Leader] Dispatching tasks...
+[DEBUG Dispatcher] Executing task task_20260314195803 for agent type food (addr: agent-food)
+[DEBUG Dispatcher] Calling executor for food
+[DEBUG Dispatcher] Executing task task_20260314195803 for agent type destination (addr: agent-destination)
+[DEBUG Dispatcher] Calling executor for destination
+[DEBUG] Prompt: 你是一位专业的旅行顾问。请根据以下信息推荐 food：
+
+用户目的地: 东京
+旅行天数: 5天4晚
+预算范围: 0 - 10000
+用户偏好: [美食 购物]
+旅行风格: 休闲
+
+请�
+[DEBUG] Prompt: 你是一位专业的旅行顾问。请根据以下信息推荐 destination：
+
+用户目的地: 东京
+旅行天数: 5天4晚
+预算范围: 0 - 10000
+用户偏好: [美食 购物]
+旅行风格: 休�
+[DEBUG] LLM Response: {
+  "items": [
+    {
+      "item_id": "tokyo_ginza_shopping",
+      "name": "银座 (Ginza)",
+      "description": "东京最高端的购物区，汇集了各大奢侈品牌旗舰店、百年百货公
+[DEBUG] Got 4 items
+[DEBUG] Result validation passed
+[DEBUG] Got 4 items
+[DEBUG Dispatcher] Executor returned 4 items, success=true
+[DEBUG] LLM Response: ```json
+{
+  "items": [
+    {
+      "item_id": "shinjuku_omoyoko_sushi_set",
+      "name": "Shinjuku Omoide Yokocho Sushi Set",
+      "description": "A delicious and affordable sushi lunch set in the n
+[DEBUG] Got 1 items
+[DEBUG] Result validation passed
+[DEBUG] Got 1 items
+[DEBUG Dispatcher] Executor returned 1 items, success=true
+[DEBUG Leader] Dispatch returned 2 results
+[DEBUG Leader] Result 0: success=true, items=4, error=
+[DEBUG Leader] Result 1: success=true, items=1, error=
++------+-------------------------------+-------------+------------+
+| ID   | Name                         | Category    | Price      |
++------+-------------------------------+-------------+------------+
+| toky | 银座 (Ginza)                    | destination |       5000 |
+| toky | 新宿 (Shinjuku)                 | destination |       3000 |
+| shin | Shinjuku Omoide Yokocho ...   | food        |       2800 |
+| toky | 筑地场外市场 (Tsuk...               | destination |       1000 |
+| toky | 表参道 (Omotesando)              | destination |       1000 |
++------+-------------------------------+-------------+------------+
+2026/03/14 19:58:19 
+=== Request 2: 计划去泰国清迈3天2夜，预算3000元，喜欢自然风光和文化 ===
+[DEBUG] Parsing profile with LLM for input: 计划去泰国清迈3天2夜，预算3000元，喜欢自然风光和文化
+[DEBUG ProfileParser] Raw LLM response: ```json
+{
+  "destination": "清迈",
+  "duration": "3天2夜",
+  "budget": 3000,
+  "preferences": ["自然风光", "文化"],
+  "travel_style": "休闲"
+}
+```
+[DEBUG ProfileParser] Parsed data keys: destination duration budget preferences travel_style 
+[DEBUG] Profile parsed: &{UserID: Name: Gender: Age:0 Occupation: Style:[casual] Budget:0x1f043b494ab0 Colors:[] Occasions:[daily] BodyType: Preferences:map[destination:清迈 duration:3天2夜 preferences:[自然风光 文化] travel_style:休闲] CreatedAt:0001-01-01 00:00:00 +0000 UTC UpdatedAt:0001-01-01 00:00:00 +0000 UTC}
+[DEBUG Leader] Created 1 tasks
+[DEBUG Leader] Dispatching tasks...
+[DEBUG Dispatcher] Executing task task_20260314195820 for agent type destination (addr: agent-destination)
+[DEBUG Dispatcher] Calling executor for destination
+[DEBUG] Prompt: 你是一位专业的旅行顾问。请根据以下信息推荐 destination：
+
+用户目的地: 清迈
+旅行天数: 3天2夜
+预算范围: 0 - 3000
+用户偏好: [自然风光 文化]
+旅行风格: 
+[DEBUG] LLM Response: ```json
+{
+  "items": [
+    {
+      "item_id": "cm_001",
+      "name": "素贴山双龙寺",
+      "description": "清迈的地标性建筑，位于山顶，可俯瞰整个清迈城全景，融合了�
+[DEBUG] Got 3 items
+[DEBUG] Result validation passed
+[DEBUG] Got 3 items
+[DEBUG Dispatcher] Executor returned 3 items, success=true
+[DEBUG Leader] Dispatch returned 1 results
+[DEBUG Leader] Result 0: success=true, items=3, error=
++------+-------------------------------+-------------+------------+
+| ID   | Name                         | Category    | Price      |
++------+-------------------------------+-------------+------------+
+| cm_0 | 湄林山谷自然度假区                     | destination |        800 |
+| cm_0 | 清迈古城及周日夜市                     | destination |        500 |
+| cm_0 | 素贴山双龙寺                        | destination |        100 |
++------+-------------------------------+-------------+------------+
+2026/03/14 19:58:23 Example completed successfully

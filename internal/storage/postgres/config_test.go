@@ -1,0 +1,135 @@
+package postgres
+
+import (
+	"testing"
+	"time"
+)
+
+func TestConfig_DefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Host != "localhost" {
+		t.Errorf("expected localhost, got %s", cfg.Host)
+	}
+	if cfg.Port != 5432 {
+		t.Errorf("expected 5432, got %d", cfg.Port)
+	}
+	if cfg.User != "postgres" {
+		t.Errorf("expected postgres, got %s", cfg.User)
+	}
+	if cfg.MaxOpenConns != 25 {
+		t.Errorf("expected 25, got %d", cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns != 10 {
+		t.Errorf("expected 10, got %d", cfg.MaxIdleConns)
+	}
+}
+
+func TestConfig_DSN(t *testing.T) {
+	cfg := &Config{
+		Host:     "localhost",
+		Port:     5432,
+		User:     "user",
+		Password: "password",
+		Database: "testdb",
+	}
+
+	dsn := cfg.DSN()
+	expected := "host=localhost port=5432 user=user password=password dbname=testdb sslmode=disable"
+	if dsn != expected {
+		t.Errorf("expected %s, got %s", expected, dsn)
+	}
+}
+
+func TestConfig_Validate(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		cfg := &Config{
+			Host:            "localhost",
+			Port:            5432,
+			MaxOpenConns:    10,
+			MaxIdleConns:    5,
+			ConnMaxLifetime: 10 * time.Minute,
+			ConnMaxIdleTime: 2 * time.Minute,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+	})
+
+	t.Run("invalid port", func(t *testing.T) {
+		cfg := &Config{
+			Port: 0,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+
+		if cfg.Port != 5432 {
+			t.Errorf("expected port 5432 after validation")
+		}
+	})
+
+	t.Run("invalid max open conns", func(t *testing.T) {
+		cfg := &Config{
+			MaxOpenConns: 0,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+
+		if cfg.MaxOpenConns != 25 {
+			t.Errorf("expected MaxOpenConns 25 after validation")
+		}
+	})
+
+	t.Run("invalid max idle conns", func(t *testing.T) {
+		cfg := &Config{
+			MaxIdleConns: 0,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+
+		if cfg.MaxIdleConns != 10 {
+			t.Errorf("expected MaxIdleConns 10 after validation")
+		}
+	})
+
+	t.Run("invalid conn max lifetime", func(t *testing.T) {
+		cfg := &Config{
+			ConnMaxLifetime: 0,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+
+		if cfg.ConnMaxLifetime != 5*time.Minute {
+			t.Errorf("expected ConnMaxLifetime 5min after validation")
+		}
+	})
+
+	t.Run("invalid conn max idle time", func(t *testing.T) {
+		cfg := &Config{
+			ConnMaxIdleTime: 0,
+		}
+
+		err := cfg.Validate()
+		if err != nil {
+			t.Errorf("Validate() error = %v", err)
+		}
+
+		if cfg.ConnMaxIdleTime != 1*time.Minute {
+			t.Errorf("expected ConnMaxIdleTime 1min after validation")
+		}
+	})
+}

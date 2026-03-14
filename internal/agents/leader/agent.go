@@ -2,6 +2,7 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"goagent/internal/agents/base"
@@ -28,6 +29,7 @@ type TaskPlanner interface {
 // TaskDispatcher dispatches tasks to sub-agents.
 type TaskDispatcher interface {
 	Dispatch(ctx context.Context, tasks []*models.Task) ([]*models.TaskResult, error)
+	RegisterExecutor(agentType models.AgentType, fn func(ctx context.Context, task *models.Task) (*models.TaskResult, error))
 }
 
 // ResultAggregator aggregates results from sub-agents.
@@ -48,12 +50,14 @@ type leaderAgent struct {
 	aggregator   ResultAggregator
 	messageQueue *ahp.MessageQueue
 	heartbeatMon *ahp.HeartbeatMonitor
+	stepCount    int
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
 type LeaderAgentConfig struct {
 	base.Config
 	MaxParallelTasks int
+	MaxSteps         int
 	EnableCache      bool
 }
 
@@ -93,6 +97,7 @@ func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 	return &LeaderAgentConfig{
 		Config:           *base.DefaultConfig(models.AgentTypeLeader),
 		MaxParallelTasks: 10,
+		MaxSteps:         10,
 		EnableCache:      true,
 	}
 }
@@ -155,6 +160,13 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		}
 	}
 
+	// Reset step count for new request
+	a.stepCount = 0
+	maxSteps := a.config.MaxSteps
+	if maxSteps <= 0 {
+		maxSteps = 10
+	}
+
 	a.setStatus(models.AgentStatusBusy)
 	defer a.setStatus(models.AgentStatusReady)
 
@@ -163,19 +175,49 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.ErrInvalidInput
 	}
 
+	// Step 1: Parse profile
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
+	}
+
 	profile, err := a.parser.Parse(ctx, strInput)
 	if err != nil {
 		return nil, err
+	}
+
+	// Step 2: Plan tasks
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
 	}
 
 	tasks, err := a.planner.Plan(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("[DEBUG Leader] Created %d tasks\n", len(tasks))
 
+	// Step 3: Dispatch tasks
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
+	}
+
+	fmt.Printf("[DEBUG Leader] Dispatching tasks...\n")
 	results, err := a.dispatcher.Dispatch(ctx, tasks)
 	if err != nil {
 		return nil, err
+	}
+	fmt.Printf("[DEBUG Leader] Dispatch returned %d results\n", len(results))
+	for i, r := range results {
+		fmt.Printf("[DEBUG Leader] Result %d: success=%v, items=%d, error=%s\n", i, r.Success, len(r.Items), r.Error)
+	}
+
+	// Step 4: Aggregate results
+	a.stepCount++
+	if a.stepCount > maxSteps {
+		return nil, errors.ErrMaxStepsExceeded
 	}
 
 	result, err := a.aggregator.Aggregate(ctx, results)

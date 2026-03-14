@@ -1,0 +1,162 @@
+# Example Configuration
+# This file demonstrates all user-configurable options
+
+server:
+  host: "localhost"
+  port: 8080
+
+llm:
+  provider: "ollama"           # "openai", "ollama", or "openrouter"
+  api_key: ""                 # API key (required for openai/openrouter)
+  base_url: "http://localhost:11434"  # Ollama: http://localhost:11434, OpenAI: https://api.openai.com/v1, OpenRouter: https://openrouter.ai/api/v1
+  model: "llama3.2"          # Model name (e.g., llama3.2, gpt-4o, anthropic/claude-3.5-sonnet)
+  timeout: 60                 # Request timeout in seconds
+
+agents:
+  leader:
+    id: "leader-1"
+    max_steps: 10               # Maximum steps per request
+    max_parallel_tasks: 5       # Maximum parallel sub-tasks
+    max_validation_retry: 3     # Maximum retries on validation failure
+    enable_cache: true          # Enable result caching
+
+  # User defines Agent数量和类型
+  # Here we define 5 sub-agents, 用户可以自由添加更多
+  sub:
+    - id: "sub-top-1"
+      type: "agent_top"
+      category: "上衣"
+      max_retries: 3
+      timeout: 30
+      model: "llama3.2"
+
+    - id: "sub-bottom-1"
+      type: "agent_bottom"
+      category: "下装"
+      max_retries: 3
+      timeout: 30
+      model: "llama3.2"
+
+    - id: "sub-shoes-1"
+      type: "agent_shoes"
+      category: "鞋子"
+      max_retries: 3
+      timeout: 30
+      model: "llama3.2"
+
+    - id: "sub-head-1"
+      type: "agent_head"
+      category: "头部配饰"
+      max_retries: 3
+      timeout: 30
+      model: "llama3.2"
+
+    - id: "sub-accessory-1"
+      type: "agent_accessory"
+      category: "配饰"
+      max_retries: 3
+      timeout: 30
+      model: "llama3.2"
+
+# 用户自定义 Prompt 模板
+prompts:
+  # Prompt for extracting user profile from natural language
+  profile_extraction: |
+    从以下用户输入中提取穿搭偏好信息：
+
+    {{.input}}
+
+    请严格按照以下 JSON Schema 返回，**只返回 JSON，不要其他文字**：
+    ```json
+    {
+      "style": ["casual", "minimalist"],
+      "occasions": ["daily", "work"],
+      "budget": {"min": 0, "max": 1000},
+      "colors": ["black", "white"],
+      "favorite_brands": []
+    }
+    ```
+
+  # Prompt for generating recommendations
+  recommendation: |
+    基于以下信息推荐 {{.category}} 类别的服装：
+
+    用户风格偏好: {{.style}}
+    场合: {{.occasions}}
+    预算范围: {{.budget}}
+
+    请严格按照以下 JSON Schema 返回，**只返回 JSON，不要其他文字**：
+    ```json
+    {
+      "items": [
+        {
+          "item_id": "商品ID",
+          "name": "商品名称",
+          "category": "类别",
+          "price": 价格,
+          "match_reason": "推荐理由"
+        }
+      ]
+    }
+    ```
+
+  # Prompt for style analysis
+  style_analysis: |
+    分析以下风格描述，识别关键特征：
+
+    {{.description}}
+
+    请严格按照以下 JSON Schema 返回，**只返回 JSON，不要其他文字**：
+    ```json
+    {
+      "primary_style": "主风格",
+      "secondary_styles": ["辅助风格"],
+      "color_palette": ["颜色"],
+      "silhouette_preference": "版型偏好",
+      "key_elements": ["关键元素"]
+    }
+    ```
+
+# User-configurable output format
+output:
+  format: "simple"           # "table", "json", "simple"
+  item_template: "{{.ItemID}}: {{.Name}} ({{.Price}})"
+  summary_template: "Got {{.Count}} recommendations"
+
+workflow:
+  definition_path: "./configs/workflow.yaml"
+  auto_reload: false
+  reload_interval: 60
+
+# Storage configuration (PostgreSQL/pgvector)
+storage:
+  enabled: false               # Enable storage (set to true to use DB)
+  type: "postgres"            # "postgres" or "sqlite"
+  host: "localhost"
+  port: 5433                 # Use 5433 to avoid conflict with local PostgreSQL
+  username: "postgres"
+  password: "postgres"
+  database: "styleagent"
+  ssl_mode: "disable"
+  pgvector:
+    enabled: false            # Enable vector similarity search
+    dimension: 1536           # Embedding dimension (1536 for OpenAI, 384 for all-MiniLM-L6-v2)
+    table_name: "embeddings"  # Table name for vector storage
+
+# Memory and distillation configuration
+memory:
+  enabled: false             # Enable memory system
+  session:
+    enabled: true
+    max_history: 50           # Max conversation turns to keep in memory
+  user_profile:
+    enabled: false           # Enable persistent user profile
+    storage: "postgres"       # "memory" or "postgres" (requires storage.enabled=true)
+    vector_db: false         # Store profile as vectors for similarity search
+  task_distillation:
+    enabled: false           # Enable task distillation (extract key info after each task)
+    storage: "postgres"       # "memory" or "postgres" (requires storage.enabled=true)
+    vector_store: false      # Store distilled results in pgvector for cross-session retrieval
+    prompt: |                # Custom prompt for distillation
+      请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。
+      只需返回JSON对象：{"user_needs": "...", "preferences": "...", "budget": "..."}

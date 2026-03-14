@@ -15,6 +15,7 @@ var (
 	ErrAgentNotRunning     = errors.New("agent not running")
 	ErrQueueNotInitialized = errors.New("message queue not initialized")
 	ErrToolNotFound        = errors.New("tool not found")
+	ErrMaxStepsExceeded    = errors.New("agent max steps exceeded")
 )
 
 // Sentinel errors for Protocol module.
@@ -52,6 +53,16 @@ var (
 	ErrInvalidBudget = errors.New("invalid budget range")
 	ErrInvalidInput  = errors.New("invalid input parameter")
 	ErrNilPointer    = errors.New("nil pointer error")
+)
+
+// Sentinel errors for parsing and retry.
+var (
+	ErrProfileParsingFailed    = errors.New("profile parsing failed")
+	ErrProfileValidationFailed = errors.New("profile validation failed")
+	ErrMaxRetriesExceeded      = errors.New("max retries exceeded")
+	ErrTaskExecutionFailed     = errors.New("task execution failed")
+	ErrPromptRenderFailed      = errors.New("prompt render failed")
+	ErrLLMGenerateFailed       = errors.New("LLM generate failed")
 )
 
 // ModelValidationErrors returns validation errors for models package.

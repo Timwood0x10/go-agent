@@ -8,8 +8,9 @@ import (
 
 // Provider types.
 const (
-	ProviderOpenAI = "openai"
-	ProviderOllama = "ollama"
+	ProviderOpenAI     = "openai"
+	ProviderOllama     = "ollama"
+	ProviderOpenRouter = "openrouter"
 )
 
 // Factory creates LLM adapters.
@@ -29,6 +30,10 @@ func NewFactory() *Factory {
 
 	f.register(ProviderOllama, func(cfg *Config) LLMAdapter {
 		return NewOllamaAdapter(cfg)
+	})
+
+	f.register(ProviderOpenRouter, func(cfg *Config) LLMAdapter {
+		return NewOpenRouterAdapter(cfg)
 	})
 
 	return f

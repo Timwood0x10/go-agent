@@ -2,10 +2,15 @@ package ahp
 
 import (
 	"encoding/json"
+	"fmt"
+	"sync/atomic"
 	"time"
 
 	"goagent/internal/core/models"
 )
+
+// messageIDCounter is used to generate unique message IDs.
+var messageIDCounter uint64
 
 // AHPMethod represents the type of AHP message.
 type AHPMethod string
@@ -118,7 +123,8 @@ func (m *AHPMessage) GetProgress() (float64, bool) {
 }
 
 func generateMessageID() string {
-	return time.Now().Format("20060102150405.000000")
+	id := atomic.AddUint64(&messageIDCounter, 1)
+	return fmt.Sprintf("%s.%d", time.Now().Format("20060102150405.000000"), id)
 }
 
 // MarshalJSON implements custom JSON marshaling.
