@@ -33,6 +33,7 @@ var StrategyMap = map[string]ErrorStrategy{
 	"04-003": {Backoff: 0, MaxRetries: 0, DLQEnabled: false, AlertEnabled: true, AlertMessage: "LLM quota exceeded"},
 	"04-005": {Backoff: 1 * time.Second, MaxRetries: 3, DLQEnabled: false, AlertEnabled: false},
 	"04-006": {Backoff: 0, MaxRetries: 0, DLQEnabled: false, AlertEnabled: true, AlertMessage: "LLM validation failed"},
+	"04-007": {Backoff: 0, MaxRetries: 0, DLQEnabled: false, AlertEnabled: true, AlertMessage: "LLM authentication failed (401) - check API key"},
 }
 
 // GetStrategy returns the error strategy for the given error code.
