@@ -7,21 +7,61 @@ import (
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/protocol/ahp"
 )
 
 // TaskExecutorFunc is a function type for executing tasks directly.
 type TaskExecutorFunc func(ctx context.Context, task *models.Task) (*models.TaskResult, error)
 
+// MessageSender sends messages to sub-agents (for distributed deployment).
+type MessageSender interface {
+	Send(ctx context.Context, agentAddr string, msg *ahp.AHPMessage) error
+}
+
+// LocalMessageSender sends messages to local agent queues.
+type LocalMessageSender struct {
+	queues map[string]*ahp.MessageQueue
+	mu     sync.RWMutex
+}
+
+// NewLocalMessageSender creates a new LocalMessageSender.
+func NewLocalMessageSender() *LocalMessageSender {
+	return &LocalMessageSender{
+		queues: make(map[string]*ahp.MessageQueue),
+	}
+}
+
+// RegisterQueue registers a message queue for an agent address.
+func (s *LocalMessageSender) RegisterQueue(agentAddr string, queue *ahp.MessageQueue) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queues[agentAddr] = queue
+}
+
+// Send sends a message to the specified agent address.
+func (s *LocalMessageSender) Send(ctx context.Context, agentAddr string, msg *ahp.AHPMessage) error {
+	s.mu.RLock()
+	queue, ok := s.queues[agentAddr]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("no queue registered for agent: %s", agentAddr)
+	}
+
+	return queue.Enqueue(ctx, msg)
+}
+
 // taskDispatcher dispatches tasks to sub-agents.
 type taskDispatcher struct {
 	agentRegistry map[models.AgentType]string
 	executorFuncs map[models.AgentType]TaskExecutorFunc
+	messageSender MessageSender
 	maxParallel   int
 	timeout       int
 }
 
 // NewTaskDispatcher creates a new TaskDispatcher.
-func NewTaskDispatcher(agentRegistry map[models.AgentType]string, maxParallel int, timeout int) TaskDispatcher {
+func NewTaskDispatcher(agentRegistry map[models.AgentType]string, maxParallel int, timeout int, sender MessageSender) TaskDispatcher {
 	if maxParallel <= 0 {
 		maxParallel = 10
 	}
@@ -31,6 +71,7 @@ func NewTaskDispatcher(agentRegistry map[models.AgentType]string, maxParallel in
 	d := &taskDispatcher{
 		agentRegistry: agentRegistry,
 		executorFuncs: make(map[models.AgentType]TaskExecutorFunc),
+		messageSender: sender,
 		maxParallel:   maxParallel,
 		timeout:       timeout,
 	}
@@ -109,29 +150,23 @@ func (d *taskDispatcher) executeTask(ctx context.Context, task *models.Task) *mo
 		return execResult
 	}
 
-	// Fallback: create AHP message and send via queue
-	// TODO: Implement actual message queue based dispatch
-	// Current implementation uses direct executor function call above
-	// For distributed deployment, uncomment the following:
-	/*
-	sessionID := ""
-	if task.Context != nil && len(task.Context.Dependencies) > 0 {
-		sessionID = task.Context.Dependencies[0]
-	}
-	msg := ahp.NewTaskMessage(d.getAgentID(), agentAddr, task.TaskID, sessionID, task.Payload)
-	if d.messageQueue != nil {
-		if err := d.messageQueue.Enqueue(ctx, msg); err != nil {
-			result.SetError("failed to enqueue message: " + err.Error())
+	// If no local executor, use message sender (for distributed deployment)
+	if d.messageSender != nil {
+		sessionID := ""
+		if task.Context != nil && len(task.Context.Dependencies) > 0 {
+			sessionID = task.Context.Dependencies[0]
+		}
+		msg := ahp.NewTaskMessage(d.getAgentID(), agentAddr, task.TaskID, sessionID, task.Payload)
+		if err := d.messageSender.Send(ctx, agentAddr, msg); err != nil {
+			result.SetError("failed to send message: " + err.Error())
 			return result
 		}
-		result.SetSuccess(nil, "task dispatched via queue to "+agentAddr)
+		result.SetSuccess(nil, "task dispatched via message queue to "+agentAddr)
 		return result
 	}
-	*/
 
-	// Simulate task dispatch (for backward compatibility)
-	result.SetSuccess(nil, "task dispatched to "+agentAddr)
-
+	// No executor and no message sender - return error
+	result.SetError("no executor or message sender registered for agent type: " + string(task.AgentType))
 	return result
 }
 

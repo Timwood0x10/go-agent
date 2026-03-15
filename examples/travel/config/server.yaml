@@ -8,7 +8,7 @@ server:
 # LLM Configuration - OpenRouter
 llm:
   provider: "openrouter"
-  api_key: "sk-or-v1-xxxx"  # Replace with your OpenRouter API key
+  api_key: "sk-or-v1-xxx"  # Replace with your OpenRouter API key
   base_url: "https://openrouter.ai/api/v1"
   model: "meta-llama/llama-3.1-8b-instruct"  # Free model that works globally
   timeout: 60

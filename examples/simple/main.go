@@ -197,6 +197,7 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 		agentRegistry,
 		cfg.Agents.Leader.MaxParallelTasks,
 		cfg.Agents.Leader.MaxSteps,
+		nil, // messageSender (not used in simple example)
 	)
 
 	// Register executor functions for each sub-agent type
