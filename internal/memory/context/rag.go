@@ -2,8 +2,19 @@ package context
 
 import (
 	"context"
+	"math"
 	"sync"
+
+	"goagent/internal/storage/postgres"
 )
+
+// VectorSearcher defines the interface for vector storage operations.
+type VectorSearcher interface {
+	Search(ctx context.Context, table string, query []float64, limit int) ([]*postgres.SearchResult, error)
+	AddEmbedding(ctx context.Context, table, id string, embedding []float64, metadata map[string]any) error
+	DeleteEmbedding(ctx context.Context, table, id string) error
+	CreateVectorTable(ctx context.Context, table string, metadataSchema string) error
+}
 
 // KnowledgeEntry represents a knowledge base entry.
 type KnowledgeEntry struct {
@@ -15,10 +26,13 @@ type KnowledgeEntry struct {
 
 // RAG provides retrieval-augmented generation capabilities.
 type RAG struct {
-	entries map[string]*KnowledgeEntry
-	index   *VectorIndex
-	mu      sync.RWMutex
-	maxSize int
+	entries       map[string]*KnowledgeEntry
+	index         *VectorIndex
+	mu            sync.RWMutex
+	maxSize       int
+	usePersistent bool           // Use pgvector instead of in-memory
+	vectorSearch  VectorSearcher // Persistent storage (optional)
+	tableName     string         // Table name for persistent storage
 }
 
 // VectorIndex is a simple in-memory vector index.
@@ -27,13 +41,40 @@ type VectorIndex struct {
 	mu      sync.RWMutex
 }
 
-// NewRAG creates a new RAG instance.
+// Option is a function that configures RAG.
+type Option func(*RAG)
+
+// WithPersistentStorage enables pgvector storage.
+func WithPersistentStorage(searcher VectorSearcher, tableName string) Option {
+	return func(r *RAG) {
+		r.usePersistent = true
+		r.vectorSearch = searcher
+		r.tableName = tableName
+	}
+}
+
+// NewRAG creates a new RAG instance with in-memory storage.
 func NewRAG(maxSize int) *RAG {
 	return &RAG{
 		entries: make(map[string]*KnowledgeEntry),
 		index:   NewVectorIndex(),
 		maxSize: maxSize,
 	}
+}
+
+// NewRAGWithOptions creates a new RAG instance with options.
+func NewRAGWithOptions(maxSize int, opts ...Option) *RAG {
+	r := &RAG{
+		entries: make(map[string]*KnowledgeEntry),
+		index:   NewVectorIndex(),
+		maxSize: maxSize,
+	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
 }
 
 // NewVectorIndex creates a new VectorIndex.
@@ -55,6 +96,14 @@ func (r *RAG) Add(ctx context.Context, entry *KnowledgeEntry) error {
 	r.entries[entry.ID] = entry
 	r.index.entries = append(r.index.entries, entry)
 
+	// If using persistent storage, also save to pgvector
+	if r.usePersistent && r.vectorSearch != nil {
+		if err := r.vectorSearch.AddEmbedding(ctx, r.tableName, entry.ID, entry.Embedding, entry.Metadata); err != nil {
+			// Log error but don't fail - in-memory is primary
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -72,6 +121,24 @@ func (r *RAG) Search(ctx context.Context, query []float64, topK int) ([]*Knowled
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// If using persistent storage, use pgvector search
+	if r.usePersistent && r.vectorSearch != nil {
+		results, err := r.vectorSearch.Search(ctx, r.tableName, query, topK)
+		if err != nil {
+			return nil, err
+		}
+
+		entries := make([]*KnowledgeEntry, 0, len(results))
+		for _, result := range results {
+			// Get full entry from memory cache
+			if entry, exists := r.entries[result.ID]; exists {
+				entries = append(entries, entry)
+			}
+		}
+		return entries, nil
+	}
+
+	// Fallback to in-memory search
 	if len(r.index.entries) == 0 {
 		return nil, nil
 	}
@@ -139,6 +206,13 @@ func (r *RAG) Delete(ctx context.Context, id string) error {
 		r.index.entries = append(r.index.entries, entry)
 	}
 
+	// If using persistent storage, also delete from pgvector
+	if r.usePersistent && r.vectorSearch != nil {
+		if err := r.vectorSearch.DeleteEmbedding(ctx, r.tableName, id); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -148,6 +222,21 @@ func (r *RAG) Size() int {
 	defer r.mu.RUnlock()
 
 	return len(r.entries)
+}
+
+// InitStorage initializes the persistent storage table.
+func (r *RAG) InitStorage(ctx context.Context) error {
+	if r.usePersistent && r.vectorSearch != nil {
+		return r.vectorSearch.CreateVectorTable(ctx, r.tableName, "")
+	}
+	return nil
+}
+
+// IsPersistent returns true if using persistent storage.
+func (r *RAG) IsPersistent() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.usePersistent
 }
 
 // evictOldest removes entries when capacity is reached.
@@ -176,7 +265,8 @@ func cosineSimilarity(a, b []float64) float64 {
 		return 0
 	}
 
-	return dotProduct / (normA * normB)
+	// Correct: √(∑a²) * √(∑b²) not (∑a²)(∑b²)
+	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
 // contains checks if text contains substring (simple implementation).

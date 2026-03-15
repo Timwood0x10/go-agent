@@ -1,8 +1,10 @@
 package ahp
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"sync/atomic"
 	"time"
 
@@ -122,9 +124,16 @@ func (m *AHPMessage) GetProgress() (float64, bool) {
 	return progress, ok
 }
 
+// getRandomSuffix returns a random suffix for extra uniqueness.
+func getRandomSuffix() string {
+	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
+	return fmt.Sprintf("%04d", n.Int64())
+}
+
 func generateMessageID() string {
 	id := atomic.AddUint64(&messageIDCounter, 1)
-	return fmt.Sprintf("%s.%d", time.Now().Format("20060102150405.000000"), id)
+	randSuffix := getRandomSuffix()
+	return fmt.Sprintf("%s.%d.%s", time.Now().Format("20060102150405.000000"), id, randSuffix)
 }
 
 // MarshalJSON implements custom JSON marshaling.

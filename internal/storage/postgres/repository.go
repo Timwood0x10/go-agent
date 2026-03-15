@@ -2,10 +2,19 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 
 	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
 )
+
+// DBTX is an interface that both *sql.DB and *sql.Tx satisfy.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
 
 // Repository provides a unified interface for all data access.
 type Repository struct {
@@ -14,6 +23,7 @@ type Repository struct {
 	Profile   *ProfileRepository
 	Vector    *VectorSearcher
 	pool      *Pool
+	tx        *sql.Tx // Transaction (if in transaction mode)
 }
 
 // NewRepository creates a new Repository with all sub-repositories.
@@ -37,20 +47,25 @@ func (r *Repository) Close() error {
 	return r.pool.Close()
 }
 
+// IsTransaction returns true if this repository is in transaction mode.
+func (r *Repository) IsTransaction() bool {
+	return r.tx != nil
+}
+
 // Transaction executes a function within a transaction.
 func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) error) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.pool.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	// Create transaction-level repositories
+	// Create transaction-level repositories that use the transaction
 	txRepo := &Repository{
-		Session:   NewSessionRepository(r.pool),
-		Recommend: NewRecommendRepository(r.pool),
-		Profile:   NewProfileRepository(r.pool),
-		Vector:    NewVectorSearcher(r.pool),
-		pool:      r.pool,
+		Session:   NewSessionRepositoryWithDB(tx),
+		Recommend: NewRecommendRepositoryWithDB(tx),
+		Profile:   NewProfileRepositoryWithDB(tx),
+		Vector:    NewVectorSearcherWithDB(tx),
+		tx:        tx,
 	}
 
 	if err := fn(txRepo); err != nil {
@@ -63,29 +78,38 @@ func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) 
 	return tx.Commit()
 }
 
-// WithTransaction creates a new repository with a transaction.
+// WithTransaction creates a new repository bound to a transaction.
 func (r *Repository) WithTransaction(ctx context.Context) (*Repository, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.pool.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	txRepo := &Repository{
-		Session:   NewSessionRepository(r.pool),
-		Recommend: NewRecommendRepository(r.pool),
-		Profile:   NewProfileRepository(r.pool),
-		Vector:    NewVectorSearcher(r.pool),
-		pool:      r.pool,
-	}
-
-	// Execute in transaction
-	_, err = tx.Exec("SELECT 1")
-	if err != nil {
-		tx.Rollback()
-		return nil, err
+		Session:   NewSessionRepositoryWithDB(tx),
+		Recommend: NewRecommendRepositoryWithDB(tx),
+		Profile:   NewProfileRepositoryWithDB(tx),
+		Vector:    NewVectorSearcherWithDB(tx),
+		tx:        tx,
 	}
 
 	return txRepo, nil
+}
+
+// Commit commits the transaction.
+func (r *Repository) Commit() error {
+	if r.tx == nil {
+		return errors.ErrNoTransaction
+	}
+	return r.tx.Commit()
+}
+
+// Rollback rolls back the transaction.
+func (r *Repository) Rollback() error {
+	if r.tx == nil {
+		return nil // No transaction to rollback
+	}
+	return r.tx.Rollback()
 }
 
 // SaveSession saves a session and its results.

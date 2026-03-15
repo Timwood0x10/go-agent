@@ -14,6 +14,7 @@ type SignalHandler struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	manager *Manager
+	sigChan chan os.Signal // Store the channel for stopping
 	mu      struct {
 		sync.RWMutex
 		started bool
@@ -45,10 +46,10 @@ func (h *SignalHandler) Start(ctx context.Context) error {
 	h.ctx = ctx
 	h.cancel = cancel
 
-	sigChan := make(chan os.Signal, len(h.signals))
-	signal.Notify(sigChan, h.signals...)
+	h.sigChan = make(chan os.Signal, len(h.signals))
+	signal.Notify(h.sigChan, h.signals...)
 
-	go h.handleSignals(sigChan)
+	go h.handleSignals(h.sigChan)
 
 	h.mu.Lock()
 	h.mu.started = true
@@ -70,7 +71,10 @@ func (h *SignalHandler) Stop() error {
 		h.cancel()
 	}
 
-	signal.Stop(make(chan os.Signal, 1))
+	// Stop the actual channel that was registered
+	if h.sigChan != nil {
+		signal.Stop(h.sigChan)
+	}
 
 	h.mu.Lock()
 	h.mu.started = false

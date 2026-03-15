@@ -205,10 +205,11 @@ func (m *Manager) Wait() {
 	m.wg.Wait()
 }
 
-// IsShutdown returns true if shutdown has started.
+// IsShutdown returns true if shutdown has started (past PhasePreShutdown).
 func (m *Manager) IsShutdown() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.currentPhase != 0
+	// Shutdown has started if we're past PhasePreShutdown
+	return m.currentPhase > PhasePreShutdown
 }

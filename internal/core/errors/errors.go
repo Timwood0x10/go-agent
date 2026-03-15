@@ -34,6 +34,7 @@ var (
 	ErrVectorSearchFailed = errors.New("vector search failed")
 	ErrRecordNotFound     = errors.New("record not found")
 	ErrTransactionFailed  = errors.New("transaction failed")
+	ErrNoTransaction      = errors.New("no active transaction")
 )
 
 // Sentinel errors for LLM module.

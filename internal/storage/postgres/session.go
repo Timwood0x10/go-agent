@@ -13,12 +13,17 @@ import (
 
 // SessionRepository handles session persistence.
 type SessionRepository struct {
-	pool *Pool
+	db DBTX
 }
 
 // NewSessionRepository creates a new SessionRepository.
 func NewSessionRepository(pool *Pool) *SessionRepository {
-	return &SessionRepository{pool: pool}
+	return &SessionRepository{db: pool.db}
+}
+
+// NewSessionRepositoryWithDB creates a new SessionRepository with a transaction or connection.
+func NewSessionRepositoryWithDB(db DBTX) *SessionRepository {
+	return &SessionRepository{db: db}
 }
 
 // Create creates a new session.
@@ -38,7 +43,7 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	_, err = r.pool.Exec(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		session.SessionID,
 		session.UserID,
 		session.Input,
@@ -66,7 +71,7 @@ func (r *SessionRepository) GetByID(ctx context.Context, sessionID string) (*mod
 	var session models.Session
 	var profileJSON, metadataJSON []byte
 
-	err := r.pool.QueryRow(ctx, query, sessionID).Scan(
+	err := r.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&session.SessionID,
 		&session.UserID,
 		&session.Input,
@@ -112,7 +117,7 @@ func (r *SessionRepository) Update(ctx context.Context, session *models.Session)
 		WHERE session_id = $5
 	`
 
-	result, err := r.pool.Exec(ctx, query,
+	result, err := r.db.ExecContext(ctx, query,
 		session.Status,
 		profileJSON,
 		metadataJSON,
@@ -138,7 +143,7 @@ func (r *SessionRepository) Update(ctx context.Context, session *models.Session)
 func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error {
 	query := `DELETE FROM sessions WHERE session_id = $1`
 
-	result, err := r.pool.Exec(ctx, query, sessionID)
+	result, err := r.db.ExecContext(ctx, query, sessionID)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
@@ -163,7 +168,7 @@ func (r *SessionRepository) ListByUserID(ctx context.Context, userID string, lim
 		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.pool.Query(ctx, query, userID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query sessions: %w", err)
 	}
@@ -205,7 +210,7 @@ func (r *SessionRepository) ListByUserID(ctx context.Context, userID string, lim
 func (r *SessionRepository) CleanupExpired(ctx context.Context) (int64, error) {
 	query := `DELETE FROM sessions WHERE expired_at < $1`
 
-	result, err := r.pool.Exec(ctx, query, time.Now())
+	result, err := r.db.ExecContext(ctx, query, time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("cleanup expired: %w", err)
 	}

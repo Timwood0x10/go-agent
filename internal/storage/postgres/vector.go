@@ -10,12 +10,17 @@ import (
 
 // VectorSearcher handles vector similarity search.
 type VectorSearcher struct {
-	pool *Pool
+	db DBTX
 }
 
 // NewVectorSearcher creates a new VectorSearcher.
 func NewVectorSearcher(pool *Pool) *VectorSearcher {
-	return &VectorSearcher{pool: pool}
+	return &VectorSearcher{db: pool.db}
+}
+
+// NewVectorSearcherWithDB creates a new VectorSearcher with a transaction or connection.
+func NewVectorSearcherWithDB(db DBTX) *VectorSearcher {
+	return &VectorSearcher{db: db}
 }
 
 // SearchResult represents a vector search result.
@@ -44,7 +49,7 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 		return nil, fmt.Errorf("marshal embedding: %w", err)
 	}
 
-	rows, err := v.pool.Query(ctx, query, embeddingJSON, limit)
+	rows, err := v.db.QueryContext(ctx, query, embeddingJSON, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
@@ -90,7 +95,7 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 		VALUES ($1, $2, $3)
 	`, table)
 
-	_, err = v.pool.Exec(ctx, query, id, embeddingJSON, metadataJSON)
+	_, err = v.db.ExecContext(ctx, query, id, embeddingJSON, metadataJSON)
 	if err != nil {
 		return fmt.Errorf("add embedding: %w", err)
 	}
@@ -102,7 +107,7 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 func (v *VectorSearcher) DeleteEmbedding(ctx context.Context, table, id string) error {
 	query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, table)
 
-	_, err := v.pool.Exec(ctx, query, id)
+	_, err := v.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("delete embedding: %w", err)
 	}
@@ -123,7 +128,7 @@ func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, me
 		CREATE INDEX IF NOT EXISTS %s_embedding_idx ON %s USING ivfflat (embedding vector_cosine_ops);
 	`, table, 1536, table, table) // Default dimension for common embedding models
 
-	_, err := v.pool.Exec(ctx, query)
+	_, err := v.db.ExecContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("create vector table: %w", err)
 	}

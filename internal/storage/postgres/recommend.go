@@ -12,12 +12,17 @@ import (
 
 // RecommendRepository handles recommendation persistence.
 type RecommendRepository struct {
-	pool *Pool
+	db DBTX
 }
 
 // NewRecommendRepository creates a new RecommendRepository.
 func NewRecommendRepository(pool *Pool) *RecommendRepository {
-	return &RecommendRepository{pool: pool}
+	return &RecommendRepository{db: pool.db}
+}
+
+// NewRecommendRepositoryWithDB creates a new RecommendRepository with a transaction or connection.
+func NewRecommendRepositoryWithDB(db DBTX) *RecommendRepository {
+	return &RecommendRepository{db: db}
 }
 
 // Create creates a new recommendation result.
@@ -42,7 +47,7 @@ func (r *RecommendRepository) Create(ctx context.Context, result *models.Recomme
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
-	_, err = r.pool.Exec(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		result.SessionID,
 		result.UserID,
 		itemsJSON,
@@ -72,7 +77,7 @@ func (r *RecommendRepository) GetBySessionID(ctx context.Context, sessionID stri
 	var result models.RecommendResult
 	var itemsJSON, feedbackJSON, metadataJSON []byte
 
-	err := r.pool.QueryRow(ctx, query, sessionID).Scan(
+	err := r.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&result.SessionID,
 		&result.UserID,
 		&itemsJSON,
@@ -114,7 +119,7 @@ func (r *RecommendRepository) UpdateFeedback(ctx context.Context, sessionID stri
 
 	query := `UPDATE recommendations SET feedback = $1 WHERE session_id = $2`
 
-	result, err := r.pool.Exec(ctx, query, feedbackJSON, sessionID)
+	result, err := r.db.ExecContext(ctx, query, feedbackJSON, sessionID)
 	if err != nil {
 		return fmt.Errorf("update feedback: %w", err)
 	}
@@ -139,7 +144,7 @@ func (r *RecommendRepository) ListByUserID(ctx context.Context, userID string, l
 		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.pool.Query(ctx, query, userID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query recommendations: %w", err)
 	}
@@ -186,7 +191,7 @@ func (r *RecommendRepository) ListByUserID(ctx context.Context, userID string, l
 func (r *RecommendRepository) Delete(ctx context.Context, sessionID string) error {
 	query := `DELETE FROM recommendations WHERE session_id = $1`
 
-	result, err := r.pool.Exec(ctx, query, sessionID)
+	result, err := r.db.ExecContext(ctx, query, sessionID)
 	if err != nil {
 		return fmt.Errorf("delete recommendation: %w", err)
 	}

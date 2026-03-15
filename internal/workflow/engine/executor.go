@@ -127,19 +127,26 @@ func (e *Executor) runSteps(
 	completed := make(map[string]bool)
 	var mu sync.Mutex
 
+	// Event-driven: wakeup channel to trigger re-checking pending steps
+	wakeup := make(chan struct{}, 1)
+
 	for {
 		// Submit new steps while we have capacity
-		for stepIndex < len(executionOrder) && len(stepChan) < e.maxParallel {
+		submitted := true
+		for submitted && stepIndex < len(executionOrder) && len(stepChan) < e.maxParallel {
+			submitted = false
 			stepID := executionOrder[stepIndex]
 			step := e.findStep(workflow.Steps, stepID)
 
 			if !e.canExecute(step, completed) {
 				stepIndex++
+				submitted = true
 				continue
 			}
 
 			stepChan <- stepID
 			stepIndex++
+			submitted = true
 
 			go func(sid string) {
 				result := e.executeStep(ctx, workflow, sid, initialInput, completed)
@@ -150,6 +157,12 @@ func (e *Executor) runSteps(
 					completed[sid] = true
 				}
 				mu.Unlock()
+
+				// Trigger wakeup to re-check pending steps
+				select {
+				case wakeup <- struct{}{}:
+				default:
+				}
 			}(stepID)
 		}
 
@@ -178,7 +191,7 @@ func (e *Executor) runSteps(
 			}
 		}
 
-		// Event-driven: wait for result or context done
+		// Event-driven: wait for result, wakeup, or context done
 		select {
 		case <-ctx.Done():
 			errChan <- ctx.Err()
@@ -190,8 +203,8 @@ func (e *Executor) runSteps(
 				completed[result.StepID] = true
 				mu.Unlock()
 			}
-		case <-time.After(10 * time.Millisecond):
-			// Timeout to re-check pending steps
+		case <-wakeup:
+			// A step completed, re-check pending steps without polling
 		}
 	}
 }

@@ -13,12 +13,17 @@ import (
 
 // ProfileRepository handles user profile persistence.
 type ProfileRepository struct {
-	pool *Pool
+	db DBTX
 }
 
 // NewProfileRepository creates a new ProfileRepository.
 func NewProfileRepository(pool *Pool) *ProfileRepository {
-	return &ProfileRepository{pool: pool}
+	return &ProfileRepository{db: pool.db}
+}
+
+// NewProfileRepositoryWithDB creates a new ProfileRepository with a transaction or connection.
+func NewProfileRepositoryWithDB(db DBTX) *ProfileRepository {
+	return &ProfileRepository{db: db}
 }
 
 // Create creates a new user profile.
@@ -53,7 +58,7 @@ func (r *ProfileRepository) Create(ctx context.Context, profile *models.UserProf
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
-	_, err = r.pool.Exec(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		profile.UserID,
 		profile.Name,
 		profile.Gender,
@@ -85,7 +90,7 @@ func (r *ProfileRepository) GetByID(ctx context.Context, userID string) (*models
 	var profile models.UserProfile
 	var styleJSON, budgetJSON, colorsJSON, occasionsJSON, preferencesJSON []byte
 
-	err := r.pool.QueryRow(ctx, query, userID).Scan(
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
 		&profile.UserID,
 		&profile.Name,
 		&profile.Gender,
@@ -162,7 +167,7 @@ func (r *ProfileRepository) Update(ctx context.Context, profile *models.UserProf
 		WHERE user_id = $12
 	`
 
-	result, err := r.pool.Exec(ctx, query,
+	result, err := r.db.ExecContext(ctx, query,
 		profile.Name,
 		profile.Gender,
 		profile.Age,
@@ -195,7 +200,7 @@ func (r *ProfileRepository) Update(ctx context.Context, profile *models.UserProf
 func (r *ProfileRepository) Delete(ctx context.Context, userID string) error {
 	query := `DELETE FROM user_profiles WHERE user_id = $1`
 
-	result, err := r.pool.Exec(ctx, query, userID)
+	result, err := r.db.ExecContext(ctx, query, userID)
 	if err != nil {
 		return fmt.Errorf("delete profile: %w", err)
 	}
@@ -216,7 +221,7 @@ func (r *ProfileRepository) Exists(ctx context.Context, userID string) (bool, er
 	query := `SELECT EXISTS(SELECT 1 FROM user_profiles WHERE user_id = $1)`
 
 	var exists bool
-	err := r.pool.QueryRow(ctx, query, userID).Scan(&exists)
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check exists: %w", err)
 	}

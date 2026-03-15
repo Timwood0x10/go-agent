@@ -20,7 +20,7 @@ type callbackWithID struct {
 	fn ReloadCallback
 }
 
-// FileWatcher watches files for changes.
+// FileWatcher watches files for changes using fsnotify.
 type FileWatcher struct {
 	watcher      *fsnotify.Watcher
 	workflows    map[string]*Workflow
@@ -28,12 +28,21 @@ type FileWatcher struct {
 	callbacks    []callbackWithID
 	callbackID   uint64
 	mu           sync.RWMutex
-	pollInterval time.Duration
+	pollInterval time.Duration // Fallback polling interval (only used if fsnotify fails)
 }
 
 // NewFileWatcher creates a new FileWatcher.
 func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *FileWatcher {
+	// Try to create fsnotify watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Printf("[WARN] FileWatcher: fsnotify not available, falling back to polling: %v\n", err)
+	} else {
+		fmt.Printf("[INFO] FileWatcher: using fsnotify for real-time file monitoring\n")
+	}
+
 	return &FileWatcher{
+		watcher:      watcher,
 		loader:       loader,
 		workflows:    workflows,
 		callbacks:    make([]callbackWithID, 0),
@@ -47,12 +56,87 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 		return err
 	}
 
-	go w.watchLoop(ctx, dir)
+	// If we have fsnotify watcher, use event-driven approach
+	if w.watcher != nil {
+		// Add directory to watch
+		if err := w.watcher.Add(dir); err != nil {
+			return fmt.Errorf("watch directory: %w", err)
+		}
+
+		// Watch subdirectories for workflow files
+		w.watchDirectory(ctx, dir)
+
+		go w.fsnotifyLoop(ctx, dir)
+	} else {
+		// Fallback to polling
+		go w.watchLoop(ctx, dir)
+	}
 
 	return nil
 }
 
-// watchLoop periodically checks for file changes.
+// watchDirectory recursively adds directories to fsnotify watch.
+func (w *FileWatcher) watchDirectory(ctx context.Context, dir string) {
+	if w.watcher == nil {
+		return
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			path := filepath.Join(dir, entry.Name())
+			if err := w.watcher.Add(path); err != nil {
+				continue
+			}
+			// Recursively watch subdirectories
+			w.watchDirectory(ctx, path)
+		}
+	}
+}
+
+// fsnotifyLoop watches for file change events.
+func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
+	defer func() {
+		if w.watcher != nil {
+			w.watcher.Close()
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-w.watcher.Events:
+			if !ok {
+				return
+			}
+			// Only handle write and create events
+			if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 {
+				continue
+			}
+			// Check if it's a workflow file
+			ext := filepath.Ext(event.Name)
+			if ext != ".json" && ext != ".yaml" && ext != ".yml" {
+				continue
+			}
+			// Reload on file change
+			if err := w.scanAndLoad(ctx, dir); err != nil {
+				continue
+			}
+		case err, ok := <-w.watcher.Errors:
+			if !ok {
+				return
+			}
+			fmt.Printf("[ERROR] FileWatcher: %v\n", err)
+		}
+	}
+}
+
+// watchLoop periodically checks for file changes (fallback when fsnotify unavailable).
 func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
@@ -163,11 +247,12 @@ func (w *FileWatcher) UnregisterCallback(callbackID string) {
 
 // WorkflowReloader manages workflow hot reloading.
 type WorkflowReloader struct {
-	loader    WorkflowLoader
-	workflows map[string]*Workflow
-	callbacks []ReloadCallback
-	mu        sync.RWMutex
-	watcher   *FileWatcher
+	loader     WorkflowLoader
+	workflows  map[string]*Workflow
+	callbackID uint64
+	callbacks  map[string]ReloadCallback // Use map for O(1) lookup
+	mu         sync.RWMutex
+	watcher    *FileWatcher
 }
 
 // NewWorkflowReloader creates a new WorkflowReloader.
@@ -175,7 +260,7 @@ func NewWorkflowReloader(loader WorkflowLoader) *WorkflowReloader {
 	return &WorkflowReloader{
 		loader:    loader,
 		workflows: make(map[string]*Workflow),
-		callbacks: make([]ReloadCallback, 0),
+		callbacks: make(map[string]ReloadCallback),
 	}
 }
 
@@ -249,12 +334,23 @@ func (r *WorkflowReloader) notifyCallbacks() {
 	}
 }
 
-// RegisterCallback registers a callback for reload events.
-func (r *WorkflowReloader) RegisterCallback(callback ReloadCallback) {
+// RegisterCallback registers a callback for reload events and returns the callback ID.
+func (r *WorkflowReloader) RegisterCallback(callback ReloadCallback) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.callbacks = append(r.callbacks, callback)
+	r.callbackID++
+	id := fmt.Sprintf("callback-%d", r.callbackID)
+	r.callbacks[id] = callback
+	return id
+}
+
+// UnregisterCallback removes a callback by ID.
+func (r *WorkflowReloader) UnregisterCallback(callbackID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.callbacks, callbackID)
 }
 
 // GetWorkflow returns a workflow by ID.
