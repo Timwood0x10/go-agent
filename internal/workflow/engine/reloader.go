@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -36,9 +37,9 @@ func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *File
 	// Try to create fsnotify watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		fmt.Printf("[WARN] FileWatcher: fsnotify not available, falling back to polling: %v\n", err)
+		slog.Warn("FileWatcher: fsnotify not available, falling back to polling", "error", err)
 	} else {
-		fmt.Printf("[INFO] FileWatcher: using fsnotify for real-time file monitoring\n")
+		slog.Info("FileWatcher: using fsnotify for real-time file monitoring")
 	}
 
 	return &FileWatcher{
@@ -131,7 +132,7 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 			if !ok {
 				return
 			}
-			fmt.Printf("[ERROR] FileWatcher: %v\n", err)
+			slog.Error("FileWatcher error", "error", err)
 		}
 	}
 }

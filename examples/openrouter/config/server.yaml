@@ -7,7 +7,7 @@ server:
 
 llm:
   provider: "openrouter"       # Uses OpenRouter API
-  api_key: "sk-or-v1-xxxx" # Replace with your OpenRouter API key
+  api_key: "sk-or-v1-xxx" # Replace with your OpenRouter API key
   base_url: "https://openrouter.ai/api/v1"
   model: "minimax/minimax-m2-her"  # Model available on OpenRouter
   timeout: 60                 # Request timeout in seconds

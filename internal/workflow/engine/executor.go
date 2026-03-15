@@ -149,7 +149,13 @@ func (e *Executor) runSteps(
 
 			go func(sid string) {
 				result := e.executeStep(ctx, workflow, sid, initialInput, completed)
-				resultChan <- result
+
+				// Use non-blocking send to avoid goroutine leak when resultChan is full
+				select {
+				case resultChan <- result:
+				case <-ctx.Done():
+					// Context cancelled, discard result to prevent goroutine leak
+				}
 
 				mu.Lock()
 				if result.Status == StepStatusCompleted {

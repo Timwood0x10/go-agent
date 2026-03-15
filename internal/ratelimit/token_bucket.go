@@ -57,7 +57,7 @@ func (l *TokenBucketLimiter) Wait(ctx context.Context) error {
 		}
 
 		// Wait for token to become available
-		waitTime := time.Duration(1/l.rate) * time.Second
+		waitTime := time.Duration(float64(time.Second) / l.rate)
 
 		select {
 		case <-ctx.Done():

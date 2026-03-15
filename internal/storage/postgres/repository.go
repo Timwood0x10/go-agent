@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
@@ -70,7 +71,7 @@ func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) 
 
 	if err := fn(txRepo); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return rbErr
+			return fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
 		}
 		return err
 	}

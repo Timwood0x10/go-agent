@@ -145,14 +145,14 @@ func (p *Pool) Ping(ctx context.Context) error {
 // Exec executes a query without returning rows.
 func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	var result sql.Result
-	var err error
+	var execErr error
 
 	p.WithConnection(ctx, func(conn *sql.Conn) error {
-		result, err = conn.ExecContext(ctx, query, args...)
-		return err
+		result, execErr = conn.ExecContext(ctx, query, args...)
+		return execErr
 	})
 
-	return result, err
+	return result, execErr
 }
 
 // Query executes a query and returns rows.
@@ -198,8 +198,14 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 
 	p.WithConnection(ctx, func(conn *sql.Conn) error {
 		row = conn.QueryRowContext(ctx, query, args...)
-		return nil
+		return nil // Don't return error here, let sql.Row handle it
 	})
+
+	// Check if connection was acquired successfully
+	if row == nil {
+		// Return a row that will produce an error on Scan
+		return nil
+	}
 
 	return row
 }

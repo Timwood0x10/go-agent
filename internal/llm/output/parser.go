@@ -10,6 +10,16 @@ import (
 	"goagent/internal/core/models"
 )
 
+// Pre-compiled regular expressions for better performance.
+var (
+	markdownPattern     = regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
+	trailingComma       = regexp.MustCompile(",\\s*([\\}\\]])")
+	singleLineComment   = regexp.MustCompile("//.*$")
+	multiLineComment    = regexp.MustCompile("/\\*[\\s\\S]*?\\*/")
+	unquotedKey         = regexp.MustCompile("([{,])\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*:")
+	singleQuote         = regexp.MustCompile("'([^']*)'")
+)
+
 // Parser parses LLM output into structured types.
 type Parser struct {
 	fixJSON bool
@@ -90,7 +100,6 @@ func (p *Parser) extractJSON(output string) string {
 	output = strings.TrimSpace(output)
 
 	// Try to find JSON in markdown code blocks
-	markdownPattern := regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
 	matches := markdownPattern.FindStringSubmatch(output)
 	if len(matches) > 1 {
 		result := strings.TrimSpace(matches[1])
@@ -151,22 +160,16 @@ func (p *Parser) fixJSONString(jsonStr string) (string, error) {
 	fixed := jsonStr
 
 	// Remove trailing commas
-	trailingComma := regexp.MustCompile(",\\s*([\\}\\]])")
 	fixed = trailingComma.ReplaceAllString(fixed, "$1")
 
 	// Remove comments
-	singleLineComment := regexp.MustCompile("//.*$")
 	fixed = singleLineComment.ReplaceAllString(fixed, "")
-
-	multiLineComment := regexp.MustCompile("/\\*[\\s\\S]*?\\*/")
 	fixed = multiLineComment.ReplaceAllString(fixed, "")
 
 	// Fix unquoted keys
-	unquotedKey := regexp.MustCompile("([{,])\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*:")
 	fixed = unquotedKey.ReplaceAllString(fixed, "$1\"$2\":")
 
 	// Fix single-quoted strings
-	singleQuote := regexp.MustCompile("'([^']*)'")
 	fixed = singleQuote.ReplaceAllString(fixed, "\"$1\"")
 
 	// Check if it's valid JSON

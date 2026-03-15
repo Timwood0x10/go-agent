@@ -3,6 +3,7 @@ package leader
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	apperrors "goagent/internal/core/errors"
@@ -104,7 +105,10 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 
 			select {
 			case <-ctx.Done():
-				errCh <- ctx.Err()
+				select {
+				case errCh <- ctx.Err():
+				default:
+				}
 				return
 			default:
 				// Execute task
@@ -134,19 +138,19 @@ func (d *taskDispatcher) executeTask(ctx context.Context, task *models.Task) *mo
 		return result
 	}
 
-	fmt.Printf("[DEBUG Dispatcher] Executing task %s for agent type %s (addr: %s)\n", task.TaskID, task.AgentType, agentAddr)
+	slog.Debug("Executing task", "task_id", task.TaskID, "agent_type", task.AgentType, "agent_addr", agentAddr)
 
 	// Check if we have a direct executor registered
 	if fn, exists := d.executorFuncs[task.AgentType]; exists {
 		// Call the executor directly
-		fmt.Printf("[DEBUG Dispatcher] Calling executor for %s\n", task.AgentType)
+		slog.Debug("Calling executor", "agent_type", task.AgentType)
 		execResult, err := fn(ctx, task)
 		if err != nil {
-			fmt.Printf("[DEBUG Dispatcher] Executor error: %v\n", err)
+			slog.Error("Executor error", "agent_type", task.AgentType, "error", err)
 			result.SetError(err.Error())
 			return result
 		}
-		fmt.Printf("[DEBUG Dispatcher] Executor returned %d items, success=%v\n", len(execResult.Items), execResult.Success)
+		slog.Debug("Executor returned", "agent_type", task.AgentType, "item_count", len(execResult.Items), "success", execResult.Success)
 		return execResult
 	}
 
