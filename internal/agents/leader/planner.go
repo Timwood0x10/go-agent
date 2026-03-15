@@ -176,21 +176,30 @@ func (p *taskPlanner) getProfileFields(profile *models.UserProfile) map[string]b
 // createFashionTasks creates tasks for fashion recommendation (fallback).
 func (p *taskPlanner) createFashionTasks(profile *models.UserProfile) []*models.Task {
 	tasks := make([]*models.Task, 0)
+	addedTypes := make(map[models.AgentType]bool)
 
 	// Generate tasks based on style tags
 	for _, style := range profile.Style {
-		task := models.NewTask(generateTaskID(), getAgentTypeForStyle(style), profile)
-		task.Priority = calculatePriority(style)
-		task.Deadline = time.Now().Add(1 * time.Hour)
-		tasks = append(tasks, task)
+		agentType := getAgentTypeForStyle(style)
+		if !addedTypes[agentType] {
+			task := models.NewTask(generateTaskID(), agentType, profile)
+			task.Priority = calculatePriority(style)
+			task.Deadline = time.Now().Add(1 * time.Hour)
+			tasks = append(tasks, task)
+			addedTypes[agentType] = true
+		}
 	}
 
 	// Add occasion-based tasks
 	for _, occasion := range profile.Occasions {
-		task := models.NewTask(generateTaskID(), getAgentTypeForOccasion(occasion), profile)
-		task.Priority = calculatePriorityForOccasion(occasion)
-		task.Deadline = time.Now().Add(1 * time.Hour)
-		tasks = append(tasks, task)
+		agentType := getAgentTypeForOccasion(occasion)
+		if !addedTypes[agentType] {
+			task := models.NewTask(generateTaskID(), agentType, profile)
+			task.Priority = calculatePriorityForOccasion(occasion)
+			task.Deadline = time.Now().Add(1 * time.Hour)
+			tasks = append(tasks, task)
+			addedTypes[agentType] = true
+		}
 	}
 
 	return tasks

@@ -227,6 +227,11 @@ func Load(path string) (*Config, error) {
 	// Set defaults
 	cfg.setDefaults()
 
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	return &cfg, nil
 }
 
@@ -348,4 +353,81 @@ func (c *Config) setDefaults() {
 	if c.Validation.MaxRetries == 0 {
 		c.Validation.MaxRetries = 3
 	}
+}
+
+// Validate validates the configuration values.
+func (c *Config) Validate() error {
+	// Validate server configuration
+	if c.Server.Port < 1 || c.Server.Port > 65535 {
+		return fmt.Errorf("invalid server port: %d, must be between 1 and 65535", c.Server.Port)
+	}
+
+	// Validate LLM configuration
+	if c.LLM.Timeout < 1 {
+		return fmt.Errorf("invalid LLM timeout: %d, must be positive", c.LLM.Timeout)
+	}
+	if c.LLM.MaxTokens < 1 {
+		return fmt.Errorf("invalid LLM max tokens: %d, must be positive", c.LLM.MaxTokens)
+	}
+	if c.LLM.Provider != "openai" && c.LLM.Provider != "ollama" && c.LLM.Provider != "openrouter" {
+		return fmt.Errorf("invalid LLM provider: %s, must be 'openai', 'ollama', or 'openrouter'", c.LLM.Provider)
+	}
+
+	// Validate agents configuration
+	if c.Agents.Leader.MaxSteps < 1 {
+		return fmt.Errorf("invalid leader max steps: %d, must be positive", c.Agents.Leader.MaxSteps)
+	}
+	if c.Agents.Leader.MaxParallelTasks < 1 {
+		return fmt.Errorf("invalid leader max parallel tasks: %d, must be positive", c.Agents.Leader.MaxParallelTasks)
+	}
+	if c.Agents.Leader.MaxValidationRetry < 0 {
+		return fmt.Errorf("invalid leader max validation retry: %d, must be non-negative", c.Agents.Leader.MaxValidationRetry)
+	}
+
+	// Validate sub-agent configurations
+	for i, subAgent := range c.Agents.Sub {
+		if subAgent.ID == "" {
+			return fmt.Errorf("sub-agent %d: ID cannot be empty", i)
+		}
+		if subAgent.Type == "" {
+			return fmt.Errorf("sub-agent %d: Type cannot be empty", i)
+		}
+		if subAgent.Timeout < 1 {
+			return fmt.Errorf("sub-agent %d: timeout must be positive", i)
+		}
+		if subAgent.MaxRetries < 0 {
+			return fmt.Errorf("sub-agent %d: max retries must be non-negative", i)
+		}
+	}
+
+	// Validate output configuration
+	validFormats := map[string]bool{"table": true, "json": true, "simple": true}
+	if !validFormats[c.Output.Format] {
+		return fmt.Errorf("invalid output format: %s, must be 'table', 'json', or 'simple'", c.Output.Format)
+	}
+
+	// Validate validation configuration
+	if c.Validation.MaxRetries < 0 {
+		return fmt.Errorf("invalid validation max retries: %d, must be non-negative", c.Validation.MaxRetries)
+	}
+
+	// Validate storage configuration if enabled
+	if c.Storage.Enabled {
+		if c.Storage.Host == "" {
+			return fmt.Errorf("storage enabled but host is empty")
+		}
+		if c.Storage.Port < 1 || c.Storage.Port > 65535 {
+			return fmt.Errorf("invalid storage port: %d, must be between 1 and 65535", c.Storage.Port)
+		}
+		if c.Storage.Database == "" {
+			return fmt.Errorf("storage enabled but database name is empty")
+		}
+	}
+
+	// Validate memory configuration
+	if c.Memory.SessionMemory.MaxHistory < 0 {
+		return fmt.Errorf("invalid session memory max history: %d, must be non-negative", c.Memory.SessionMemory.MaxHistory)
+	}
+
+	return nil
 }

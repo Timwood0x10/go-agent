@@ -94,7 +94,7 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 	sem := make(chan struct{}, d.maxParallel)
 	var wg sync.WaitGroup
 	results := make([]*models.TaskResult, len(tasks))
-	errCh := make(chan error, 1)
+	errCh := make(chan error, len(tasks))
 
 	for i, task := range tasks {
 		wg.Add(1)
@@ -105,10 +105,7 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 
 			select {
 			case <-ctx.Done():
-				select {
-				case errCh <- ctx.Err():
-				default:
-				}
+				errCh <- ctx.Err()
 				return
 			default:
 				// Execute task
@@ -121,8 +118,17 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 	wg.Wait()
 	close(errCh)
 
-	if err, ok := <-errCh; ok && err != nil {
-		return nil, err
+	// Collect all errors
+	var errors []error
+	for err := range errCh {
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	// Return aggregated error if any
+	if len(errors) > 0 {
+		return results, fmt.Errorf("%d task(s) failed: %v", len(errors), errors)
 	}
 
 	return results, nil

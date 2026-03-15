@@ -133,6 +133,31 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 
 	a.setStatus(models.AgentStatusStarting)
 
+	// Validate and initialize dependencies
+	if a.parser == nil {
+		return errors.ErrProfileParserNotInitialized
+	}
+	if a.planner == nil {
+		return errors.ErrTaskPlannerNotInitialized
+	}
+	if a.dispatcher == nil {
+		return errors.ErrDispatchNotInitialized
+	}
+	if a.aggregator == nil {
+		return errors.ErrResultAggNotInitialized
+	}
+
+	// Initialize heartbeat monitor if provided
+	if a.heartbeatMon != nil {
+		// Heartbeat monitor is ready to use
+	}
+
+	// Initialize message queue if provided
+	if a.messageQueue != nil {
+		// Message queue is ready to use
+	}
+
+	slog.Info("Leader agent started successfully", "agent_id", a.id)
 	a.setStatus(models.AgentStatusReady)
 	return nil
 }

@@ -137,11 +137,23 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 	defer cancel()
 
 	errChan := make(chan error, len(handler.callbacks))
+	panicChan := make(chan interface{}, len(handler.callbacks))
 
 	for _, callback := range handler.callbacks {
 		m.wg.Add(1)
 		go func(cb Callback) {
 			defer m.wg.Done()
+
+			// Recover from panic to prevent one callback from breaking the entire shutdown
+			defer func() {
+				if r := recover(); r != nil {
+					if handler.onPanic != nil {
+						handler.onPanic(r)
+					}
+					panicChan <- r
+				}
+			}()
+
 			if err := cb(phaseCtx); err != nil {
 				errChan <- err
 			}
@@ -158,11 +170,31 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 	select {
 	case <-done:
 		close(errChan)
+		close(panicChan)
+
+		// Check for panics first
+		panicCount := 0
+		for panicInfo := range panicChan {
+			panicCount++
+			fmt.Printf("Shutdown phase %s: panic recovered: %v\n", phase, panicInfo)
+		}
+
+		// Then check for errors
+		var errors []error
 		for err := range errChan {
 			if err != nil {
-				return err
+				errors = append(errors, err)
 			}
 		}
+
+		if panicCount > 0 {
+			return fmt.Errorf("%d callback(s) panicked during shutdown phase %s", panicCount, phase)
+		}
+
+		if len(errors) > 0 {
+			return fmt.Errorf("%d callback(s) failed during shutdown phase %s: %v", len(errors), phase, errors)
+		}
+
 		return nil
 	case <-phaseCtx.Done():
 		if handler.onTimeout != nil {
