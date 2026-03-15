@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"goagent/internal/core/errors"
+	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
-	"goagent/internal/protocol/ahp"
 )
 
 // TaskExecutorFunc is a function type for executing tasks directly.
@@ -46,7 +45,7 @@ func (d *taskDispatcher) RegisterExecutor(agentType models.AgentType, fn func(ct
 // Dispatch dispatches tasks to sub-agents in parallel.
 func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]*models.TaskResult, error) {
 	if len(tasks) == 0 {
-		return nil, errors.ErrInvalidInput
+		return nil, apperrors.ErrInvalidInput
 	}
 
 	// Limit parallel execution
@@ -111,13 +110,24 @@ func (d *taskDispatcher) executeTask(ctx context.Context, task *models.Task) *mo
 	}
 
 	// Fallback: create AHP message and send via queue
+	// TODO: Implement actual message queue based dispatch
+	// Current implementation uses direct executor function call above
+	// For distributed deployment, uncomment the following:
+	/*
 	sessionID := ""
 	if task.Context != nil && len(task.Context.Dependencies) > 0 {
 		sessionID = task.Context.Dependencies[0]
 	}
-
 	msg := ahp.NewTaskMessage(d.getAgentID(), agentAddr, task.TaskID, sessionID, task.Payload)
-	_ = msg // Message would be sent via message queue in real implementation
+	if d.messageQueue != nil {
+		if err := d.messageQueue.Enqueue(ctx, msg); err != nil {
+			result.SetError("failed to enqueue message: " + err.Error())
+			return result
+		}
+		result.SetSuccess(nil, "task dispatched via queue to "+agentAddr)
+		return result
+	}
+	*/
 
 	// Simulate task dispatch (for backward compatibility)
 	result.SetSuccess(nil, "task dispatched to "+agentAddr)

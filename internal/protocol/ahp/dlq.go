@@ -156,10 +156,14 @@ func (p *DLQProcessor) Process(ctx context.Context) error {
 
 	for _, entry := range entries {
 		if err := p.processEntry(ctx, entry); err != nil {
+			p.mu.Lock()
 			p.failed++
+			p.mu.Unlock()
 			continue
 		}
+		p.mu.Lock()
 		p.processed++
+		p.mu.Unlock()
 	}
 
 	return nil

@@ -111,8 +111,70 @@ func (m *AHPMessage) GetResult() (*models.TaskResult, bool) {
 	if m.Method != AHPMethodResult {
 		return nil, false
 	}
-	result, ok := m.Payload["result"].(*models.TaskResult)
-	return result, ok
+
+	// Try direct type assertion first (for in-memory objects)
+	if result, ok := m.Payload["result"].(*models.TaskResult); ok {
+		return result, true
+	}
+
+	// Handle JSON deserialized map[string]interface{}
+	if resultMap, ok := m.Payload["result"].(map[string]any); ok {
+		result := reconstructTaskResult(resultMap)
+		if result != nil {
+			return result, true
+		}
+	}
+
+	return nil, false
+}
+
+// reconstructTaskResult reconstructs TaskResult from map after JSON deserialization.
+func reconstructTaskResult(m map[string]any) *models.TaskResult {
+	if m == nil {
+		return nil
+	}
+
+	result := &models.TaskResult{
+		Items: make([]*models.RecommendItem, 0),
+	}
+
+	// Reconstruct fields from map
+	if v, ok := m["task_id"].(string); ok {
+		result.TaskID = v
+	}
+	if v, ok := m["success"].(bool); ok {
+		result.Success = v
+	}
+	if v, ok := m["error"].(string); ok {
+		result.Error = v
+	}
+	if v, ok := m["reason"].(string); ok {
+		result.Reason = v
+	}
+
+	// Reconstruct items
+	if items, ok := m["items"].([]any); ok {
+		for _, item := range items {
+			if itemMap, ok := item.(map[string]any); ok {
+				item := &models.RecommendItem{}
+				if id, ok := itemMap["item_id"].(string); ok {
+					item.ItemID = id
+				}
+				if name, ok := itemMap["name"].(string); ok {
+					item.Name = name
+				}
+				if category, ok := itemMap["category"].(string); ok {
+					item.Category = category
+				}
+				if price, ok := itemMap["price"].(float64); ok {
+					item.Price = price
+				}
+				result.Items = append(result.Items, item)
+			}
+		}
+	}
+
+	return result
 }
 
 // GetProgress extracts progress from payload.

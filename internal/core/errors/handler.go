@@ -67,7 +67,13 @@ func (h *Handler) RetryWithBackoff(ctx context.Context, appErr *AppError, attemp
 	}
 
 	strategy := GetStrategy(appErr.Code.Code)
-	backoff := strategy.Backoff * time.Duration(attempt)
+	// Exponential backoff: base * 2^attempt
+	// Cap at maxBackoff to prevent excessive waiting
+	maxBackoff := 30 * time.Second
+	backoff := strategy.Backoff * time.Duration(1<<attempt)
+	if backoff > maxBackoff {
+		backoff = maxBackoff
+	}
 
 	select {
 	case <-ctx.Done():

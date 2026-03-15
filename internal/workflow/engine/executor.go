@@ -138,12 +138,11 @@ func (e *Executor) runSteps(
 			stepID := executionOrder[stepIndex]
 			step := e.findStep(workflow.Steps, stepID)
 
-			if !e.canExecute(step, completed) {
-				stepIndex++
-				submitted = true
-				continue
-			}
-
+				if !e.canExecute(step, completed, &mu) {
+						stepIndex++
+						submitted = true
+						continue
+					}
 			stepChan <- stepID
 			stepIndex++
 			submitted = true
@@ -178,7 +177,7 @@ func (e *Executor) runSteps(
 			for _, sid := range executionOrder {
 				if !completed[sid] {
 					step := e.findStep(workflow.Steps, sid)
-					if !e.canExecute(step, completed) {
+					if !e.canExecute(step, completed, &mu) {
 						pending = true
 						break
 					}
@@ -210,7 +209,9 @@ func (e *Executor) runSteps(
 }
 
 // canExecute checks if a step can be executed.
-func (e *Executor) canExecute(step *Step, completed map[string]bool) bool {
+func (e *Executor) canExecute(step *Step, completed map[string]bool, mu *sync.Mutex) bool {
+	mu.Lock()
+	defer mu.Unlock()
 	for _, dep := range step.DependsOn {
 		if !completed[dep] {
 			return false

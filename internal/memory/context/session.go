@@ -50,9 +50,9 @@ func NewSessionMemory(maxSize int, ttl time.Duration) *SessionMemory {
 // Get retrieves session data.
 func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	session, exists := m.sessions[sessionID]
+	m.mu.RUnlock()
+
 	if !exists {
 		return nil, false
 	}
@@ -61,6 +61,7 @@ func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData
 		return nil, false
 	}
 
+	// Update AccessedAt outside of lock to avoid read-write race
 	session.AccessedAt = time.Now()
 	return session, true
 }
