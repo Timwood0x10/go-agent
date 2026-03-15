@@ -2,6 +2,7 @@ package shutdown
 
 import (
 	"context"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -90,5 +91,48 @@ func TestPhaseExecutor(t *testing.T) {
 		if executor.State() != PhaseStatePending {
 			t.Errorf("expected pending state")
 		}
+	})
+}
+
+func TestSignalHandler(t *testing.T) {
+	t.Run("create signal handler", func(t *testing.T) {
+		manager := NewManager(10 * time.Second)
+		handler := NewSignalHandler(manager)
+
+		if handler == nil {
+			t.Errorf("handler should not be nil")
+		}
+	})
+
+	t.Run("start handler", func(t *testing.T) {
+		manager := NewManager(10 * time.Second)
+		handler := NewSignalHandler(manager)
+
+		err := handler.Start(t.Context())
+		if err != nil {
+			t.Errorf("start error: %v", err)
+		}
+
+		// Stop the handler
+		handler.Stop()
+	})
+
+	t.Run("add signal", func(t *testing.T) {
+		manager := NewManager(10 * time.Second)
+		handler := NewSignalHandler(manager)
+
+		// Add SIGTERM (available on all platforms)
+		handler.AddSignal(syscall.SIGTERM)
+		// Just verify no panic
+	})
+
+	t.Run("set context", func(t *testing.T) {
+		manager := NewManager(10 * time.Second)
+		handler := NewSignalHandler(manager)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		handler.SetContext(ctx)
+		cancel()
+		// Just verify no panic
 	})
 }

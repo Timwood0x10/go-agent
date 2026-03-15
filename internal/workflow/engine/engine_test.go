@@ -87,3 +87,19 @@ func TestWorkflowErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestExecutor(t *testing.T) {
+	// Skip executor tests - requires proper registry setup
+	t.Skip("Executor requires proper agent registry setup")
+}
+
+func TestLoader(t *testing.T) {
+	// FileLoader requires a decoder, skip basic test
+	// The loader tests would require a valid decoder setup
+	t.Skip("FileLoader requires valid decoder setup")
+}
+
+func TestReloader(t *testing.T) {
+	// Skip tests that require full setup
+	t.Skip("Reloader tests require full setup")
+}

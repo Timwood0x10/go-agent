@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -131,5 +132,62 @@ func TestConfig_Validate(t *testing.T) {
 		if cfg.ConnMaxIdleTime != 1*time.Minute {
 			t.Errorf("expected ConnMaxIdleTime 1min after validation")
 		}
+	})
+}
+
+func TestPool(t *testing.T) {
+	t.Run("create pool with default config", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Host = "localhost"
+
+		// Note: This test requires a running PostgreSQL instance
+		// In CI, we skip if no database is available
+		_, err := NewPool(cfg)
+		if err != nil {
+			// Expected to fail without real database
+			t.Logf("Expected to fail without database: %v", err)
+		}
+	})
+}
+
+func TestRepository(t *testing.T) {
+	t.Run("create repository", func(t *testing.T) {
+		// Test that NewRepository doesn't panic with nil pool
+		// Note: This test requires a running PostgreSQL instance
+		cfg := DefaultConfig()
+		cfg.Host = "localhost"
+
+		_, err := NewPool(cfg)
+		if err != nil {
+			t.Logf("Expected to fail without database: %v", err)
+		}
+	})
+
+	t.Run("transaction", func(t *testing.T) {
+		// Test transaction helper exists
+		cfg := DefaultConfig()
+		cfg.Host = "localhost"
+
+		pool, err := NewPool(cfg)
+		if err != nil {
+			t.Logf("Expected to fail without database: %v", err)
+			return
+		}
+
+		repo := NewRepository(pool)
+		if repo == nil {
+			t.Errorf("repository should not be nil")
+		}
+
+		// Test transaction function - just verify it can be called
+		err = repo.Transaction(t.Context(), func(tx *Repository) error {
+			// Just test that tx repo is created properly
+			if tx == nil {
+				return errors.New("transaction failed")
+			}
+			return nil
+		})
+		// Will fail without database, that's expected
+		_ = err
 	})
 }

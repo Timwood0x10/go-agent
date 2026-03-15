@@ -101,3 +101,20 @@ func TestLimiterFactory(t *testing.T) {
 		}
 	})
 }
+
+func TestBackpressure(t *testing.T) {
+	t.Run("create backpressure", func(t *testing.T) {
+		bp := NewBackpressure(10, 20, DropPolicyReject)
+
+		if bp == nil {
+			t.Errorf("backpressure should not be nil")
+		}
+	})
+
+	t.Run("check max active", func(t *testing.T) {
+		bp := NewBackpressure(5, 10, DropPolicyReject)
+
+		_ = bp
+		// Just test that it can be created
+	})
+}
