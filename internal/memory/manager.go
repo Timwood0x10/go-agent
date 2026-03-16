@@ -90,14 +90,14 @@ type Message struct {
 // DefaultMemoryConfig returns default configuration for MemoryManager.
 func DefaultMemoryConfig() *MemoryConfig {
 	return &MemoryConfig{
-		Enabled:       true,
-		Storage:       "memory",
-		MaxHistory:    10,
-		MaxSessions:   100,
-		MaxTasks:      1000,
-		SessionTTL:    24 * time.Hour,
-		TaskTTL:       7 * 24 * time.Hour,
-		VectorDim:     128, // 128-dimensional vector for simple hash-based embedding
+		Enabled:        true,
+		Storage:        "memory",
+		MaxHistory:     10,
+		MaxSessions:    100,
+		MaxTasks:       1000,
+		SessionTTL:     24 * time.Hour,
+		TaskTTL:        7 * 24 * time.Hour,
+		VectorDim:      128, // 128-dimensional vector for simple hash-based embedding
 		EnablePostgres: false,
 	}
 }

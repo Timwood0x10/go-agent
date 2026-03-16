@@ -17,7 +17,7 @@ import (
 	"goagent/internal/config"
 	"goagent/internal/core/models"
 	"goagent/internal/llm/output"
-	memctx "goagent/internal/memory/context"
+	"goagent/internal/memory"
 	"goagent/internal/protocol/ahp"
 )
 
@@ -45,7 +45,7 @@ func main() {
 	}
 
 	// Initialize components
-	comps, err := initializeComponents(cfg)
+	comps, err := initializeComponents(ctx, cfg)
 	if err != nil {
 		slog.Error("Failed to initialize components", "error", err)
 		os.Exit(1)
@@ -107,7 +107,7 @@ func loadConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
-func initializeComponents(cfg *config.Config) (*components, error) {
+func initializeComponents(ctx context.Context, cfg *config.Config) (*components, error) {
 	llmFactory := output.NewFactory()
 	llmCfg := &output.Config{
 		Provider:  cfg.LLM.Provider,
@@ -382,45 +382,16 @@ func processUserInput(ctx context.Context, agent leader.Agent, comps *components
 	fmt.Printf("Processing: %s\n", input)
 	fmt.Println(strings.Repeat("-", 50))
 
-	// Add user input to memory.
-	userMsg := memctx.Message{
-		Role:    "user",
-		Content: input,
-		Time:    time.Now(),
-	}
-	if err := comps.sessionMemory.AddMessage(ctx, comps.sessionID, userMsg); err != nil {
-		slog.Warn("Failed to add user message to memory", "error", err)
-	}
-
-	// Get history and build context.
-	history, err := comps.sessionMemory.GetMessages(ctx, comps.sessionID)
-	if err != nil {
-		slog.Warn("Failed to get history from memory", "error", err)
-		history = []memctx.Message{}
-	}
-
-	// Build input with context.
-	inputWithContext := buildInputWithContext(input, history)
-
 	startTime := time.Now()
-	result, err := agent.Process(ctx, inputWithContext)
+	result, err := agent.Process(ctx, input)
 	duration := time.Since(startTime)
 
 	if err != nil {
 		slog.Error("Processing error", "error", err)
 		fmt.Printf("Error: %v\n\n", err)
-
-		// Add error to memory.
-		errorMsg := memctx.Message{
-			Role:    "assistant",
-			Content: fmt.Sprintf("Error: %v", err),
-			Time:    time.Now(),
-		}
-		_ = comps.sessionMemory.AddMessage(ctx, comps.sessionID, errorMsg)
 		return fmt.Errorf("process input: %w", err)
 	}
 
-	// Add result to memory.
 	if recommendResult, ok := result.(*models.RecommendResult); ok {
 		filesCreated := generateFiles(recommendResult.Items)
 
@@ -433,24 +404,6 @@ func processUserInput(ctx context.Context, agent leader.Agent, comps *components
 		}
 
 		formatOutput(recommendResult.Items)
-
-		// Save result summary to memory.
-		summary := fmt.Sprintf("Generated %d items: ", len(recommendResult.Items))
-		for i, item := range recommendResult.Items {
-			if i > 0 {
-				summary += ", "
-			}
-			summary += fmt.Sprintf("%s (%s)", item.Name, item.Category)
-		}
-
-		assistantMsg := memctx.Message{
-			Role:    "assistant",
-			Content: summary,
-			Time:    time.Now(),
-		}
-		if err := comps.sessionMemory.AddMessage(ctx, comps.sessionID, assistantMsg); err != nil {
-			slog.Warn("Failed to add assistant message to memory", "error", err)
-		}
 	} else {
 		slog.Info("Result", "data", result)
 		fmt.Printf("Result: %v\n\n", result)
@@ -458,41 +411,6 @@ func processUserInput(ctx context.Context, agent leader.Agent, comps *components
 
 	fmt.Printf("Completed in %v\n\n", duration)
 	return nil
-}
-
-// buildInputWithContext builds input with conversation history.
-func buildInputWithContext(currentInput string, history []memctx.Message) string {
-	if len(history) == 0 {
-		return currentInput
-	}
-
-	// Keep only last 5 turns (10 messages) to avoid long context.
-	const maxHistory = 10
-	if len(history) > maxHistory {
-		history = history[len(history)-maxHistory:]
-	}
-
-	var contextBuilder strings.Builder
-	contextBuilder.WriteString("Previous conversation history:\n\n")
-
-	for _, msg := range history {
-		if msg.Role == "user" {
-			contextBuilder.WriteString(fmt.Sprintf("User: %s\n", msg.Content))
-		} else {
-			contextBuilder.WriteString(fmt.Sprintf("Assistant: %s\n", msg.Content))
-		}
-
-		// Keep only summary, not full content.
-		if len(msg.Content) > 100 {
-			contextBuilder.WriteString(msg.Content[:100])
-			contextBuilder.WriteString("...\n")
-		}
-	}
-
-	contextBuilder.WriteString("\nCurrent request:\n")
-	contextBuilder.WriteString(currentInput)
-
-	return contextBuilder.String()
 }
 
 func generateFiles(items []*models.RecommendItem) []string {

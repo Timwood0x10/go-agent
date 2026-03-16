@@ -9,11 +9,11 @@ server:
 # LLM Configuration - OpenRouter
 llm:
   provider: "openrouter"
-  api_key: "sk-or-v1-xxx"  # Replace with your OpenRouter API key
+  api_key: "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"  # Replace with your OpenRouter API key
   base_url: "https://openrouter.ai/api/v1"
   model: "meta-llama/llama-3.1-8b-instruct"
   timeout: 120
-  max_tokens: 8192 
+  max_tokens: 7000
 
 # Agent Configuration
 agents:
@@ -193,18 +193,16 @@ workflow:
 # Memory Configuration
 memory:
   enabled: true
-  session:
-    enabled: true
-    max_history: 100
-  user_profile:
-    enabled: true
-    storage: "memory"
-    vector_db: false
-  task_distillation:
-    enabled: true
-    storage: "memory"
-    vector_store: false
-    prompt: "请简洁总结以下开发任务的关键信息，包括：任务类型、编程语言、核心需求、主要功能点、依赖关系。"
+  storage: "memory"  # "memory" or "postgres"
+  max_history: 10   # Maximum number of turns to keep in context
+  max_sessions: 100 # Maximum number of sessions to store
+  max_tasks: 1000   # Maximum number of tasks to store
+  session_ttl: "24h" # Session time-to-live
+  task_ttl: "168h"   # Task time-to-live (7 days)
+  vector_dim: 128    # Vector dimension for local hash-based embedding
+  postgres:
+    enabled: false
+    dsn: "host=localhost port=5432 user=styleagent password=password dbname=styleagent sslmode=disable"
 
 # Storage Configuration
 storage:

@@ -41,20 +41,20 @@ type ResultAggregator interface {
 
 // leaderAgent implements the Leader Agent.
 type leaderAgent struct {
-	mu             sync.RWMutex
-	id             string
-	agentType      models.AgentType
-	status         models.AgentStatus
-	config         *LeaderAgentConfig
-	parser         ProfileParser
-	planner        TaskPlanner
-	dispatcher     TaskDispatcher
-	aggregator     ResultAggregator
-	messageQueue   *ahp.MessageQueue
-	heartbeatMon   *ahp.HeartbeatMonitor
-	memoryManager  memory.MemoryManager
-	sessionID      string
-	stepCount      int
+	mu            sync.RWMutex
+	id            string
+	agentType     models.AgentType
+	status        models.AgentStatus
+	config        *LeaderAgentConfig
+	parser        ProfileParser
+	planner       TaskPlanner
+	dispatcher    TaskDispatcher
+	aggregator    ResultAggregator
+	messageQueue  *ahp.MessageQueue
+	heartbeatMon  *ahp.HeartbeatMonitor
+	memoryManager memory.MemoryManager
+	sessionID     string
+	stepCount     int
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.

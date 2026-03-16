@@ -9,21 +9,21 @@ import (
 	"sync"
 	"time"
 
-	memctx "goagent/internal/memory/context"
 	"goagent/internal/core/models"
+	memctx "goagent/internal/memory/context"
 )
 
 // memoryManager implements MemoryManager interface.
 // It coordinates session memory, task memory, and local vector storage.
 type memoryManager struct {
-	sessionMemory     *memctx.SessionMemory
-	taskMemory        *memctx.TaskMemory
-	distilledTasks    map[string]*DistilledTaskData
-	mu                sync.RWMutex
-	config            *MemoryConfig
-	started           bool
-	stopped           bool
-	vectorDim         int
+	sessionMemory  *memctx.SessionMemory
+	taskMemory     *memctx.TaskMemory
+	distilledTasks map[string]*DistilledTaskData
+	mu             sync.RWMutex
+	config         *MemoryConfig
+	started        bool
+	stopped        bool
+	vectorDim      int
 }
 
 // DistilledTaskData holds distilled task information with local vector.
@@ -97,7 +97,8 @@ func (m *memoryManager) Stop(ctx context.Context) error {
 
 // CreateSession creates a new session and returns the session ID.
 func (m *memoryManager) CreateSession(ctx context.Context, userID string) (string, error) {
-	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
+	// Use both time and userID to ensure uniqueness
+	sessionID := fmt.Sprintf("session_%s_%d", userID, time.Now().UnixNano())
 
 	messages := []memctx.Message{
 		{
@@ -264,7 +265,7 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 
 	// Spread hash across vector dimensions
 	for i := range vector {
-		vector[i] = float64((hash >> (i * 5)) % 1000) / 1000.0
+		vector[i] = float64((hash>>(i*5))%1000) / 1000.0
 	}
 
 	// Normalize vector
