@@ -76,6 +76,15 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 			if result.Status == StepStatusFailed {
 				execution.Status = WorkflowStatusFailed
 				execution.Error = result.Error
+				execution.FinishedAt = time.Now()
+				return &WorkflowResult{
+					ExecutionID: execution.ID,
+					WorkflowID:  workflow.ID,
+					Status:      WorkflowStatusFailed,
+					Error:       result.Error,
+					Duration:    execution.FinishedAt.Sub(execution.StartedAt),
+					Steps:       stepResults,
+				}, fmt.Errorf("step %s failed: %s", result.StepID, result.Error)
 			}
 		case err := <-errChan:
 			execution.Status = WorkflowStatusFailed
@@ -125,92 +134,110 @@ func (e *Executor) runSteps(
 ) {
 	stepIndex := 0
 	completed := make(map[string]bool)
+	processed := make(map[string]bool)
 	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	// Event-driven: wakeup channel to trigger re-checking pending steps
-	wakeup := make(chan struct{}, 1)
+	// Submit steps according to execution order
+	for stepIndex < len(executionOrder) {
+		stepID := executionOrder[stepIndex]
+		step := e.findStep(workflow.Steps, stepID)
 
-	for {
-		// Submit new steps while we have capacity
-		submitted := true
-		for submitted && stepIndex < len(executionOrder) && len(stepChan) < e.maxParallel {
-			submitted = false
-			stepID := executionOrder[stepIndex]
-			step := e.findStep(workflow.Steps, stepID)
+		// Check if step can be executed based on dependencies
+		if !e.canExecute(step, completed, &mu) {
+			// Cannot execute yet, check if this step was already processed
+			mu.Lock()
+			alreadyProcessed := processed[stepID]
+			mu.Unlock()
 
-				if !e.canExecute(step, completed, &mu) {
-						stepIndex++
-						submitted = true
-						continue
-					}
-			stepChan <- stepID
-			stepIndex++
-			submitted = true
-
-			go func(sid string) {
-				result := e.executeStep(ctx, workflow, sid, initialInput, completed)
-
-				// Use non-blocking send to avoid goroutine leak when resultChan is full
-				select {
-				case resultChan <- result:
-				case <-ctx.Done():
-					// Context cancelled, discard result to prevent goroutine leak
-				}
-
-				mu.Lock()
-				if result.Status == StepStatusCompleted {
-					completed[sid] = true
-				}
-				mu.Unlock()
-
-				// Trigger wakeup to re-check pending steps
-				select {
-				case wakeup <- struct{}{}:
-				default:
-				}
-			}(stepID)
-		}
-
-		// Check if workflow is complete
-		if len(completed) == len(workflow.Steps) {
-			close(resultChan)
-			return
-		}
-
-		// Check for incomplete workflow
-		if stepIndex >= len(executionOrder) && len(completed) < len(workflow.Steps) {
-			pending := false
-			for _, sid := range executionOrder {
-				if !completed[sid] {
-					step := e.findStep(workflow.Steps, sid)
-					if !e.canExecute(step, completed, &mu) {
-						pending = true
-						break
-					}
-				}
+			if alreadyProcessed {
+				// Already processed but not completed, move to next step
+				stepIndex++
+				continue
 			}
-			if !pending {
-				errChan <- ErrWorkflowIncomplete
-				close(resultChan)
-				return
-			}
+
+			// Wait for dependency to complete
+			// Check if we have any active goroutines
+			wg.Wait()
+			continue
 		}
 
-		// Event-driven: wait for result, wakeup, or context done
-		select {
-		case <-ctx.Done():
-			errChan <- ctx.Err()
-			return
-		case result := <-resultChan:
-			// Update completed status from result
+		// Wait for capacity
+		if len(stepChan) >= e.maxParallel {
+			<-stepChan
+		}
+
+		// Start executing the step
+		stepChan <- stepID
+		stepIndex++
+
+		wg.Add(1)
+		go func(sid string) {
+			defer func() {
+				<-stepChan
+				wg.Done()
+
+				if r := recover(); r != nil {
+					mu.Lock()
+					processed[sid] = true
+					mu.Unlock()
+
+					result := &StepResult{
+						StepID: sid,
+						Status: StepStatusFailed,
+						Error:  fmt.Sprintf("panic: %v", r),
+					}
+					resultChan <- result
+				}
+			}()
+
+			result := e.executeStep(ctx, workflow, sid, initialInput, completed)
+
+			mu.Lock()
+			processed[sid] = true
 			if result.Status == StepStatusCompleted {
-				mu.Lock()
-				completed[result.StepID] = true
-				mu.Unlock()
+				completed[sid] = true
 			}
-		case <-wakeup:
-			// A step completed, re-check pending steps without polling
+			mu.Unlock()
+
+			resultChan <- result
+		}(stepID)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Check if workflow is complete
+	mu.Lock()
+	allCompleted := len(completed) == len(workflow.Steps)
+	mu.Unlock()
+
+	if allCompleted {
+		close(resultChan)
+		return
+	}
+
+	// Check for incomplete workflow
+	pending := false
+	for _, sid := range executionOrder {
+		mu.Lock()
+		isProcessed := processed[sid]
+		mu.Unlock()
+
+		if !isProcessed {
+			step := e.findStep(workflow.Steps, sid)
+			if !e.canExecute(step, completed, &mu) {
+				pending = true
+				break
+			}
 		}
+	}
+
+	if pending {
+		errChan <- ErrWorkflowIncomplete
+		close(resultChan)
+	} else {
+		close(resultChan)
 	}
 }
 

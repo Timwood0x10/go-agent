@@ -25,7 +25,7 @@ type CacheItem struct {
 // NewCache creates a new Cache.
 func NewCache(maxSize int, ttl time.Duration) *Cache {
 	cache := &Cache{
-		items:  make(map[string]*CacheItem),
+		items:   make(map[string]*CacheItem),
 		maxSize: maxSize,
 		ttl:     ttl,
 		stopCh:  make(chan struct{}),

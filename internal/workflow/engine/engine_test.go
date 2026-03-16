@@ -89,8 +89,8 @@ func TestWorkflowErrors(t *testing.T) {
 }
 
 func TestExecutor(t *testing.T) {
-	// Skip executor tests - requires proper registry setup
-	t.Skip("Executor requires proper agent registry setup")
+	// Skip all executor tests - they have concurrency issues that cause tests to timeout
+	t.Skip("Executor tests have concurrency issues that cause timeouts, need refactoring")
 }
 
 func TestLoader(t *testing.T) {

@@ -12,12 +12,12 @@ import (
 
 // Pre-compiled regular expressions for better performance.
 var (
-	markdownPattern     = regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
-	trailingComma       = regexp.MustCompile(",\\s*([\\}\\]])")
-	singleLineComment   = regexp.MustCompile("//.*$")
-	multiLineComment    = regexp.MustCompile("/\\*[\\s\\S]*?\\*/")
-	unquotedKey         = regexp.MustCompile("([{,])\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*:")
-	singleQuote         = regexp.MustCompile("'([^']*)'")
+	markdownPattern   = regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
+	trailingComma     = regexp.MustCompile(",\\s*([\\}\\]])")
+	singleLineComment = regexp.MustCompile("//.*$")
+	multiLineComment  = regexp.MustCompile("/\\*[\\s\\S]*?\\*/")
+	unquotedKey       = regexp.MustCompile("([{,])\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*:")
+	singleQuote       = regexp.MustCompile("'([^']*)'")
 )
 
 // Parser parses LLM output into structured types.

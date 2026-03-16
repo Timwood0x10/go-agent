@@ -67,20 +67,26 @@ func (h *Handler) RetryWithBackoff(ctx context.Context, appErr *AppError, attemp
 	}
 
 	strategy := GetStrategy(appErr.Code.Code)
-	// Exponential backoff: base * 2^attempt
-	// Cap at maxBackoff to prevent excessive waiting
-	maxBackoff := 30 * time.Second
-	backoff := strategy.Backoff * time.Duration(1<<attempt)
-	if backoff > maxBackoff {
-		backoff = maxBackoff
+	
+	// Only apply backoff on retry attempts (attempt > 0), not on first attempt
+	if attempt > 0 {
+		// Exponential backoff: base * 2^(attempt-1)
+		// Cap at maxBackoff to prevent excessive waiting
+		maxBackoff := 30 * time.Second
+		backoff := strategy.Backoff * time.Duration(1<<(attempt-1))
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+			// Continue to next attempt
+		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(backoff):
-		return fn()
-	}
+	return fn()
 }
 
 // FormatError formats an error for logging or display.

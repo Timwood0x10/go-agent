@@ -398,8 +398,8 @@ func TestValidator(t *testing.T) {
 		v := NewValidator()
 
 		schema := &Schema{
-			Type: "array",
-			Items: &Schema{Type: "string"},
+			Type:     "array",
+			Items:    &Schema{Type: "string"},
 			MinItems: pointerToInt(1),
 		}
 

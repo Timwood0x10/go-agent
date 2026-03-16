@@ -464,11 +464,12 @@ func toInt64(v interface{}) (int64, bool) {
 		}
 	case uint32:
 		return int64(val), true
-	// Reject string type to avoid ambiguous type conversion
-	// Strings should be validated explicitly before conversion
+		// Reject string type to avoid ambiguous type conversion
+		// Strings should be validated explicitly before conversion
 	}
 	return 0, false
 }
+
 // Validator errors.
 var (
 	ErrValidationFailed = errors.New("validation failed")

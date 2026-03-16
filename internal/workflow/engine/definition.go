@@ -115,15 +115,36 @@ func (p *DefinitionParser) extractField(content, field string) (string, error) {
 func (p *DefinitionParser) extractPrompts(content string) map[string]string {
 	prompts := make(map[string]string)
 
-	promptPattern := regexp.MustCompile(`(?si)##\s*Prompt\s*:(\w+)\s*\n(.*?)(?=##|\z)`)
-	matches := promptPattern.FindAllStringSubmatch(content, -1)
+	// Use a simpler regex pattern that doesn't require lookahead
+	lines := strings.Split(content, "\n")
+	var currentPrompt string
+	var promptContent strings.Builder
+	inPromptSection := false
 
-	for _, match := range matches {
-		if len(match) > 2 {
-			promptName := strings.TrimSpace(match[1])
-			promptContent := strings.TrimSpace(match[2])
-			prompts[promptName] = promptContent
+	for _, line := range lines {
+		if strings.HasPrefix(line, "##") {
+			// New section
+			if inPromptSection && currentPrompt != "" {
+				prompts[currentPrompt] = strings.TrimSpace(promptContent.String())
+			}
+			currentPrompt = ""
+			promptContent.Reset()
+			inPromptSection = false
+
+			// Check if this is a Prompt section
+			promptMatch := regexp.MustCompile(`(?i)^##\s*Prompt\s*:\s*(\w+)\s*$`).FindStringSubmatch(line)
+			if len(promptMatch) > 1 {
+				currentPrompt = strings.TrimSpace(promptMatch[1])
+				inPromptSection = true
+			}
+		} else if inPromptSection {
+			promptContent.WriteString(line + "\n")
 		}
+	}
+
+	// Don't forget the last section
+	if inPromptSection && currentPrompt != "" {
+		prompts[currentPrompt] = strings.TrimSpace(promptContent.String())
 	}
 
 	return prompts
@@ -133,18 +154,26 @@ func (p *DefinitionParser) extractPrompts(content string) map[string]string {
 func (p *DefinitionParser) extractTools(content string) []string {
 	tools := make([]string, 0)
 
-	toolPattern := regexp.MustCompile(`(?i)##\s*Tools\s*\n(.*?)(?=##|\z)`)
-	matches := toolPattern.FindStringSubmatch(content)
+	lines := strings.Split(content, "\n")
+	inToolsSection := false
 
-	if len(matches) > 1 {
-		toolList := matches[1]
-		toolItemPattern := regexp.MustCompile(`(?m)^\s*-\s*(.+?)$`)
-		toolMatches := toolItemPattern.FindAllStringSubmatch(toolList, -1)
+	for _, line := range lines {
+		if strings.HasPrefix(line, "##") {
+			// New section
+			inToolsSection = false
 
-		for _, toolMatch := range toolMatches {
+			// Check if this is a Tools section
+			if regexp.MustCompile(`(?i)^##\s*Tools\s*$`).MatchString(strings.TrimSpace(line)) {
+				inToolsSection = true
+			}
+		} else if inToolsSection {
+			// Look for tool list items
+			toolMatch := regexp.MustCompile(`^\s*-\s*(.+?)$`).FindStringSubmatch(line)
 			if len(toolMatch) > 1 {
 				toolName := strings.TrimSpace(toolMatch[1])
-				tools = append(tools, toolName)
+				if toolName != "" {
+					tools = append(tools, toolName)
+				}
 			}
 		}
 	}
@@ -156,15 +185,21 @@ func (p *DefinitionParser) extractTools(content string) []string {
 func (p *DefinitionParser) extractMetadata(content string) map[string]string {
 	metadata := make(map[string]string)
 
-	metaPattern := regexp.MustCompile(`(?i)##\s*Metadata\s*\n(.*?)(?=##|\z)`)
-	matches := metaPattern.FindStringSubmatch(content)
+	lines := strings.Split(content, "\n")
+	inMetadataSection := false
 
-	if len(matches) > 1 {
-		metaContent := matches[1]
-		metaItemPattern := regexp.MustCompile(`(?m)^\s*-\s*(\w+)\s*:\s*(.+?)$`)
-		metaMatches := metaItemPattern.FindAllStringSubmatch(metaContent, -1)
+	for _, line := range lines {
+		if strings.HasPrefix(line, "##") {
+			// New section
+			inMetadataSection = false
 
-		for _, metaMatch := range metaMatches {
+			// Check if this is a Metadata section
+			if regexp.MustCompile(`(?i)^##\s*Metadata\s*$`).MatchString(strings.TrimSpace(line)) {
+				inMetadataSection = true
+			}
+		} else if inMetadataSection {
+			// Look for metadata key-value pairs
+			metaMatch := regexp.MustCompile(`^\s*-\s*(\w+)\s*:\s*(.+?)$`).FindStringSubmatch(line)
 			if len(metaMatch) > 2 {
 				key := strings.TrimSpace(metaMatch[1])
 				value := strings.TrimSpace(metaMatch[2])
