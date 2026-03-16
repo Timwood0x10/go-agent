@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -516,22 +517,25 @@ func TestRealHeartbeatMissed(t *testing.T) {
 		heartbeatCh := make(chan bool, 1)
 		var missedCount int
 		var heartbeatStopped bool
+		var heartbeatStoppedMu sync.Mutex
 
 		// Simulate heartbeat sending with controlled stopping
 		go func() {
 			// Send initial heartbeat
 			heartbeatCh <- true
 			time.Sleep(50 * time.Millisecond)
-			
+
 			// Send second heartbeat
 			heartbeatCh <- true
 			time.Sleep(50 * time.Millisecond)
-			
+
 			// Send third heartbeat
 			heartbeatCh <- true
-			
+
 			// Stop sending heartbeat, simulate connection lost
+			heartbeatStoppedMu.Lock()
 			heartbeatStopped = true
+			heartbeatStoppedMu.Unlock()
 		}()
 
 		// Heartbeat detection logic
@@ -548,7 +552,11 @@ func TestRealHeartbeatMissed(t *testing.T) {
 					missedCount = 0
 				case <-ticker.C:
 					// Periodic heartbeat check
-					if heartbeatStopped {
+					heartbeatStoppedMu.Lock()
+					stopped := heartbeatStopped
+					heartbeatStoppedMu.Unlock()
+
+					if stopped {
 						// Heartbeat stopped, start counting missed beats
 						missedCount++
 						if missedCount >= 2 {
@@ -690,10 +698,16 @@ func TestRealConcurrentErrorHandling(t *testing.T) {
 	t.Run("Real concurrent error handling", func(t *testing.T) {
 		// Create mock concurrent API server
 		var requestCount int
+		var requestCountMu sync.Mutex
+
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCountMu.Lock()
 			requestCount++
+			currentRequestCount := requestCount
+			requestCountMu.Unlock()
+
 			// Fail every 3rd request
-			if requestCount%3 == 0 {
+			if currentRequestCount%3 == 0 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Fprintf(w, `{"error": "intermittent failure"}`)
@@ -714,6 +728,7 @@ func TestRealConcurrentErrorHandling(t *testing.T) {
 		errorsCh := make(chan error, concurrency)
 		var successCount int
 		var errorCount int
+		var resultCountMu sync.Mutex
 
 		for i := 0; i < concurrency; i++ {
 			go func(id int) {
@@ -749,6 +764,7 @@ func TestRealConcurrentErrorHandling(t *testing.T) {
 				appErr := New(code)
 				result := handler.RetryWithBackoff(context.Background(), appErr, 0, makeRequest)
 
+				resultCountMu.Lock()
 				if result != nil {
 					errorCount++
 					errorsCh <- result
@@ -756,6 +772,7 @@ func TestRealConcurrentErrorHandling(t *testing.T) {
 					successCount++
 					errorsCh <- nil
 				}
+				resultCountMu.Unlock()
 			}(i)
 		}
 

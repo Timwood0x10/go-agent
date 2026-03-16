@@ -67,7 +67,7 @@ func (h *Handler) RetryWithBackoff(ctx context.Context, appErr *AppError, attemp
 	}
 
 	strategy := GetStrategy(appErr.Code.Code)
-	
+
 	// Only apply backoff on retry attempts (attempt > 0), not on first attempt
 	if attempt > 0 {
 		// Exponential backoff: base * 2^(attempt-1)
