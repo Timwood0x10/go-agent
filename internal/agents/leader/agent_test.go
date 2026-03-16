@@ -229,7 +229,7 @@ func TestLeaderAgent_New(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	if agent.ID() != "leader1" {
 		t.Errorf("expected leader1, got %s", agent.ID())
@@ -263,7 +263,7 @@ func TestLeaderAgent_StartStop(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Start
 	err := agent.Start(context.Background())
@@ -311,7 +311,7 @@ func TestLeaderAgent_Process(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Process without starting should auto-start
 	result, err := agent.Process(context.Background(), "I want casual style")
@@ -334,7 +334,7 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Start then set to busy
 	agent.Start(context.Background())

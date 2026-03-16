@@ -30,6 +30,7 @@ type RecommendItem struct {
 	Colors      []string       `json:"colors"`
 	Description string         `json:"description"`
 	MatchReason string         `json:"match_reason"`
+	Content     string         `json:"content"` // add Content field saved by agI
 	Metadata    map[string]any `json:"metadata"`
 }
 
