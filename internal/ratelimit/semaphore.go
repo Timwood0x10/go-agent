@@ -110,30 +110,34 @@ type WeightedSemaphoreLimiter struct {
 	used      int
 	weighted  map[string]int
 	config    *LimiterConfig
+	cond      *sync.Cond // Use condition variable for efficient waiting
 }
 
 // NewWeightedSemaphoreLimiter creates a new WeightedSemaphoreLimiter.
 func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimiter {
-	return &WeightedSemaphoreLimiter{
+	limiter := &WeightedSemaphoreLimiter{
 		available: config.Burst,
 		weighted:  make(map[string]int),
 		config:    config,
 	}
+	limiter.cond = sync.NewCond(&limiter.mu)
+	return limiter
 }
 
 // Acquire acquires weighted slots.
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	if l.available >= weight {
 		l.available -= weight
 		l.used += weight
 		l.weighted[key] += weight
+		l.mu.Unlock()
 		return nil
 	}
 
-	// Wait for available slots
+	// Wait for available slots with proper signaling
+	// Release lock while waiting, re-check after wakeup
 	for l.available < weight {
 		l.mu.Unlock()
 		select {
@@ -141,13 +145,18 @@ func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weig
 			return ctx.Err()
 		case <-time.After(10 * time.Millisecond):
 			l.mu.Lock()
+			// Re-check condition after waking up
+			if l.available >= weight {
+				l.available -= weight
+				l.used += weight
+				l.weighted[key] += weight
+				l.mu.Unlock()
+				return nil
+			}
 		}
 	}
 
-	l.available -= weight
-	l.used += weight
-	l.weighted[key] += weight
-
+	l.mu.Unlock()
 	return nil
 }
 
@@ -164,6 +173,8 @@ func (l *WeightedSemaphoreLimiter) Release(key string, weight int) {
 		if l.weighted[key] <= 0 {
 			delete(l.weighted, key)
 		}
+		// Wake up waiting goroutines
+		l.cond.Broadcast()
 	}
 }
 
@@ -189,6 +200,7 @@ func (l *WeightedSemaphoreLimiter) Reset() {
 	l.available = l.config.Burst
 	l.used = 0
 	l.weighted = make(map[string]int)
+	l.cond.Broadcast()
 }
 
 // Available returns available slots.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"strconv"
 
 	"goagent/internal/core/models"
 )
@@ -427,9 +426,16 @@ func toFloat64(v interface{}) (float64, bool) {
 		return float64(val), true
 	case int64:
 		return float64(val), true
-	case string:
-		f, err := strconv.ParseFloat(val, 64)
-		return f, err == nil
+	case int32:
+		return float64(val), true
+	case uint:
+		return float64(val), true
+	case uint64:
+		return float64(val), true
+	case uint32:
+		return float64(val), true
+		// Reject string type to avoid ambiguous type conversion
+		// Strings should be validated explicitly before conversion
 	}
 	return 0, false
 }
@@ -440,13 +446,26 @@ func toInt64(v interface{}) (int64, bool) {
 		return int64(val), true
 	case int64:
 		return val, true
+	case int32:
+		return int64(val), true
 	case float64:
-		if float64(int64(val)) == val {
+		if val >= float64(^uint64(0)>>1) || val < float64(^int64(0)) {
 			return int64(val), true
 		}
-	case string:
-		i, err := strconv.ParseInt(val, 10, 64)
-		return i, err == nil
+	case float32:
+		if float64(val) >= float64(^uint64(0)>>1) || float64(val) < float64(^int64(0)) {
+			return int64(val), true
+		}
+	case uint:
+		return int64(val), true
+	case uint64:
+		if val <= uint64(int64(^uint64(0)>>1)) {
+			return int64(val), true
+		}
+	case uint32:
+		return int64(val), true
+		// Reject string type to avoid ambiguous type conversion
+		// Strings should be validated explicitly before conversion
 	}
 	return 0, false
 }

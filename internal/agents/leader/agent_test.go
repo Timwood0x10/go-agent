@@ -182,7 +182,7 @@ func TestTaskDispatcher_Dispatch(t *testing.T) {
 		models.AgentTypeTop:    "agent_top",
 		models.AgentTypeBottom: "agent_bottom",
 	}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 
 	profile := &models.UserProfile{
 		Style:     []models.StyleTag{models.StyleCasual},
@@ -206,7 +206,7 @@ func TestTaskDispatcher_Dispatch(t *testing.T) {
 
 func TestTaskDispatcher_DispatchEmpty(t *testing.T) {
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 
 	_, err := dispatcher.Dispatch(context.Background(), nil)
 	if err == nil {
@@ -226,7 +226,7 @@ func TestLeaderAgent_New(t *testing.T) {
 	registry := map[models.AgentType]string{
 		models.AgentTypeTop: "agent_top",
 	}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
@@ -260,7 +260,7 @@ func TestLeaderAgent_StartStop(t *testing.T) {
 	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
@@ -308,7 +308,7 @@ func TestLeaderAgent_Process(t *testing.T) {
 	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
@@ -331,7 +331,7 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
@@ -359,7 +359,7 @@ func TestLeaderAgent_SendReceiveMessage(t *testing.T) {
 	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 	queue := ahp.NewMessageQueue("leader1", &ahp.QueueOptions{MaxSize: 10})
 
@@ -400,7 +400,7 @@ func TestLeaderAgent_Heartbeat(t *testing.T) {
 	)
 	planner := NewTaskPlanner(3)
 	registry := map[models.AgentType]string{}
-	dispatcher := NewTaskDispatcher(registry, 2, 30)
+	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 	hbMon := ahp.NewHeartbeatMonitor(ahp.DefaultHeartbeatConfig())
 

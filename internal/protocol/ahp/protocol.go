@@ -142,10 +142,15 @@ func (p *Protocol) DecodeMessage(data []byte) (*AHPMessage, error) {
 
 // Stats returns protocol statistics.
 func (p *Protocol) Stats() *ProtocolStats {
+	dlqSize := 0
+	if p.dlq != nil {
+		dlqSize = p.dlq.Size()
+	}
+
 	return &ProtocolStats{
 		TotalQueues:     len(p.registry.ListAgents()),
 		TotalMessages:   p.registry.Size(),
-		DLQSize:         p.dlq.Size(),
+		DLQSize:         dlqSize,
 		MonitoredAgents: len(p.heartbeat.ListAgents()),
 	}
 }

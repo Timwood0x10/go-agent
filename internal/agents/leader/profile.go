@@ -3,6 +3,7 @@ package leader
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
@@ -45,22 +46,22 @@ func (p *profileParser) Parse(ctx context.Context, input string) (*models.UserPr
 		return p.getDefaultProfile(), nil
 	}
 
-	fmt.Printf("[DEBUG] Parsing profile with LLM for input: %s\n", input)
+	slog.Debug("Parsing profile with LLM", "input", input)
 
 	for attempt := 0; attempt < p.maxRetries; attempt++ {
 		profile, err := p.parseOnce(ctx, input)
 		if err != nil {
-			fmt.Printf("[DEBUG] Parse attempt %d failed: %v\n", attempt+1, err)
+			slog.Debug("Parse attempt failed", "attempt", attempt+1, "error", err)
 			continue
 		}
 
 		// Validate result
 		if err := p.validateProfile(profile); err != nil {
-			fmt.Printf("[DEBUG] Validate attempt %d failed: %v\n", attempt+1, err)
+			slog.Debug("Validate attempt failed", "attempt", attempt+1, "error", err)
 			continue
 		}
 
-		fmt.Printf("[DEBUG] Profile parsed: %+v\n", profile)
+		slog.Debug("Profile parsed successfully", "user_id", profile.UserID, "style", profile.Style)
 		return profile, nil
 	}
 
@@ -102,7 +103,7 @@ func (p *profileParser) parseOnce(ctx context.Context, input string) (*models.Us
 
 func (p *profileParser) parseResponse(response string) (*models.UserProfile, error) {
 	// Debug: print raw response
-	fmt.Printf("[DEBUG ProfileParser] Raw LLM response: %s\n", response[:min(500, len(response))])
+	slog.Debug("Raw LLM response", "preview", response[:min(500, len(response))])
 
 	// Try to parse as JSON
 	parser := output.NewParser()
@@ -111,12 +112,12 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 		return nil, fmt.Errorf("%w: %w", apperrors.ErrLLMParserFailed, err)
 	}
 
-	// Debug: print parsed data
-	fmt.Printf("[DEBUG ProfileParser] Parsed data keys: ")
+	// Debug: print parsed data keys
+	keys := make([]string, 0, len(data))
 	for k := range data {
-		fmt.Printf("%s ", k)
+		keys = append(keys, k)
 	}
-	fmt.Println()
+	slog.Debug("Parsed data keys", "keys", keys)
 
 	// Extract fields
 	profile := &models.UserProfile{}

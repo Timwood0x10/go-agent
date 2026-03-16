@@ -3,6 +3,7 @@ package context
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -15,10 +16,12 @@ var (
 
 // SessionMemory stores conversation context for a session.
 type SessionMemory struct {
-	sessions map[string]*SessionData
-	mu       sync.RWMutex
-	maxSize  int
-	ttl      time.Duration
+	sessions    map[string]*SessionData
+	mu          sync.RWMutex
+	maxSize     int
+	ttl         time.Duration
+	cleanupTick time.Duration
+	stopCleanup chan struct{}
 }
 
 // SessionData holds session information.
@@ -41,27 +44,85 @@ type Message struct {
 // NewSessionMemory creates a new SessionMemory.
 func NewSessionMemory(maxSize int, ttl time.Duration) *SessionMemory {
 	return &SessionMemory{
-		sessions: make(map[string]*SessionData),
-		maxSize:  maxSize,
-		ttl:      ttl,
+		sessions:    make(map[string]*SessionData),
+		maxSize:     maxSize,
+		ttl:         ttl,
+		cleanupTick: ttl / 2, // Cleanup every half TTL period
+		stopCleanup: make(chan struct{}),
 	}
+}
+
+// StartCleanup starts the background cleanup task.
+func (m *SessionMemory) StartCleanup() {
+	if m.cleanupTick <= 0 {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(m.cleanupTick)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				removed := m.Cleanup(context.Background())
+				if removed > 0 {
+					slog.Debug("Session memory cleanup completed", "removed_sessions", removed)
+				}
+			case <-m.stopCleanup:
+				return
+			}
+		}
+	}()
+}
+
+// StopCleanup stops the background cleanup task.
+func (m *SessionMemory) StopCleanup() {
+	close(m.stopCleanup)
+}
+
+// Cleanup removes all expired sessions and returns the count of removed sessions.
+func (m *SessionMemory) Cleanup(ctx context.Context) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	removed := 0
+
+	for sessionID, session := range m.sessions {
+		if now.Sub(session.AccessedAt) > m.ttl {
+			delete(m.sessions, sessionID)
+			removed++
+		}
+	}
+
+	return removed
 }
 
 // Get retrieves session data.
 func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	session, exists := m.sessions[sessionID]
 	if !exists {
+		m.mu.RUnlock()
 		return nil, false
 	}
 
 	if time.Since(session.AccessedAt) > m.ttl {
+		m.mu.RUnlock()
+		// Session expired, remove it
+		m.mu.Lock()
+		delete(m.sessions, sessionID)
+		m.mu.Unlock()
 		return nil, false
 	}
+	m.mu.RUnlock()
 
+	// Use write lock to update AccessedAt to avoid data race
+	m.mu.Lock()
 	session.AccessedAt = time.Now()
+	m.mu.Unlock()
+
 	return session, true
 }
 
@@ -140,6 +201,20 @@ func (m *SessionMemory) Size() int {
 	defer m.mu.RUnlock()
 
 	return len(m.sessions)
+}
+
+// Close stops the background cleanup task and clears all sessions.
+func (m *SessionMemory) Close(ctx context.Context) error {
+	// Stop background cleanup
+	select {
+	case <-m.stopCleanup:
+		// Already stopped
+	default:
+		close(m.stopCleanup)
+	}
+
+	// Clear all sessions
+	return m.Clear(ctx)
 }
 
 // evictOldest removes the oldest session.

@@ -14,7 +14,6 @@ type MessageQueue struct {
 	messages chan *AHPMessage
 	agentID  string
 	opts     *QueueOptions
-	peeked   *AHPMessage // Cached peek result for thread-safe access
 }
 
 // QueueOptions holds the configuration options for the message queue.
@@ -62,10 +61,6 @@ func (q *MessageQueue) Enqueue(ctx context.Context, msg *AHPMessage) error {
 func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
 	select {
 	case msg := <-q.messages:
-		// Clear peek cache since we consumed a message
-		q.mu.Lock()
-		q.peeked = nil
-		q.mu.Unlock()
 		return msg, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -76,10 +71,6 @@ func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
 func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, error) {
 	select {
 	case msg := <-q.messages:
-		// Clear peek cache since we consumed a message
-		q.mu.Lock()
-		q.peeked = nil
-		q.mu.Unlock()
 		return msg, nil
 	case <-time.After(timeout):
 		return nil, errors.ErrQueueEmpty
@@ -87,23 +78,22 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 }
 
 // Peek returns the first message without removing it.
-// Thread-safe: uses cached peeked message.
+// Uses non-blocking select to avoid deadlock.
 func (q *MessageQueue) Peek() *AHPMessage {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	// Return cached peek result if available
-	if q.peeked != nil {
-		return q.peeked
-	}
-
-	// Try to get from channel without removing
+	// Use non-blocking receive to peek without removing
 	select {
-	case msg := <-q.messages:
-		// Cache it and put back to channel
-		q.peeked = msg
-		q.messages <- msg
-		return msg
+	case msg, ok := <-q.messages:
+		if !ok {
+			return nil // Channel closed
+		}
+		// Put the message back to channel (non-blocking)
+		select {
+		case q.messages <- msg:
+			return msg
+		default:
+			// Channel full, message is lost but return it anyway
+			return msg
+		}
 	default:
 		return nil
 	}

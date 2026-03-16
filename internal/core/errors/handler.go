@@ -2,7 +2,7 @@ package errors
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -55,7 +55,7 @@ func (h *Handler) HandleError(ctx context.Context, appErr *AppError, retryCount 
 			RetryCount: retryCount,
 		}
 		if err := h.dlq(ctx, dlqMsg); err != nil {
-			log.Printf("failed to send to DLQ: %v", err)
+			slog.Error("Failed to send to DLQ", "error_code", code, "error", err)
 		}
 	}
 }
@@ -67,14 +67,26 @@ func (h *Handler) RetryWithBackoff(ctx context.Context, appErr *AppError, attemp
 	}
 
 	strategy := GetStrategy(appErr.Code.Code)
-	backoff := strategy.Backoff * time.Duration(attempt)
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(backoff):
-		return fn()
+	// Only apply backoff on retry attempts (attempt > 0), not on first attempt
+	if attempt > 0 {
+		// Exponential backoff: base * 2^(attempt-1)
+		// Cap at maxBackoff to prevent excessive waiting
+		maxBackoff := 30 * time.Second
+		backoff := strategy.Backoff * time.Duration(1<<(attempt-1))
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+			// Continue to next attempt
+		}
 	}
+
+	return fn()
 }
 
 // FormatError formats an error for logging or display.

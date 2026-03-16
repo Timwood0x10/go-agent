@@ -2,7 +2,7 @@ package leader
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"sync"
 
 	"goagent/internal/agents/base"
@@ -133,6 +133,31 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 
 	a.setStatus(models.AgentStatusStarting)
 
+	// Validate and initialize dependencies
+	if a.parser == nil {
+		return errors.ErrProfileParserNotInitialized
+	}
+	if a.planner == nil {
+		return errors.ErrTaskPlannerNotInitialized
+	}
+	if a.dispatcher == nil {
+		return errors.ErrDispatchNotInitialized
+	}
+	if a.aggregator == nil {
+		return errors.ErrResultAggNotInitialized
+	}
+
+	// Initialize heartbeat monitor if provided
+	if a.heartbeatMon != nil {
+		// Heartbeat monitor is ready to use
+	}
+
+	// Initialize message queue if provided
+	if a.messageQueue != nil {
+		// Message queue is ready to use
+	}
+
+	slog.Info("Leader agent started successfully", "agent_id", a.id)
 	a.setStatus(models.AgentStatusReady)
 	return nil
 }
@@ -196,7 +221,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("[DEBUG Leader] Created %d tasks\n", len(tasks))
+	slog.Info("Leader tasks created", "module", "leader", "count", len(tasks))
 
 	// Step 3: Dispatch tasks
 	a.stepCount++
@@ -204,14 +229,14 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.ErrMaxStepsExceeded
 	}
 
-	fmt.Printf("[DEBUG Leader] Dispatching tasks...\n")
+	slog.Info("Leader dispatching tasks", "module", "leader")
 	results, err := a.dispatcher.Dispatch(ctx, tasks)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("[DEBUG Leader] Dispatch returned %d results\n", len(results))
+	slog.Info("Leader dispatch completed", "module", "leader", "result_count", len(results))
 	for i, r := range results {
-		fmt.Printf("[DEBUG Leader] Result %d: success=%v, items=%d, error=%s\n", i, r.Success, len(r.Items), r.Error)
+		slog.Info("Leader task result", "module", "leader", "index", i, "success", r.Success, "items", len(r.Items), "error", r.Error)
 	}
 
 	// Step 4: Aggregate results

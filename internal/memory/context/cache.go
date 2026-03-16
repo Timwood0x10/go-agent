@@ -12,6 +12,7 @@ type Cache struct {
 	mu      sync.RWMutex
 	maxSize int
 	ttl     time.Duration
+	stopCh  chan struct{}
 }
 
 // CacheItem represents a cache entry.
@@ -27,6 +28,7 @@ func NewCache(maxSize int, ttl time.Duration) *Cache {
 		items:   make(map[string]*CacheItem),
 		maxSize: maxSize,
 		ttl:     ttl,
+		stopCh:  make(chan struct{}),
 	}
 
 	go cache.cleanupLoop()
@@ -118,9 +120,19 @@ func (c *Cache) cleanupLoop() {
 	ticker := time.NewTicker(c.ttl / 2)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.cleanup()
+	for {
+		select {
+		case <-ticker.C:
+			c.cleanup()
+		case <-c.stopCh:
+			return
+		}
 	}
+}
+
+// Stop stops the cleanup goroutine.
+func (c *Cache) Stop() {
+	close(c.stopCh)
 }
 
 // cleanup removes expired items.

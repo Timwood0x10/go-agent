@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -30,7 +30,7 @@ import (
 // All through configuration files.
 
 func main() {
-	log.Println("Starting Style Agent (OpenRouter Example)...")
+	slog.Info("Starting Style Agent (OpenRouter Example)")
 
 	// Load configuration from file
 	configPath := os.Getenv("CONFIG_PATH")
@@ -40,18 +40,21 @@ func main() {
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
-	// Override with environment variables if present
+	// Load environment variables
 	if err := config.LoadFromEnv(cfg); err != nil {
-		log.Fatalf("Failed to load env config: %v", err)
+		slog.Error("Failed to load env config", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize components
 	components, err := initializeComponents(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize components: %v", err)
+		slog.Error("Failed to initialize components", "error", err)
+		os.Exit(1)
 	}
 
 	// Create Leader Agent with user configuration
@@ -60,19 +63,20 @@ func main() {
 	// Create Sub Agents based on user configuration
 	subAgents := createSubAgents(cfg, components)
 
-	log.Printf("Initialized %d Sub Agents", len(subAgents))
+	slog.Info("Initialized Sub Agents", "count", len(subAgents))
 
 	// Start all agents
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if err := leaderAgent.Start(ctx); err != nil {
-		log.Fatalf("Failed to start leader agent: %v", err)
+		slog.Error("Failed to start leader agent", "error", err)
+		os.Exit(1)
 	}
 
 	for _, agent := range subAgents {
 		if err := agent.Start(ctx); err != nil {
-			log.Printf("Warning: failed to start sub agent %s: %v", agent.ID(), err)
+			slog.Warn("Failed to start sub agent", "id", agent.ID(), "error", err)
 		}
 	}
 
@@ -82,7 +86,7 @@ func main() {
 
 	go func() {
 		<-sigCh
-		log.Println("Shutting down...")
+		slog.Info("Shutting down")
 		cancel()
 		time.Sleep(time.Second)
 		os.Exit(0)
@@ -91,7 +95,7 @@ func main() {
 	// Process a sample request
 	processSampleRequest(leaderAgent, cfg)
 
-	log.Println("Example completed successfully")
+	slog.Info("Example completed successfully")
 }
 
 type components struct {
@@ -166,9 +170,9 @@ func getLLMAdapter(comps *components, agentModel string, provider string) output
 	cfg := *comps.llmConfig
 	cfg.Model = model
 	cfg.Provider = agentProvider
-	adapter, err := comps.llmFactory.Create(agentProvider, &cfg)
+	adapter, err := comps.llmFactory.Create(provider, &cfg)
 	if err != nil {
-		log.Printf("Warning: failed to create adapter for provider=%s model=%s: %v, using default", agentProvider, model, err)
+		slog.Warn("Failed to create adapter, using default", "provider", provider, "model", model, "error", err)
 		return comps.llmAdapter
 	}
 	return adapter
@@ -197,6 +201,7 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 		agentRegistry,
 		cfg.Agents.Leader.MaxParallelTasks,
 		cfg.Agents.Leader.MaxSteps,
+		nil, // messageSender
 	)
 
 	// Register executor functions for each sub-agent type
@@ -302,18 +307,18 @@ func processSampleRequest(agent leader.Agent, cfg *config.Config) {
 	// Sample user input
 	input := "我想找一些适合日常通勤的衣服，休闲风格，预算500-1000元"
 
-	log.Printf("Processing request: %s", input)
+	slog.Info("Processing request", "input", input)
 
 	result, err := agent.Process(ctx, input)
 	if err != nil {
-		log.Printf("Error: %v", err)
+		slog.Error("Processing error", "error", err)
 		return
 	}
 
 	if recommendResult, ok := result.(*models.RecommendResult); ok {
 		formatOutput(cfg.Output, recommendResult.Items)
 	} else {
-		log.Printf("Result: %+v", result)
+		slog.Info("Result", "data", result)
 	}
 }
 
@@ -324,7 +329,7 @@ func formatOutput(outputCfg config.OutputConfig, items []*models.RecommendItem) 
 		// JSON format
 		jsonBytes, err := json.MarshalIndent(items, "", "  ")
 		if err != nil {
-			log.Printf("JSON format error: %v", err)
+			slog.Error("JSON format error", "error", err)
 			return
 		}
 		fmt.Println(string(jsonBytes))
@@ -357,21 +362,21 @@ func formatOutput(outputCfg config.OutputConfig, items []*models.RecommendItem) 
 		// Render summary
 		summaryTmpl, err := template.New("summary").Parse(outputCfg.SummaryTemplate)
 		if err != nil {
-			log.Printf("Template error: %v", err)
+			slog.Error("Template error", "error", err)
 			return
 		}
 		summaryData := map[string]interface{}{"Count": len(items)}
 		var summaryBuf strings.Builder
 		if err := summaryTmpl.Execute(&summaryBuf, summaryData); err != nil {
-			log.Printf("Template execute error: %v", err)
+			slog.Error("Template execute error", "error", err)
 			return
 		}
-		log.Println(summaryBuf.String())
+		slog.Info("Summary", "content", summaryBuf.String())
 
 		// Render each item
 		itemTmpl, err := template.New("item").Parse(outputCfg.ItemTemplate)
 		if err != nil {
-			log.Printf("Template error: %v", err)
+			slog.Error("Template error", "error", err)
 			return
 		}
 		for _, item := range items {

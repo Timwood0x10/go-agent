@@ -101,7 +101,7 @@ func TestNoopTracer_WithTrace(t *testing.T) {
 }
 
 func TestLogTracer_RecordLLMCall(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	call := &LLMCall{
@@ -117,7 +117,7 @@ func TestLogTracer_RecordLLMCall(t *testing.T) {
 }
 
 func TestLogTracer_RecordToolCall(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	call := &ToolCall{
@@ -133,7 +133,7 @@ func TestLogTracer_RecordToolCall(t *testing.T) {
 }
 
 func TestLogTracer_RecordToolCall_WithError(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	testErr := errors.New("tool execution failed")
@@ -150,7 +150,7 @@ func TestLogTracer_RecordToolCall_WithError(t *testing.T) {
 }
 
 func TestLogTracer_RecordAgentStep(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	step := &AgentStep{
@@ -165,7 +165,7 @@ func TestLogTracer_RecordAgentStep(t *testing.T) {
 }
 
 func TestLogTracer_RecordAgentStep_WithError(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	testErr := errors.New("step failed")
@@ -182,7 +182,7 @@ func TestLogTracer_RecordAgentStep_WithError(t *testing.T) {
 }
 
 func TestLogTracer_RecordError(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: false})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	err := &AgentError{
@@ -244,7 +244,7 @@ func TestLogTracer_WithTrace_DifferentIDs(t *testing.T) {
 }
 
 func TestLogTracer_JSON_Format(t *testing.T) {
-	tracer := NewLogTracer(&LogTracerConfig{EnableJSON: true})
+	tracer := NewLogTracer(&LogTracerConfig{Logger: nil})
 	ctx := context.Background()
 
 	call := &LLMCall{

@@ -2,6 +2,7 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"goagent/internal/core/models"
@@ -70,8 +71,18 @@ func deduplicateItems(items []*models.RecommendItem) []*models.RecommendItem {
 	result := make([]*models.RecommendItem, 0)
 
 	for _, item := range items {
-		if !seen[item.ItemID] {
-			seen[item.ItemID] = true
+		// Skip nil items
+		if item == nil {
+			continue
+		}
+		// Use ItemID if non-empty, otherwise use a generated key based on name+price
+		itemID := item.ItemID
+		if itemID == "" {
+			// Generate a key from name and price to avoid duplicates with empty ItemID
+			itemID = fmt.Sprintf("%s_%.2f", item.Name, item.Price)
+		}
+		if !seen[itemID] {
+			seen[itemID] = true
 			result = append(result, item)
 		}
 	}

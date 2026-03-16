@@ -3,6 +3,7 @@ package sub
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	apperrors "goagent/internal/core/errors"
@@ -20,6 +21,7 @@ type taskExecutor struct {
 	maxRetries  int
 	retryOnFail bool // Retry LLM call when validation fails
 	strictMode  bool // Return error on validation failure
+	logger      *slog.Logger
 }
 
 // ValidationConfig holds validation configuration for executor.
@@ -66,6 +68,7 @@ func NewTaskExecutorWithValidation(
 		maxRetries:  maxRetries,
 		retryOnFail: retryOnFail,
 		strictMode:  strictMode,
+		logger:      slog.Default(),
 	}
 }
 
@@ -96,8 +99,10 @@ func (e *taskExecutor) Execute(ctx context.Context, task *models.Task) (*models.
 	var profile *models.UserProfile
 	if task.UserProfile != nil {
 		profile = task.UserProfile
-	} else if p, ok := task.Payload["profile"].(*models.UserProfile); ok {
-		profile = p
+	} else if task.Payload != nil {
+		if p, ok := task.Payload["profile"].(*models.UserProfile); ok {
+			profile = p
+		}
 	}
 
 	if profile == nil {
@@ -115,15 +120,15 @@ func (e *taskExecutor) Execute(ctx context.Context, task *models.Task) (*models.
 	// Execute LLM-based recommendation
 	items, err := e.executeWithLLM(ctx, task, profile)
 	if err != nil {
-		fmt.Printf("[DEBUG] LLM execution failed: %v\n", err)
+		slog.Debug("LLM execution failed, using fallback", "error", err)
 		// Fallback to type-specific execution
 		fallbackItems, reason, fallbackErr := e.executeByType(ctx, task)
 		if fallbackErr != nil {
-			fmt.Printf("[DEBUG] Fallback also failed: %v\n", fallbackErr)
+			slog.Debug("Fallback also failed", "error", fallbackErr)
 			result.SetError(err.Error())
 			return result, nil
 		}
-		fmt.Printf("[DEBUG] Using fallback, got %d items\n", len(fallbackItems))
+		slog.Debug("Using fallback", "item_count", len(fallbackItems))
 		result.SetSuccess(fallbackItems, reason)
 		result.Duration = time.Since(startTime)
 		return result, nil
@@ -139,24 +144,24 @@ func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, pr
 	var lastErr error
 	for attempt := 0; attempt < e.maxRetries; attempt++ {
 		if attempt > 0 {
-			fmt.Printf("[DEBUG] Retry attempt %d/%d\n", attempt+1, e.maxRetries)
+			slog.Debug("Retry attempt", "attempt", attempt+1, "max_retries", e.maxRetries)
 		}
 
 		// Execute LLM call
 		items, err := e.executeWithLLMSingle(ctx, task, profile)
 		if err != nil {
 			lastErr = err
-			fmt.Printf("[DEBUG] Attempt %d failed: %v\n", attempt+1, err)
+			slog.Error("LLM call failed", "attempt", attempt+1, "error", err)
 			continue
 		}
 
 		// Validate results using validator
 		if e.validator != nil {
 			if err := e.validator.ValidateRecommendResult(&models.RecommendResult{Items: items}); err != nil {
-				fmt.Printf("[DEBUG] Result validation failed: %v\n", err)
+				slog.Debug("Validation failed", "error", err)
 				// Retry if enabled and not already at max retries
 				if e.retryOnFail && attempt < e.maxRetries-1 {
-					fmt.Printf("[DEBUG] Will retry LLM call (attempt %d/%d)...\n", attempt+2, e.maxRetries)
+					slog.Debug("Will retry LLM call", "next_attempt", attempt+2, "max_retries", e.maxRetries)
 					continue
 				}
 				// Strict mode: return error
@@ -164,13 +169,13 @@ func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, pr
 					return nil, fmt.Errorf("validation failed: %w", err)
 				}
 				// Non-strict mode: log and continue with whatever we got
-				fmt.Printf("[DEBUG] Continuing with unvalidated result (strict_mode=false)\n")
+				slog.Debug("Continuing with unvalidated result", "strict_mode", false)
 			} else {
-				fmt.Printf("[DEBUG] Result validation passed\n")
+				slog.Debug("Validation passed")
 			}
 		}
 
-		fmt.Printf("[DEBUG] Got %d items\n", len(items))
+		slog.Info("Got items from LLM", "count", len(items))
 		return items, nil
 	}
 
@@ -204,14 +209,14 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 	if err != nil {
 		return nil, fmt.Errorf("render prompt: %w", err)
 	}
-	fmt.Printf("[DEBUG] Prompt: %s\n", prompt[:min(200, len(prompt))])
+	slog.Debug("Generated prompt", "preview", prompt[:min(200, len(prompt))])
 
 	// Call LLM
 	response, err := e.llmAdapter.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
-	fmt.Printf("[DEBUG] LLM Response: %s\n", response[:min(200, len(response))])
+	slog.Debug("LLM response", "preview", response[:min(500, len(response))])
 
 	// Parse response
 	parser := output.NewParser()
@@ -224,7 +229,7 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 		return nil, fmt.Errorf("empty result from LLM")
 	}
 
-	fmt.Printf("[DEBUG] Got %d items\n", len(result.Items))
+	slog.Info("Parsed result items", "count", len(result.Items))
 	return result.Items, nil
 }
 
@@ -237,7 +242,7 @@ func formatBudget(budget *models.PriceRange) string {
 
 // executeByType dispatches to type-specific handlers.
 func (e *taskExecutor) executeByType(ctx context.Context, task *models.Task) ([]*models.RecommendItem, string, error) {
-	fmt.Printf("[DEBUG] executeByType called for agent type: %s\n", task.AgentType)
+	slog.Debug("executeByType called", "agent_type", task.AgentType)
 	switch task.AgentType {
 	case models.AgentTypeTop:
 		return e.executeTopRecommendation(ctx, task)
