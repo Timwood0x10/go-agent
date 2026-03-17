@@ -17,6 +17,7 @@ type Config struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+	QueryTimeout    time.Duration
 }
 
 // DefaultConfig returns the default database configuration.
@@ -31,6 +32,7 @@ func DefaultConfig() *Config {
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,
 		ConnMaxIdleTime: 1 * time.Minute,
+		QueryTimeout:    30 * time.Second,
 	}
 }
 
@@ -59,6 +61,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ConnMaxIdleTime <= 0 {
 		c.ConnMaxIdleTime = 1 * time.Minute
+	}
+	if c.QueryTimeout <= 0 {
+		c.QueryTimeout = 30 * time.Second
 	}
 	return nil
 }

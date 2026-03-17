@@ -21,14 +21,24 @@ type RegisteredCallback struct {
 	OnError  func(error)
 }
 
-// NewCallbackRegistry creates a new CallbackRegistry.
+// NewCallbackRegistry creates a new CallbackRegistry instance.
+// Returns:
+// *CallbackRegistry - a new CallbackRegistry instance.
 func NewCallbackRegistry() *CallbackRegistry {
 	return &CallbackRegistry{
 		callbacks: make(map[Phase][]RegisteredCallback),
 	}
 }
 
-// Register registers a callback for a phase.
+// Register registers a callback for a shutdown phase with priority sorting.
+// Args:
+// phase - the shutdown phase to register the callback for.
+// id - unique identifier for the callback.
+// priority - callback priority (higher values execute first).
+// fn - the callback function to execute.
+// timeout - maximum duration for the callback execution.
+// Returns:
+// error - error if registration fails.
 func (r *CallbackRegistry) Register(phase Phase, id string, priority int, fn Callback, timeout time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -54,7 +64,12 @@ func (r *CallbackRegistry) Register(phase Phase, id string, priority int, fn Cal
 	return nil
 }
 
-// Unregister removes a callback by ID.
+// Unregister removes a callback by its unique identifier.
+// Args:
+// phase - the shutdown phase to remove the callback from.
+// id - the unique identifier of the callback to remove.
+// Returns:
+// error - ErrCallbackNotFound if callback does not exist.
 func (r *CallbackRegistry) Unregister(phase Phase, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -74,7 +89,11 @@ func (r *CallbackRegistry) Unregister(phase Phase, id string) error {
 	return ErrCallbackNotFound
 }
 
-// GetCallbacks returns callbacks for a phase, sorted by priority.
+// GetCallbacks returns all callbacks for a phase, sorted by priority.
+// Args:
+// phase - the shutdown phase to get callbacks for.
+// Returns:
+// []Callback - slice of callback functions, sorted by priority (higher first).
 func (r *CallbackRegistry) GetCallbacks(phase Phase) []Callback {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -92,7 +111,9 @@ func (r *CallbackRegistry) GetCallbacks(phase Phase) []Callback {
 	return result
 }
 
-// Clear removes all callbacks for a phase.
+// Clear removes all callbacks for a specific shutdown phase.
+// Args:
+// phase - the shutdown phase to clear callbacks from.
 func (r *CallbackRegistry) Clear(phase Phase) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -100,7 +121,11 @@ func (r *CallbackRegistry) Clear(phase Phase) {
 	delete(r.callbacks, phase)
 }
 
-// Count returns the number of callbacks for a phase.
+// Count returns the number of registered callbacks for a phase.
+// Args:
+// phase - the shutdown phase to count callbacks for.
+// Returns:
+// int - the number of callbacks registered for the phase.
 func (r *CallbackRegistry) Count(phase Phase) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -108,7 +133,13 @@ func (r *CallbackRegistry) Count(phase Phase) int {
 	return len(r.callbacks[phase])
 }
 
-// SetOnError sets error handler for a callback.
+// SetOnError sets an error handler for a specific callback.
+// Args:
+// phase - the shutdown phase containing the callback.
+// id - the unique identifier of the callback.
+// onError - the error handler function to call on error.
+// Returns:
+// error - ErrCallbackNotFound if callback does not exist.
 func (r *CallbackRegistry) SetOnError(phase Phase, id string, onError func(error)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -147,7 +178,9 @@ type CallbackChain struct {
 	callbacks []Callback
 }
 
-// NewCallbackChain creates a new CallbackChain.
+// NewCallbackChain creates a new CallbackChain instance.
+// Returns:
+// *CallbackChain - a new CallbackChain instance.
 func NewCallbackChain() *CallbackChain {
 	return &CallbackChain{
 		callbacks: make([]Callback, 0),
@@ -155,12 +188,20 @@ func NewCallbackChain() *CallbackChain {
 }
 
 // Add adds a callback to the chain.
+// Args:
+// fn - the callback function to add to the chain.
+// Returns:
+// *CallbackChain - the CallbackChain for method chaining.
 func (c *CallbackChain) Add(fn Callback) *CallbackChain {
 	c.callbacks = append(c.callbacks, fn)
 	return c
 }
 
-// Execute executes all callbacks in order.
+// Execute executes all callbacks in the chain sequentially.
+// Args:
+// ctx - context for cancellation and timeout control.
+// Returns:
+// error - error if any callback fails.
 func (c *CallbackChain) Execute(ctx context.Context) error {
 	for _, fn := range c.callbacks {
 		if err := fn(ctx); err != nil {
@@ -170,7 +211,11 @@ func (c *CallbackChain) Execute(ctx context.Context) error {
 	return nil
 }
 
-// ExecuteParallel executes all callbacks in parallel.
+// ExecuteParallel executes all callbacks in the chain concurrently.
+// Args:
+// ctx - context for cancellation and timeout control.
+// Returns:
+// error - error if any callback fails or context is cancelled.
 func (c *CallbackChain) ExecuteParallel(ctx context.Context) error {
 	if len(c.callbacks) == 0 {
 		return nil

@@ -159,16 +159,24 @@ func (s *Sanitizer) SanitizeJSON(jsonStr string) string {
 
 // maskAPIKey masks an API key while preserving some context.
 func maskAPIKey(match string) string {
-	// Extract the actual key value
-	re := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
-	matches := re.FindAllString(match, -1)
-	if len(matches) == 0 {
+	// Extract the actual key value using the same pattern as the detection
+	re := regexp.MustCompile(`(?i)(api[_-]?key|apikey|secret[_-]?key|token[_-]?key)[:\s]+["']?([a-zA-Z0-9_\-\.]+)["']?`)
+	matches := re.FindStringSubmatch(match)
+	if len(matches) > 2 {
+		// matches[1] is the keyword, matches[2] is the actual key
+		keyValue := matches[2]
+		return strings.Replace(match, keyValue, maskString(keyValue, 4), 1)
+	}
+	// Fallback: try to find any long alphanumeric string
+	re2 := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
+	allMatches := re2.FindAllString(match, -1)
+	if len(allMatches) == 0 {
 		return maskString(match, 4)
 	}
 
 	// Mask the longest match (likely the actual key)
-	longest := matches[0]
-	for _, m := range matches {
+	longest := allMatches[0]
+	for _, m := range allMatches {
 		if len(m) > len(longest) {
 			longest = m
 		}
@@ -179,24 +187,36 @@ func maskAPIKey(match string) string {
 
 // maskPassword masks a password completely.
 func maskPassword(match string) string {
-	re := regexp.MustCompile(`["']?([^"'\s]+)["']?`)
+	// Extract the password value: find the part after password/passwd/pwd keyword
+	re := regexp.MustCompile(`(?i)(password|passwd|pwd)[:\s]+["']?([^"'\s]+)["']?`)
 	matches := re.FindStringSubmatch(match)
-	if len(matches) > 1 {
-		return strings.Replace(match, matches[1], maskString(matches[1], 0), 1)
+	if len(matches) > 2 {
+		// matches[1] is the keyword (password/passwd/pwd), matches[2] is the actual password
+		passwordValue := matches[2]
+		return strings.Replace(match, passwordValue, maskString(passwordValue, 0), 1)
 	}
 	return maskString(match, 0)
 }
 
 // maskToken masks a token while preserving some context.
 func maskToken(match string) string {
-	re := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
-	matches := re.FindAllString(match, -1)
-	if len(matches) == 0 {
+	// Extract the actual token value using the same pattern as the detection
+	re := regexp.MustCompile(`(?i)(token|bearer[:\s]+|authorization[:\s]+bearer)[:\s]+["']?([a-zA-Z0-9_\-\.]+)["']?`)
+	matches := re.FindStringSubmatch(match)
+	if len(matches) > 2 {
+		// matches[1] is the keyword, matches[2] is the actual token
+		tokenValue := matches[2]
+		return strings.Replace(match, tokenValue, maskString(tokenValue, 4), 1)
+	}
+	// Fallback: try to find any long alphanumeric string
+	re2 := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
+	allMatches := re2.FindAllString(match, -1)
+	if len(allMatches) == 0 {
 		return maskString(match, 4)
 	}
 
-	longest := matches[0]
-	for _, m := range matches {
+	longest := allMatches[0]
+	for _, m := range allMatches {
 		if len(m) > len(longest) {
 			longest = m
 		}
