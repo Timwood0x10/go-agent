@@ -6,10 +6,12 @@ import os
 import json
 import hashlib
 import logging
+import unicodedata
+import re
 from typing import List, Optional
 
 import redis
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
@@ -49,6 +51,7 @@ EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CACHE_TTL = int(os.getenv("CACHE_TTL", "86400"))  # 24 hours
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
+MAX_LENGTH = int(os.getenv("MAX_LENGTH", "512"))
 
 
 # Data models
@@ -70,8 +73,8 @@ class BatchEmbedRequest(BaseModel):
 
 class BatchEmbedResponse(BaseModel):
     embeddings: List[List[float]] = Field(..., description="List of vector embeddings")
-    dimension: int = Text(..., description="Embedding dimension")
-    cached_count: int = Field(default=0, description("Number of cached results")
+    dimension: int = Field(..., description="Embedding dimension")
+    cached_count: int = Field(default=0, description="Number of cached results")
 
 
 class HealthResponse(BaseModel):
@@ -96,7 +99,7 @@ async def startup_event():
         
         # Initialize Redis cache
         try:
-            redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+            redis_client = redis.from_url(REDIS_URL, decode_responses=False)
             redis_client.ping()
             logger.info("Redis cache connected successfully")
         except Exception as e:
@@ -145,8 +148,11 @@ async def embed(request: EmbedRequest):
     if not model:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
+    # Normalize text to avoid cache miss explosion
+    normalized_text = normalize_text(request.text)
+    
     # Check cache first
-    cache_key = generate_cache_key(request.text, request.prefix)
+    cache_key = generate_cache_key(normalized_text, request.prefix)
     if redis_client:
         try:
             cached_data = redis_client.get(cache_key)
@@ -161,7 +167,11 @@ async def embed(request: EmbedRequest):
             logger.warning(f"Cache lookup failed: {e}")
     
     # Add prefix for e5 models
-    text_with_prefix = request.prefix + request.text if request.prefix else request.text
+    text_with_prefix = request.prefix + normalized_text if request.prefix else normalized_text
+    
+    # Truncate if too long
+    if len(text_with_prefix) > MAX_LENGTH:
+        text_with_prefix = text_with_prefix[:MAX_LENGTH]
     
     # Generate embedding
     embedding = model.encode(text_with_prefix).tolist()
@@ -194,9 +204,18 @@ async def embed_batch(request: BatchEmbedRequest):
     if not model:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
+    # Normalize texts
+    normalized_texts = [normalize_text(text) for text in request.texts]
+    
     texts_with_prefix = [
         request.prefix + text if request.prefix else text
-        for text in request.texts
+        for text in normalized_texts
+    ]
+    
+    # Truncate if too long
+    texts_with_prefix = [
+        text[:MAX_LENGTH] if len(text) > MAX_LENGTH else text
+        for text in texts_with_prefix
     ]
     
     # Generate embeddings
@@ -205,7 +224,7 @@ async def embed_batch(request: BatchEmbedRequest):
     # Try to cache results
     cached_count = 0
     if redis_client:
-        for i, text in enumerate(request.texts):
+        for i, text in enumerate(normalized_texts):
             cache_key = generate_cache_key(text, request.prefix)
             try:
                 cached_data = redis_client.get(cache_key)
@@ -226,6 +245,45 @@ async def embed_batch(request: BatchEmbedRequest):
         dimension=len(embeddings[0]) if embeddings else 0,
         cached_count=cached_count
     )
+
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize text to avoid cache miss explosion.
+    
+    This function:
+    1. Unicode normalization (NFKC)
+    2. Lowercase conversion
+    3. Trim whitespace
+    4. Remove extra spaces (including unicode spaces)
+    5. Remove control characters
+    
+    Args:
+        text: Text content to normalize.
+    
+    Returns:
+        Normalized text string.
+    """
+    # 1. Unicode normalize
+    text = unicodedata.normalize('NFKC', text)
+    
+    # 2. Lowercase
+    text = text.lower()
+    
+    # 3. Trim spaces
+    text = text.strip()
+    
+    # 4. Remove extra spaces (including unicode spaces)
+    # Replace all unicode whitespace with single space
+    text = re.sub(r'\s+', ' ', text)
+    
+    # 5. Remove control characters (except newline and tab)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    
+    # 6. Final trim
+    text = text.strip()
+    
+    return text
 
 
 def generate_cache_key(text: str, prefix: str) -> str:
