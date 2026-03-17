@@ -102,8 +102,8 @@ func New(
 func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 	return &LeaderAgentConfig{
 		Config:           *base.DefaultConfig(models.AgentTypeLeader),
-		MaxParallelTasks: 10,
-		MaxSteps:         10,
+		MaxParallelTasks: DefaultMaxParallelTasks,
+		MaxSteps:         DefaultMaxSteps,
 		EnableCache:      true,
 	}
 }
@@ -195,7 +195,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	a.stepCount = 0
 	maxSteps := a.config.MaxSteps
 	if maxSteps <= 0 {
-		maxSteps = 10
+		maxSteps = DefaultMaxSteps
 	}
 
 	a.setStatus(models.AgentStatusBusy)

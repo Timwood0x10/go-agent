@@ -1,0 +1,328 @@
+package security
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// SensitiveFieldType represents different types of sensitive fields.
+type SensitiveFieldType string
+
+const (
+	// SensitiveFieldTypeAPIKey represents API keys
+	SensitiveFieldTypeAPIKey SensitiveFieldType = "api_key"
+	// SensitiveFieldTypePassword represents passwords
+	SensitiveFieldTypePassword SensitiveFieldType = "password"
+	// SensitiveFieldTypeToken represents tokens
+	SensitiveFieldTypeToken SensitiveFieldType = "token"
+	// SensitiveFieldTypeSecret represents secrets
+	SensitiveFieldTypeSecret SensitiveFieldType = "secret"
+	// SensitiveFieldTypeEmail represents email addresses
+	SensitiveFieldTypeEmail SensitiveFieldType = "email"
+	// SensitiveFieldTypePhone represents phone numbers
+	SensitiveFieldTypePhone SensitiveFieldType = "phone"
+	// SensitiveFieldTypeSSN represents social security numbers
+	SensitiveFieldTypeSSN SensitiveFieldType = "ssn"
+	// SensitiveFieldTypeCreditCard represents credit card numbers
+	SensitiveFieldTypeCreditCard SensitiveFieldType = "credit_card"
+	// SensitiveFieldTypePersonalInfo represents personal information
+	SensitiveFieldTypePersonalInfo SensitiveFieldType = "personal_info"
+)
+
+// Sanitizer handles sensitive information redaction.
+type Sanitizer struct {
+	patterns []SensitivePattern
+	options  SanitizeOptions
+}
+
+// SanitizeOptions controls sanitization behavior.
+type SanitizeOptions struct {
+	// KeepLength preserves the original string length
+	KeepLength bool
+	// MaskChar is the character used for masking
+	MaskChar rune
+	// PreserveLengthFor keeps the specified length from beginning/end
+	PreserveLengthFor map[SensitiveFieldType]int
+}
+
+// SensitivePattern defines a pattern for detecting sensitive information.
+type SensitivePattern struct {
+	Type        SensitiveFieldType
+	Pattern     *regexp.Regexp
+	MaskFunc    func(string) string
+	Description string
+}
+
+// NewSanitizer creates a new sanitizer with default patterns.
+func NewSanitizer() *Sanitizer {
+	options := DefaultSanitizeOptions()
+	return NewSanitizerWithOptions(options)
+}
+
+// NewSanitizerWithOptions creates a new sanitizer with custom options.
+func NewSanitizerWithOptions(options SanitizeOptions) *Sanitizer {
+	return &Sanitizer{
+		patterns: defaultSensitivePatterns(),
+		options:  options,
+	}
+}
+
+// DefaultSanitizeOptions returns default sanitization options.
+func DefaultSanitizeOptions() SanitizeOptions {
+	return SanitizeOptions{
+		KeepLength: false,
+		MaskChar:    '*',
+		PreserveLengthFor: map[SensitiveFieldType]int{
+			SensitiveFieldTypeAPIKey:   4,  // Keep first 4 and last 4 chars
+			SensitiveFieldTypeCreditCard: 4,  // Keep first 4 and last 4 chars
+			SensitiveFieldTypePhone:    3,  // Keep first 3 and last 3 chars
+		},
+	}
+}
+
+// defaultSensitivePatterns returns default patterns for detecting sensitive information.
+func defaultSensitivePatterns() []SensitivePattern {
+	return []SensitivePattern{
+		{
+			Type:        SensitiveFieldTypeAPIKey,
+			Pattern:     regexp.MustCompile(`(?i)(api[_-]?key|apikey|secret[_-]?key|token[_-]?key)[:\s]+["']?([a-zA-Z0-9_\-\.]+)["']?`),
+			MaskFunc:    maskAPIKey,
+			Description: "API keys (api_key, secret_key, token_key)",
+		},
+		{
+			Type:        SensitiveFieldTypePassword,
+			Pattern:     regexp.MustCompile(`(?i)(password|passwd|pwd)[:\s]+["']?([^"'\s]+)["']?`),
+			MaskFunc:    maskPassword,
+			Description: "Passwords",
+		},
+		{
+			Type:        SensitiveFieldTypeToken,
+			Pattern:     regexp.MustCompile(`(?i)(token|bearer[:\s]+|authorization[:\s]+bearer)[:\s]+["']?([a-zA-Z0-9_\-\.]+)["']?`),
+			MaskFunc:    maskToken,
+			Description: "Authentication tokens",
+		},
+		{
+			Type:        SensitiveFieldTypeEmail,
+			Pattern:     regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`),
+			MaskFunc:    maskEmail,
+			Description: "Email addresses",
+		},
+		{
+			Type:        SensitiveFieldTypePhone,
+			Pattern:     regexp.MustCompile(`(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}`),
+			MaskFunc:    maskPhone,
+			Description: "Phone numbers",
+		},
+		{
+			Type:        SensitiveFieldTypeCreditCard,
+			Pattern:     regexp.MustCompile(`\b(?:\d[ -]*?){13,16}\b`),
+			MaskFunc:    maskCreditCard,
+			Description: "Credit card numbers",
+		},
+		{
+			Type:        SensitiveFieldTypeSSN,
+			Pattern:     regexp.MustCompile(`\b\d{3}[-.]?\d{2}[-.]?\d{4}\b`),
+			MaskFunc:    maskSSN,
+			Description: "Social security numbers",
+		},
+	}
+}
+
+// Sanitize removes sensitive information from the input string.
+func (s *Sanitizer) Sanitize(input string) string {
+	if input == "" {
+		return input
+	}
+
+	result := input
+	for _, pattern := range s.patterns {
+		result = pattern.Pattern.ReplaceAllStringFunc(result, func(match string) string {
+			return pattern.MaskFunc(match)
+		})
+	}
+
+	return result
+}
+
+// SanitizeJSON sanitizes a JSON string, preserving structure.
+func (s *Sanitizer) SanitizeJSON(jsonStr string) string {
+	if jsonStr == "" {
+		return jsonStr
+	}
+
+	// For JSON, we need to be more careful to preserve structure
+	// Simple approach: only sanitize string values
+	result := s.Sanitize(jsonStr)
+	return result
+}
+
+// maskAPIKey masks an API key while preserving some context.
+func maskAPIKey(match string) string {
+	// Extract the actual key value
+	re := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
+	matches := re.FindAllString(match, -1)
+	if len(matches) == 0 {
+		return maskString(match, 4)
+	}
+
+	// Mask the longest match (likely the actual key)
+	longest := matches[0]
+	for _, m := range matches {
+		if len(m) > len(longest) {
+			longest = m
+		}
+	}
+
+	return strings.Replace(match, longest, maskString(longest, 4), 1)
+}
+
+// maskPassword masks a password completely.
+func maskPassword(match string) string {
+	re := regexp.MustCompile(`["']?([^"'\s]+)["']?`)
+	matches := re.FindStringSubmatch(match)
+	if len(matches) > 1 {
+		return strings.Replace(match, matches[1], maskString(matches[1], 0), 1)
+	}
+	return maskString(match, 0)
+}
+
+// maskToken masks a token while preserving some context.
+func maskToken(match string) string {
+	re := regexp.MustCompile(`[a-zA-Z0-9_\-\.]+`)
+	matches := re.FindAllString(match, -1)
+	if len(matches) == 0 {
+		return maskString(match, 4)
+	}
+
+	longest := matches[0]
+	for _, m := range matches {
+		if len(m) > len(longest) {
+			longest = m
+		}
+	}
+
+	return strings.Replace(match, longest, maskString(longest, 4), 1)
+}
+
+// maskEmail masks an email address.
+func maskEmail(match string) string {
+	parts := strings.Split(match, "@")
+	if len(parts) != 2 {
+		return "***@***.***"
+	}
+	
+	// For email, preserve first 2 chars of username and domain
+	username := parts[0]
+	domain := parts[1]
+	
+	maskedUsername := maskString(username, 2)
+	maskedDomain := maskString(domain, 2)
+	
+	return maskedUsername + "@" + maskedDomain
+}
+
+// maskPhone masks a phone number.
+func maskPhone(match string) string {
+	// Remove common formatting characters
+	cleaned := regexp.MustCompile(`[^\d]`).ReplaceAllString(match, "")
+	if len(cleaned) < 3 {
+		return maskString(match, 3)
+	}
+	
+	// For phone, preserve first 3 and last 4 digits
+	if len(cleaned) >= 7 {
+		return cleaned[:3] + strings.Repeat("*", len(cleaned)-7) + cleaned[len(cleaned)-4:]
+	}
+	
+	return maskString(cleaned, 3)
+}
+
+// maskCreditCard masks a credit card number.
+func maskCreditCard(match string) string {
+	// Remove spaces and dashes
+	cleaned := regexp.MustCompile(`[^\d]`).ReplaceAllString(match, "")
+	if len(cleaned) < 4 {
+		return maskString(match, 4)
+	}
+	
+	// For credit card, preserve first 4 and last 4 digits
+	if len(cleaned) >= 8 {
+		return cleaned[:4] + strings.Repeat("*", len(cleaned)-8) + cleaned[len(cleaned)-4:]
+	}
+	
+	return maskString(cleaned, 4)
+}
+
+// maskSSN masks a social security number.
+func maskSSN(match string) string {
+	// Remove spaces and dashes
+	cleaned := regexp.MustCompile(`[^\d]`).ReplaceAllString(match, "")
+	if len(cleaned) != 9 {
+		return "***-**-****"
+	}
+	return "***-**-****"
+}
+
+// maskString masks a string, preserving n characters from the beginning and end.
+func maskString(s string, preserveLength int) string {
+	if s == "" {
+		return s
+	}
+
+	length := len(s)
+	
+	// If string is too short or exactly the length to preserve, return as-is
+	if length <= preserveLength*2 {
+		return s
+	}
+
+	prefix := s[:preserveLength]
+	suffix := s[length-preserveLength:]
+	maskLength := length - preserveLength*2
+
+	return prefix + strings.Repeat(string('*'), maskLength) + suffix
+}
+
+// SanitizeLog sanitizes a log message, removing sensitive information.
+func SanitizeLog(message string) string {
+	sanitizer := NewSanitizer()
+	return sanitizer.Sanitize(message)
+}
+
+// SafeLogger wraps a logging function to automatically sanitize messages.
+type SafeLogger struct {
+	underlying func(string)
+	sanitizer  *Sanitizer
+}
+
+// NewSafeLogger creates a new safe logger.
+func NewSafeLogger(underlying func(string)) *SafeLogger {
+	return &SafeLogger{
+		underlying: underlying,
+		sanitizer:  NewSanitizer(),
+	}
+}
+
+// Log logs a message with sensitive information sanitized.
+func (l *SafeLogger) Log(message string) {
+	sanitized := l.sanitizer.Sanitize(message)
+	l.underlying(sanitized)
+}
+
+// Logf logs a formatted message with sensitive information sanitized.
+func (l *SafeLogger) Logf(format string, args ...interface{}) {
+	// Convert args to strings and sanitize them
+	sanitizedArgs := make([]interface{}, len(args))
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			sanitizedArgs[i] = l.sanitizer.Sanitize(s)
+		} else {
+			sanitizedArgs[i] = arg
+		}
+	}
+
+	// Format the message
+	message := fmt.Sprintf(format, sanitizedArgs...)
+	l.underlying(message)
+}

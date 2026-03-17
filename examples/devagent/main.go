@@ -21,8 +21,15 @@ import (
 	"goagent/internal/protocol/ahp"
 )
 
-// DevAgent - Developer Assistant with Multi-Agent Orchestration
-// Features: Code generation, review, testing, documentation with DAG orchestration
+/*
+DevAgent - Developer Assistant with Multi-Agent Orchestration
+Features: Code generation, review, testing, documentation with DAG orchestration
+
+Logging Strategy:
+- Use slog (structured logging) for system-level events, errors, and debugging
+- Use fmt.Printf for interactive CLI output (user-facing messages)
+- This separation ensures proper log formatting while maintaining CLI usability
+*/
 func main() {
 	// Enable debug logging
 	opts := &slog.HandlerOptions{

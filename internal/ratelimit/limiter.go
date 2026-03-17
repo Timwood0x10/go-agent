@@ -28,10 +28,10 @@ type LimiterConfig struct {
 // DefaultConfig returns default configuration.
 func DefaultConfig() *LimiterConfig {
 	return &LimiterConfig{
-		Rate:       10,
-		Burst:      20,
-		Timeout:    5 * time.Second,
-		RefillRate: time.Second,
+		Rate:       DefaultRate,
+		Burst:      DefaultBurst,
+		Timeout:    DefaultLimiterTimeout,
+		RefillRate: DefaultRefillRate,
 	}
 }
 

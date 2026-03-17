@@ -33,16 +33,22 @@ type SearchResult struct {
 // Search performs a vector similarity search.
 // This is a simplified implementation that uses pgvector if available.
 func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []float64, limit int) ([]*SearchResult, error) {
-	// Simplified implementation - in production, use pgvector
-	// SELECT id, 1 - (embedding <=> $1) as distance, metadata FROM table
-	// ORDER BY embedding <=> $1 LIMIT $2
+	// Validate table name to prevent SQL injection
+	if err := sanitizeSQLTable(table); err != nil {
+		return nil, fmt.Errorf("invalid table name: %w", err)
+	}
+
+	// Validate limit to prevent excessive results
+	if limit <= 0 || limit > 1000 {
+		return nil, fmt.Errorf("invalid limit: %d (must be 1-1000)", limit)
+	}
 
 	query := fmt.Sprintf(`
 		SELECT id, 1 - (embedding <=> $1) as distance, metadata
 		FROM %s
 		ORDER BY embedding <=> $1
 		LIMIT $2
-	`, table)
+	`, safeFormatTable(table))
 
 	embeddingJSON, err := json.Marshal(embedding)
 	if err != nil {
@@ -80,6 +86,25 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 
 // AddEmbedding adds a vector embedding to the specified table.
 func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, embedding []float64, metadata map[string]any) error {
+	// Validate table name to prevent SQL injection
+	if err := sanitizeSQLTable(table); err != nil {
+		return fmt.Errorf("invalid table name: %w", err)
+	}
+
+	// Validate embedding dimensions
+	if len(embedding) == 0 {
+		return fmt.Errorf("embedding cannot be empty")
+	}
+
+	if len(embedding) > 2000 { // Reasonable upper limit
+		return fmt.Errorf("embedding dimension too large: %d (max 2000)", len(embedding))
+	}
+
+	// Validate id
+	if err := validateSQLIdentifier(id); err != nil {
+		return fmt.Errorf("invalid id: %w", err)
+	}
+
 	embeddingJSON, err := json.Marshal(embedding)
 	if err != nil {
 		return fmt.Errorf("marshal embedding: %w", err)
@@ -93,7 +118,7 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 	query := fmt.Sprintf(`
 		INSERT INTO %s (id, embedding, metadata)
 		VALUES ($1, $2, $3)
-	`, table)
+	`, safeFormatTable(table))
 
 	_, err = v.db.ExecContext(ctx, query, id, embeddingJSON, metadataJSON)
 	if err != nil {
@@ -105,7 +130,17 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 
 // DeleteEmbedding deletes a vector embedding.
 func (v *VectorSearcher) DeleteEmbedding(ctx context.Context, table, id string) error {
-	query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, table)
+	// Validate table name to prevent SQL injection
+	if err := sanitizeSQLTable(table); err != nil {
+		return fmt.Errorf("invalid table name: %w", err)
+	}
+
+	// Validate id
+	if err := validateSQLIdentifier(id); err != nil {
+		return fmt.Errorf("invalid id: %w", err)
+	}
+
+	query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, safeFormatTable(table))
 
 	_, err := v.db.ExecContext(ctx, query, id)
 	if err != nil {
@@ -118,6 +153,17 @@ func (v *VectorSearcher) DeleteEmbedding(ctx context.Context, table, id string) 
 // CreateVectorTable creates a table with vector support.
 // This is a simplified implementation - in production use proper pgvector setup.
 func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, metadataSchema string) error {
+	// Validate table name to prevent SQL injection
+	if err := sanitizeSQLTable(table); err != nil {
+		return fmt.Errorf("invalid table name: %w", err)
+	}
+
+	// Validate dimension (should be between 1 and 2000)
+	dim := 1536 // Default dimension for common embedding models
+	if dim < 1 || dim > 2000 {
+		return fmt.Errorf("invalid dimension: %d (must be 1-2000)", dim)
+	}
+
 	query := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
 			id VARCHAR(255) PRIMARY KEY,
@@ -126,7 +172,7 @@ func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, me
 			created_at TIMESTAMP DEFAULT NOW()
 		);
 		CREATE INDEX IF NOT EXISTS %s_embedding_idx ON %s USING ivfflat (embedding vector_cosine_ops);
-	`, table, 1536, table, table) // Default dimension for common embedding models
+	`, safeFormatTable(table), dim, safeFormatTable(table), safeFormatTable(table)) // Default dimension for common embedding models
 
 	_, err := v.db.ExecContext(ctx, query)
 	if err != nil {
