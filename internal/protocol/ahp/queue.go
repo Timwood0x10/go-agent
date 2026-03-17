@@ -10,7 +10,6 @@ import (
 
 // MessageQueue represents an in-memory message queue for agent communication.
 type MessageQueue struct {
-	mu       sync.Mutex
 	messages chan *AHPMessage
 	agentID  string
 	opts     *QueueOptions

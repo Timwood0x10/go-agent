@@ -97,13 +97,13 @@ func (m *mockMessenger) ReceiveMessage(ctx context.Context) (*ahp.AHPMessage, er
 
 // mockHeartbeater implements the Heartbeater interface for testing.
 type mockHeartbeater struct {
-	alive     bool
+	alive      bool
 	shouldFail bool
 }
 
 func newMockHeartbeater(alive bool) *mockHeartbeater {
 	return &mockHeartbeater{
-		alive:     alive,
+		alive:      alive,
 		shouldFail: false,
 	}
 }

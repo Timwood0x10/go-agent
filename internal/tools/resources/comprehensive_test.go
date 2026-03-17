@@ -360,12 +360,12 @@ func TestFashionSearch(t *testing.T) {
 		tool := NewFashionSearch(searcher)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
-			"query":      "red shoes",
-			"category":   "shoes",
-			"colors":     []interface{}{"red", "blue"},
-			"price_min":  50.0,
-			"price_max":  200.0,
-			"limit":      5,
+			"query":     "red shoes",
+			"category":  "shoes",
+			"colors":    []interface{}{"red", "blue"},
+			"price_min": 50.0,
+			"price_max": 200.0,
+			"limit":     5,
 		})
 
 		if err != nil {
@@ -449,9 +449,9 @@ func TestFashionSearch(t *testing.T) {
 		tool := NewFashionSearch(searcher)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
-			"query":      "dress",
-			"price_min":  100.0,
-			"price_max":  200.0,
+			"query":     "dress",
+			"price_min": 100.0,
+			"price_max": 200.0,
 		})
 
 		if err != nil {
@@ -542,15 +542,15 @@ func TestStyleRecommender(t *testing.T) {
 		tool := NewStyleRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
-			"gender":       "female",
-			"age_range":     "25-35",
-			"body_type":     "slim",
-			"style_pref":    []interface{}{"casual", "minimalist"},
-			"color_pref":    []interface{}{"navy", "white"},
-			"budget_min":    50.0,
-			"budget_max":    200.0,
-			"occasion":      "casual",
-			"season":        "summer",
+			"gender":     "female",
+			"age_range":  "25-35",
+			"body_type":  "slim",
+			"style_pref": []interface{}{"casual", "minimalist"},
+			"color_pref": []interface{}{"navy", "white"},
+			"budget_min": 50.0,
+			"budget_max": 200.0,
+			"occasion":   "casual",
+			"season":     "summer",
 		})
 
 		if err != nil {
@@ -727,8 +727,8 @@ func TestWeatherCheck(t *testing.T) {
 		tool := NewWeatherCheck(provider)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
-			"location":       "London",
-			"forecast_days":  3,
+			"location":      "London",
+			"forecast_days": 3,
 		})
 
 		if err != nil {
@@ -828,8 +828,8 @@ func TestWeatherCheck(t *testing.T) {
 		tool := NewWeatherCheck(errorProvider)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
-			"location":       "Error City",
-			"forecast_days":  3,
+			"location":      "Error City",
+			"forecast_days": 3,
 		})
 
 		if err != nil {

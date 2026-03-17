@@ -88,7 +88,7 @@ func (p *DefinitionParser) ParseFile(ctx context.Context, path string) (*AgentDe
 	if err != nil {
 		return nil, fmt.Errorf("open file %s: %w", path, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	return p.Parse(ctx, bufio.NewReader(file))
 }

@@ -291,7 +291,7 @@ func (e *Executor) executeStep(
 		Name:     step.Name,
 		Status:   StepStatusCompleted,
 		Output:   output,
-		Duration: time.Now().Sub(startTime),
+		Duration: time.Since(startTime),
 	}
 
 	if err != nil {

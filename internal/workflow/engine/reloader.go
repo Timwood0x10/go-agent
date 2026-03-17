@@ -103,7 +103,7 @@ func (w *FileWatcher) watchDirectory(ctx context.Context, dir string) {
 func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 	defer func() {
 		if w.watcher != nil {
-			w.watcher.Close()
+			_ = w.watcher.Close()
 		}
 	}()
 

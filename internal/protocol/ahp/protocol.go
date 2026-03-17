@@ -3,7 +3,6 @@ package ahp
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
@@ -11,7 +10,6 @@ import (
 
 // Protocol represents the AHP protocol manager.
 type Protocol struct {
-	mu        sync.RWMutex
 	registry  *QueueRegistry
 	dlq       *DLQ
 	codec     Codec

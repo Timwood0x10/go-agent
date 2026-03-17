@@ -597,13 +597,6 @@ func formatContent(content string) string {
 	return formatted.String()
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen]
-}
-
 // detectFileExtension  check code to determine file type based on content
 func detectFileExtension(content string) string {
 	content = strings.TrimSpace(content)
