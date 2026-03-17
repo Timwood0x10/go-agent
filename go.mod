@@ -11,4 +11,5 @@ require (
 require (
 	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 )

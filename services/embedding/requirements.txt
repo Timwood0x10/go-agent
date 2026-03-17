@@ -1,0 +1,6 @@
+# fastapi
+uvicorn[standard]
+sentence-transformers
+redis
+python-dotenv
+pydantic
