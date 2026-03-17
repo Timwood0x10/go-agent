@@ -200,7 +200,7 @@ func EstimateJSONSize(data interface{}) int {
 	if data == nil {
 		return 4 // "null" is 4 bytes
 	}
-	
+
 	// Marshal to JSON and get the length
 	bytes, err := json.Marshal(data)
 	if err != nil {
@@ -208,6 +208,6 @@ func EstimateJSONSize(data interface{}) int {
 		str := fmt.Sprintf("%v", data)
 		return len(str)
 	}
-	
+
 	return len(bytes)
 }

@@ -72,11 +72,11 @@ func NewSanitizerWithOptions(options SanitizeOptions) *Sanitizer {
 func DefaultSanitizeOptions() SanitizeOptions {
 	return SanitizeOptions{
 		KeepLength: false,
-		MaskChar:    '*',
+		MaskChar:   '*',
 		PreserveLengthFor: map[SensitiveFieldType]int{
-			SensitiveFieldTypeAPIKey:   4,  // Keep first 4 and last 4 chars
-			SensitiveFieldTypeCreditCard: 4,  // Keep first 4 and last 4 chars
-			SensitiveFieldTypePhone:    3,  // Keep first 3 and last 3 chars
+			SensitiveFieldTypeAPIKey:     4, // Keep first 4 and last 4 chars
+			SensitiveFieldTypeCreditCard: 4, // Keep first 4 and last 4 chars
+			SensitiveFieldTypePhone:      3, // Keep first 3 and last 3 chars
 		},
 	}
 }
@@ -231,14 +231,14 @@ func maskEmail(match string) string {
 	if len(parts) != 2 {
 		return "***@***.***"
 	}
-	
+
 	// For email, preserve first 2 chars of username and domain
 	username := parts[0]
 	domain := parts[1]
-	
+
 	maskedUsername := maskString(username, 2)
 	maskedDomain := maskString(domain, 2)
-	
+
 	return maskedUsername + "@" + maskedDomain
 }
 
@@ -249,12 +249,12 @@ func maskPhone(match string) string {
 	if len(cleaned) < 3 {
 		return maskString(match, 3)
 	}
-	
+
 	// For phone, preserve first 3 and last 4 digits
 	if len(cleaned) >= 7 {
 		return cleaned[:3] + strings.Repeat("*", len(cleaned)-7) + cleaned[len(cleaned)-4:]
 	}
-	
+
 	return maskString(cleaned, 3)
 }
 
@@ -265,12 +265,12 @@ func maskCreditCard(match string) string {
 	if len(cleaned) < 4 {
 		return maskString(match, 4)
 	}
-	
+
 	// For credit card, preserve first 4 and last 4 digits
 	if len(cleaned) >= 8 {
 		return cleaned[:4] + strings.Repeat("*", len(cleaned)-8) + cleaned[len(cleaned)-4:]
 	}
-	
+
 	return maskString(cleaned, 4)
 }
 
@@ -291,7 +291,7 @@ func maskString(s string, preserveLength int) string {
 	}
 
 	length := len(s)
-	
+
 	// If string is too short or exactly the length to preserve, return as-is
 	if length <= preserveLength*2 {
 		return s

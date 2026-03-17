@@ -208,9 +208,9 @@ func TestShouldAlert(t *testing.T) {
 
 func TestGetAlertMessage(t *testing.T) {
 	tests := []struct {
-		name          string
-		code          string
-		expectedMsg   string
+		name        string
+		code        string
+		expectedMsg string
 	}{
 		{"Has alert message", "01-003", "Agent panic detected"},
 		{"No alert message", "01-002", ""},

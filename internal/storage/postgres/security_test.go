@@ -7,9 +7,9 @@ import (
 
 func TestValidateSQLIdentifier(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		identifier string
-		expectErr bool
+		expectErr  bool
 	}{
 		{"Valid simple", "users", false},
 		{"Valid with underscore", "user_profiles", false},

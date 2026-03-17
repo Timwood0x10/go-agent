@@ -68,7 +68,7 @@ type SecurityErrorType string
 
 const (
 	SecurityErrorInvalidIdentifier SecurityErrorType = "invalid_identifier"
-	SecurityErrorInjectionAttempt    SecurityErrorType = "injection_attempt"
+	SecurityErrorInjectionAttempt  SecurityErrorType = "injection_attempt"
 	SecurityErrorInvalidInput      SecurityErrorType = "invalid_input"
 )
 

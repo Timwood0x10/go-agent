@@ -221,20 +221,26 @@ func (c *CallbackChain) ExecuteParallel(ctx context.Context) error {
 		return nil
 	}
 
+	var wg sync.WaitGroup
 	errChan := make(chan error, len(c.callbacks))
 	done := make(chan struct{})
 
+	// WaitGroup to track all goroutines
+	wg.Add(len(c.callbacks))
+
 	for _, fn := range c.callbacks {
 		go func(callback Callback) {
+			defer wg.Done()
+
 			if err := callback(ctx); err != nil {
 				errChan <- err
 			}
 		}(fn)
 	}
 
+	// Wait for all goroutines to complete
 	go func() {
-		for range c.callbacks {
-		}
+		wg.Wait()
 		close(done)
 	}()
 

@@ -254,14 +254,19 @@ type WorkflowReloader struct {
 	callbacks  map[string]ReloadCallback // Use map for O(1) lookup
 	mu         sync.RWMutex
 	watcher    *FileWatcher
+	cancel     context.CancelFunc
+	cancelCtx  context.Context
 }
 
 // NewWorkflowReloader creates a new WorkflowReloader.
 func NewWorkflowReloader(loader WorkflowLoader) *WorkflowReloader {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &WorkflowReloader{
 		loader:    loader,
 		workflows: make(map[string]*Workflow),
 		callbacks: make(map[string]ReloadCallback),
+		cancelCtx: ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -305,7 +310,8 @@ func (r *WorkflowReloader) StartWatching(ctx context.Context, dir string) error 
 	watcher := NewFileWatcher(r.loader, r.workflows)
 	watcher.RegisterCallback(r.onReload)
 
-	if err := watcher.Watch(ctx, dir); err != nil {
+	// Use reloader's cancel context for watching
+	if err := watcher.Watch(r.cancelCtx, dir); err != nil {
 		return fmt.Errorf("start watcher: %w", err)
 	}
 
@@ -378,6 +384,9 @@ func (r *WorkflowReloader) ListWorkflows() []*Workflow {
 
 // StopWatching stops watching for file changes.
 func (r *WorkflowReloader) StopWatching() {
+	if r.cancel != nil {
+		r.cancel()
+	}
 	if r.watcher != nil {
 		r.watcher = nil
 	}

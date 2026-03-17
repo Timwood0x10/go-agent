@@ -22,14 +22,14 @@ var (
 
 // Parser parses LLM output into structured types.
 type Parser struct {
-	fixJSON       bool
+	fixJSON        bool
 	inputValidator *InputValidator
 }
 
 // NewParser creates a new Parser.
 func NewParser() *Parser {
 	return &Parser{
-		fixJSON:       true,
+		fixJSON:        true,
 		inputValidator: NewInputValidator(),
 	}
 }
@@ -37,7 +37,7 @@ func NewParser() *Parser {
 // NewParserWithValidator creates a new Parser with custom input validation.
 func NewParserWithValidator(validator *InputValidator) *Parser {
 	return &Parser{
-		fixJSON:       true,
+		fixJSON:        true,
 		inputValidator: validator,
 	}
 }

@@ -9,17 +9,17 @@ import (
 var DefaultTimeouts = struct {
 	LLMRequest          time.Duration
 	LLMStructuredOutput time.Duration
-	LLMStream          time.Duration
-	DatabaseQuery      time.Duration
+	LLMStream           time.Duration
+	DatabaseQuery       time.Duration
 	DatabaseTransaction time.Duration
-	VectorSearch       time.Duration
+	VectorSearch        time.Duration
 }{
 	LLMRequest:          120 * time.Second,
 	LLMStructuredOutput: 180 * time.Second,
-	LLMStream:          300 * time.Second,
-	DatabaseQuery:      30 * time.Second,
+	LLMStream:           300 * time.Second,
+	DatabaseQuery:       30 * time.Second,
 	DatabaseTransaction: 60 * time.Second,
-	VectorSearch:       10 * time.Second,
+	VectorSearch:        10 * time.Second,
 }
 
 // WithDefaultTimeout ensures the context has a timeout.

@@ -7,18 +7,18 @@ import (
 
 // DefaultTimeouts defines default timeout values for database operations.
 var DefaultTimeouts = struct {
-	Query      time.Duration
-	Insert     time.Duration
-	Update     time.Duration
-	Delete     time.Duration
-	Transaction time.Duration
+	Query        time.Duration
+	Insert       time.Duration
+	Update       time.Duration
+	Delete       time.Duration
+	Transaction  time.Duration
 	VectorSearch time.Duration
 }{
-	Query:      30 * time.Second,
-	Insert:     20 * time.Second,
-	Update:     20 * time.Second,
-	Delete:     20 * time.Second,
-	Transaction: 60 * time.Second,
+	Query:        30 * time.Second,
+	Insert:       20 * time.Second,
+	Update:       20 * time.Second,
+	Delete:       20 * time.Second,
+	Transaction:  60 * time.Second,
 	VectorSearch: 10 * time.Second,
 }
 

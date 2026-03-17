@@ -62,7 +62,7 @@ func (p *Pool) Get(ctx context.Context) (*sql.Conn, error) {
 
 	p.mu.Lock()
 	p.openCount++
-	p.idleCount++
+	p.idleCount--
 	elapsed := time.Since(start)
 	p.waitDuration += elapsed
 	if elapsed > time.Second {
@@ -83,7 +83,7 @@ func (p *Pool) Release(conn *sql.Conn) {
 
 	p.mu.Lock()
 	p.openCount--
-	p.idleCount--
+	p.idleCount++
 	p.mu.Unlock()
 }
 

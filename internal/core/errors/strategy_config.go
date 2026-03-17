@@ -51,7 +51,7 @@ var DefaultStrategy = ErrorStrategy{
 
 // strategyRegistry holds the error strategies with thread-safe access.
 type strategyRegistry struct {
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 	strategies map[string]ErrorStrategy
 }
 
