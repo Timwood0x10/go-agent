@@ -170,9 +170,10 @@ func (m *memoryManager) BuildContext(ctx context.Context, input string, sessionI
 	if len(messages) > 0 {
 		contextBuilder = "Previous conversation history:\n\n"
 		for _, msg := range messages {
-			if msg.Role == "user" {
+			switch msg.Role {
+			case "user":
 				contextBuilder += fmt.Sprintf("User: %s\n", truncate(msg.Content, 100))
-			} else if msg.Role == "assistant" {
+			case "assistant":
 				contextBuilder += fmt.Sprintf("Assistant: %s\n", truncate(msg.Content, 100))
 			}
 		}

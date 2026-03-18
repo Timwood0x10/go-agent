@@ -210,6 +210,7 @@ func TestCacheStats(t *testing.T) {
 
 	if stats == nil {
 		t.Error("GetStats() should return stats")
+		return
 	}
 
 	// Cache should be enabled (memory cache is always available)

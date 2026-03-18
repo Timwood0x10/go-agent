@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -108,6 +109,7 @@ func (c *QueryCache) Set(ctx context.Context, req *SearchRequest, results []*Sea
 	if c.redis != nil {
 		if err := c.redis.Set(ctx, cacheKey, string(data), c.ttl); err != nil {
 			// Redis error is not fatal, continue with memory cache
+			slog.Debug("Failed to store in Redis cache", "error", err)
 		}
 	}
 

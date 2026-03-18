@@ -24,6 +24,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 		if executor == nil {
 			t.Error("Executor should not be nil")
+			return
 		}
 
 		if executor.maxParallel != 10 {
@@ -273,6 +274,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		step := executor.findStep(workflow.Steps, "step2")
 		if step == nil {
 			t.Error("Step should not be nil")
+			return
 		}
 
 		if step.ID != "step2" {

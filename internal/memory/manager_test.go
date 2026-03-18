@@ -288,6 +288,7 @@ func TestMemoryManager_DistillTask(t *testing.T) {
 
 	if distilled == nil {
 		t.Error("DistillTask returned nil task")
+		return
 	}
 
 	if distilled.TaskID != taskID {

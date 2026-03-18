@@ -14,6 +14,7 @@ func TestShutdownManager(t *testing.T) {
 
 		if manager == nil {
 			t.Errorf("manager should not be nil")
+			return
 		}
 		if manager.timeout != 10*time.Second {
 			t.Errorf("expected 10s timeout")

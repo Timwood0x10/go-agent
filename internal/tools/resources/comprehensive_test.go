@@ -116,6 +116,7 @@ func TestResultList(t *testing.T) {
 
 		if list == nil {
 			t.Error("NewResultList() should not return nil")
+			return
 		}
 		if len(list.Results) != 0 {
 			t.Errorf("initial results count = %d, want 0", len(list.Results))
@@ -1330,6 +1331,7 @@ func TestMockStyleRecommender(t *testing.T) {
 		}
 		if rec == nil {
 			t.Error("GetRecommendations() should not return nil")
+			return
 		}
 		if rec.PrimaryStyle == "" {
 			t.Error("PrimaryStyle should not be empty")

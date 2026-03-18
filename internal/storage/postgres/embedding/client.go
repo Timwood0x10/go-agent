@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -238,7 +239,8 @@ func (c *EmbeddingClient) callEmbeddingService(ctx context.Context, text, prefix
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer			slog.Error("Failed to close response body", "error", err)
+			// nolint: errcheck // Response body close error is logged but not critical
+			slog.Error("Failed to close response body", "error", err)
 		}
 	}()
 

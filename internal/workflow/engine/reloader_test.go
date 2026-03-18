@@ -19,6 +19,7 @@ func TestFileWatcherCoverage(t *testing.T) {
 
 		if watcher == nil {
 			t.Error("FileWatcher should not be nil")
+			return
 		}
 
 		if watcher.pollInterval != 5*time.Second {
@@ -119,6 +120,7 @@ func TestWorkflowReloaderCoverage(t *testing.T) {
 
 		if reloader == nil {
 			t.Error("WorkflowReloader should not be nil")
+			return
 		}
 
 		if reloader.workflows == nil {

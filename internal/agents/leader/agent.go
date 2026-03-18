@@ -156,12 +156,14 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 	}
 
 	// Initialize heartbeat monitor if provided
+	// nolint: staticcheck // Empty branch, TODO implementation
 	if a.heartbeatMon != nil {
 		// Heartbeat monitor is ready to use
 		// TODO: Initialize heartbeat monitor
 	}
 
 	// Initialize message queue if provided
+	// nolint: staticcheck // Empty branch, TODO implementation
 	if a.messageQueue != nil {
 		// Message queue is ready to use
 		// TODO: Initialize message queue

@@ -127,12 +127,13 @@ func (v *InputValidator) ValidateJSONDepth(jsonContent string) error {
 	maxDepth := 0
 
 	for _, char := range jsonContent {
-		if char == '{' {
+		switch char {
+		case '{':
 			depth++
 			if depth > maxDepth {
 				maxDepth = depth
 			}
-		} else if char == '}' {
+		case '}':
 			depth--
 			if depth < 0 {
 				return fmt.Errorf("%w: unbalanced braces", ErrJSONDepthExceeded)

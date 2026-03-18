@@ -227,6 +227,7 @@ func TestPool_Stats(t *testing.T) {
 		stats := pool.Stats()
 		if stats == nil {
 			t.Error("stats should not be nil")
+			return
 		}
 		if stats.MaxOpenConns != cfg.MaxOpenConns {
 			t.Errorf("expected MaxOpenConns %d, got %d", cfg.MaxOpenConns, stats.MaxOpenConns)

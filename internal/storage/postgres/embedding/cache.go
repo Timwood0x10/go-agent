@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -115,7 +116,7 @@ func (c *EmbeddingCache) Set(ctx context.Context, key *CacheKey, embedding []flo
 	if c.redis != nil {
 		if err := c.redis.Set(ctx, keyStr, string(data), c.ttl); err != nil {
 			// Redis error is not fatal, continue with memory cache
-
+			slog.Debug("Failed to store in Redis cache", "error", err)
 		}
 	}
 
