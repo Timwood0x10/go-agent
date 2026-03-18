@@ -35,7 +35,7 @@ GoAgent 是一个**通用多智能体框架**，用户只需通过**配置文件
 ### 运行旅行规划示例
 
 ```bash
-cd /Users/scc/go/src/styleagent
+cd /Users/scc/go/src/goagent
 
 # 设置 API Key
 export OPENROUTER_API_KEY="your-api-key"

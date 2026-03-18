@@ -6,3 +6,6 @@ plan/
 
 bin/
 
+/**/.venv/
+
+**/.env

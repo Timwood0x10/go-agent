@@ -1,20 +1,18 @@
 """
 Embedding Service - Provides vector embeddings for AI agent framework.
-This service uses sentence-transformers with e5-large model for semantic search.
+This service supports multiple backends: sentence-transformers and Ollama.
 """
 import os
 import json
-import hashlib
 import logging
 import unicodedata
 import re
+import requests
 from typing import List, Optional
 
-import redis
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -30,8 +28,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Embedding Service",
-    description="Vector embedding service for AI agent framework",
-    version="1.0.0"
+    description="Vector embedding service for AI agent framework (supports Ollama)",
+    version="2.0.0"
 )
 
 # Add CORS middleware
@@ -43,15 +41,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Backend type
+BACKEND_TYPE = os.getenv("BACKEND_TYPE", "ollama")  # "ollama" or "transformers"
+
+# Ollama configuration
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "hf.co/ChristianAzinn/e5-large-v2-gguf:Q8_0")
+
 # Global variables
-model: Optional[SentenceTransformer] = None
-redis_client: Optional[redis.Redis] = None
-MODEL_NAME = os.getenv("MODEL_NAME", "intfloat/e5-large")
+model = None
+redis_client = None
+MODEL_NAME = os.getenv("MODEL_NAME", "e5-large-v2")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CACHE_TTL = int(os.getenv("CACHE_TTL", "86400"))  # 24 hours
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 MAX_LENGTH = int(os.getenv("MAX_LENGTH", "512"))
+
+
+class OllamaClient:
+    """Client for Ollama embedding API."""
+    
+    def __init__(self, base_url: str, model: str):
+        self.base_url = base_url.rstrip('/')
+        self.model = model
+    
+    def embed(self, text: str) -> List[float]:
+        """Generate embedding using Ollama."""
+        response = requests.post(
+            f"{self.base_url}/api/embeddings",
+            json={
+                "model": self.model,
+                "prompt": text
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()["embedding"]
+    
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts using Ollama."""
+        embeddings = []
+        for text in texts:
+            embedding = self.embed(text)
+            embeddings.append(embedding)
+        return embeddings
+    
+    def health(self) -> bool:
+        """Check if Ollama is healthy."""
+        try:
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
 
 
 # Data models
@@ -81,6 +123,7 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Service health status")
     model: str = Field(..., description="Loaded model name")
     cache_enabled: bool = Field(..., description="Whether cache is enabled")
+    backend_type: str = Field(default="ollama", description="Backend type (ollama/transformers)")
 
 
 # Startup event
@@ -90,15 +133,35 @@ async def startup_event():
     global model, redis_client
     
     logger.info("Starting embedding service...")
+    logger.info(f"Backend type: {BACKEND_TYPE}")
     
     try:
-        # Load embedding model
-        logger.info(f"Loading model: {MODEL_NAME}")
-        model = SentenceTransformer(MODEL_NAME)
-        logger.info(f"Model loaded successfully, dimension: {model.get_sentence_embedding_dimension()}")
+        if BACKEND_TYPE == "ollama":
+            # Initialize Ollama client
+            logger.info(f"Initializing Ollama client: {OLLAMA_BASE_URL}")
+            logger.info(f"Ollama model: {OLLAMA_MODEL}")
+            
+            model = OllamaClient(OLLAMA_BASE_URL, OLLAMA_MODEL)
+            
+            # Check Ollama health
+            if not model.health():
+                raise Exception("Ollama is not running or not accessible")
+            
+            # Test embedding
+            test_embedding = model.embed("test")
+            logger.info(f"Ollama client initialized successfully, dimension: {len(test_embedding)}")
+            
+        else:
+            # Initialize sentence-transformers model
+            logger.info(f"Loading model: {MODEL_NAME}")
+            from sentence_transformers import SentenceTransformer
+            st_model = SentenceTransformer(MODEL_NAME)
+            model = st_model
+            logger.info(f"Model loaded successfully, dimension: {model.get_sentence_embedding_dimension()}")
         
         # Initialize Redis cache
         try:
+            import redis
             redis_client = redis.from_url(REDIS_URL, decode_responses=False)
             redis_client.ping()
             logger.info("Redis cache connected successfully")
@@ -131,10 +194,12 @@ async def shutdown_event():
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
+    model_name = OLLAMA_MODEL if BACKEND_TYPE == "ollama" else MODEL_NAME
     return HealthResponse(
         status="healthy",
-        model=MODEL_NAME,
-        cache_enabled=redis_client is not None
+        model=model_name,
+        cache_enabled=redis_client is not None,
+        backend_type=BACKEND_TYPE
     )
 
 
@@ -173,8 +238,12 @@ async def embed(request: EmbedRequest):
     if len(text_with_prefix) > MAX_LENGTH:
         text_with_prefix = text_with_prefix[:MAX_LENGTH]
     
-    # Generate embedding
-    embedding = model.encode(text_with_prefix).tolist()
+    # Generate embedding based on backend type
+    if BACKEND_TYPE == "ollama":
+        embedding = model.embed(text_with_prefix)
+    else:
+        # sentence-transformers backend
+        embedding = model.encode(text_with_prefix).tolist()
     
     # Cache the result
     if redis_client:
@@ -218,8 +287,12 @@ async def embed_batch(request: BatchEmbedRequest):
         for text in texts_with_prefix
     ]
     
-    # Generate embeddings
-    embeddings = model.encode(texts_with_prefix).tolist()
+    # Generate embeddings based on backend type
+    if BACKEND_TYPE == "ollama":
+        embeddings = model.embed_batch(texts_with_prefix)
+    else:
+        # sentence-transformers backend
+        embeddings = model.encode(texts_with_prefix).tolist()
     
     # Try to cache results
     cached_count = 0

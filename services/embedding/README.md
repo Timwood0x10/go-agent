@@ -45,24 +45,70 @@ Production-grade vector embedding service for AI agent framework using sentence-
 ### Prerequisites
 
 - Python 3.11+
+- uv (fast Python package manager)
+- Ollama (for local embedding model)
 - Redis (optional, for caching)
 - Docker (optional, for containerized deployment)
 
-### Local Development
+### Quick Start with Setup Scripts
 
-1. Clone the repository
-2. Install dependencies:
+We provide automated setup scripts using uv and Ollama:
+
+1. **Run the setup script** (installs uv, creates virtual environment, downloads model):
 ```bash
-pip install -r requirements.txt
+./setup.sh
 ```
 
-3. Set up environment variables:
+2. **Start the service**:
+```bash
+./start.sh
+```
+
+3. **Stop the service**:
+```bash
+./stop.sh
+```
+
+### Manual Installation
+
+1. **Install uv** (if not already installed):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. **Install Ollama** (if not already installed):
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+3. **Create virtual environment with uv**:
+```bash
+uv venv
+source .venv/bin/activate
+```
+
+4. **Install dependencies**:
+```bash
+uv pip install -r requirements.txt
+```
+
+5. **Set up environment variables**:
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. Run the service:
+6. **Download embedding model**:
+```bash
+ollama pull hf.co/ChristianAzinn/e5-large-v2-gguf:Q8_0
+```
+
+7. **Start Ollama** (in a separate terminal):
+```bash
+ollama serve
+```
+
+8. **Run the service**:
 ```bash
 python app.py
 ```

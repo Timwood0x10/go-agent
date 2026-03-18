@@ -1,4 +1,4 @@
-# Makefile for Style Agent Framework
+# Makefile for GO Agent Framework
 
 .PHONY: all lint test test-race check check-core check-tools help clean install
 
