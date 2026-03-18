@@ -181,55 +181,48 @@ func TestExperience_EmptyFields(t *testing.T) {
 func TestExperience_IsExpired(t *testing.T) {
 
 	tests := []struct {
+		name string
 
-		name      string
+		decayAt time.Time
 
-		decayAt   time.Time
-
-		expected  bool
-
+		expected bool
 	}{
 
 		{
 
-			name:     "expired experience",
+			name: "expired experience",
 
-			decayAt:  time.Now().Add(-1 * time.Hour),
-
-			expected: true,
-
-		},
-
-		{
-
-			name:     "not expired experience",
-
-			decayAt:  time.Now().Add(1 * time.Hour),
-
-			expected: false,
-
-		},
-
-		{
-
-			name:     "zero decay time",
-
-			decayAt:  time.Time{},
-
-			expected: false,
-
-		},
-
-		{
-
-			name:     "exactly expired",
-
-			decayAt:  time.Now(),
+			decayAt: time.Now().Add(-1 * time.Hour),
 
 			expected: true,
-
 		},
 
+		{
+
+			name: "not expired experience",
+
+			decayAt: time.Now().Add(1 * time.Hour),
+
+			expected: false,
+		},
+
+		{
+
+			name: "zero decay time",
+
+			decayAt: time.Time{},
+
+			expected: false,
+		},
+
+		{
+
+			name: "exactly expired",
+
+			decayAt: time.Now(),
+
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {

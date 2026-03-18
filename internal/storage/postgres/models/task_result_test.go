@@ -20,37 +20,34 @@ func TestTaskResult_ValidFields(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:               "result-id",
+		ID: "result-id",
 
-		TenantID:         "tenant-1",
+		TenantID: "tenant-1",
 
-		SessionID:        "session-1",
+		SessionID: "session-1",
 
-		TaskType:         "test-task",
+		TaskType: "test-task",
 
-		AgentID:          "agent-1",
+		AgentID: "agent-1",
 
-		Input:            map[string]interface{}{"prompt": "test input"},
+		Input: map[string]interface{}{"prompt": "test input"},
 
-		Output:           map[string]interface{}{"result": "test output"},
+		Output: map[string]interface{}{"result": "test output"},
 
-		Embedding:        []float64{0.1, 0.2, 0.3},
+		Embedding: []float64{0.1, 0.2, 0.3},
 
-		EmbeddingModel:   "e5-large",
+		EmbeddingModel: "e5-large",
 
 		EmbeddingVersion: 1,
 
-		Status:           TaskStatusCompleted,
+		Status: TaskStatusCompleted,
 
-		LatencyMs:        100,
+		LatencyMs: 100,
 
-		Metadata:         map[string]interface{}{"key": "value"},
+		Metadata: map[string]interface{}{"key": "value"},
 
-		CreatedAt:        time.Now(),
-
+		CreatedAt: time.Now(),
 	}
-
-
 
 	assert.Equal(t, "result-id", result.ID)
 
@@ -82,15 +79,11 @@ func TestTaskResult_ValidFields(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_EmptyFields tests handling of empty fields.
 
 func TestTaskResult_EmptyFields(t *testing.T) {
 
 	result := &TaskResult{}
-
-
 
 	assert.Empty(t, result.ID)
 
@@ -124,29 +117,24 @@ func TestTaskResult_EmptyFields(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_EmptyEmbedding tests handling of empty embedding.
 
 func TestTaskResult_EmptyEmbedding(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:         "result-id",
+		ID: "result-id",
 
-		SessionID:  "session-1",
+		SessionID: "session-1",
 
-		TaskType:   "test-task",
+		TaskType: "test-task",
 
-		Embedding:  []float64{},
+		Embedding: []float64{},
 
-		Status:     TaskStatusCompleted,
+		Status: TaskStatusCompleted,
 
-		CreatedAt:  time.Now(),
-
+		CreatedAt: time.Now(),
 	}
-
-
 
 	assert.Empty(t, result.Embedding)
 
@@ -154,29 +142,24 @@ func TestTaskResult_EmptyEmbedding(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_NilEmbedding tests handling of nil embedding.
 
 func TestTaskResult_NilEmbedding(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:         "result-id",
+		ID: "result-id",
 
-		SessionID:  "session-1",
+		SessionID: "session-1",
 
-		TaskType:   "test-task",
+		TaskType: "test-task",
 
-		Embedding:  nil,
+		Embedding: nil,
 
-		Status:     TaskStatusCompleted,
+		Status: TaskStatusCompleted,
 
-		CreatedAt:  time.Now(),
-
+		CreatedAt: time.Now(),
 	}
-
-
 
 	assert.Nil(t, result.Embedding)
 
@@ -184,18 +167,14 @@ func TestTaskResult_NilEmbedding(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_StatusValues tests different status values.
 
 func TestTaskResult_StatusValues(t *testing.T) {
 
 	tests := []struct {
-
-		name   string
+		name string
 
 		status string
-
 	}{
 
 		{"completed status", TaskStatusCompleted},
@@ -205,10 +184,7 @@ func TestTaskResult_StatusValues(t *testing.T) {
 		{"pending status", TaskStatusPending},
 
 		{"running status", TaskStatusRunning},
-
 	}
-
-
 
 	for _, tt := range tests {
 
@@ -216,14 +192,13 @@ func TestTaskResult_StatusValues(t *testing.T) {
 
 			result := &TaskResult{
 
-				ID:        "result-id",
+				ID: "result-id",
 
 				SessionID: "session-1",
 
-				Status:    tt.status,
+				Status: tt.status,
 
 				CreatedAt: time.Now(),
-
 			}
 
 			assert.Equal(t, tt.status, result.Status)
@@ -234,20 +209,16 @@ func TestTaskResult_StatusValues(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_IsSuccessful tests success status check.
 
 func TestTaskResult_IsSuccessful(t *testing.T) {
 
 	tests := []struct {
+		name string
 
-		name     string
-
-		status   string
+		status string
 
 		expected bool
-
 	}{
 
 		{"completed is successful", TaskStatusCompleted, true},
@@ -257,10 +228,7 @@ func TestTaskResult_IsSuccessful(t *testing.T) {
 		{"pending is not successful", TaskStatusPending, false},
 
 		{"running is not successful", TaskStatusRunning, false},
-
 	}
-
-
 
 	for _, tt := range tests {
 
@@ -268,14 +236,13 @@ func TestTaskResult_IsSuccessful(t *testing.T) {
 
 			result := &TaskResult{
 
-				ID:        "result-id",
+				ID: "result-id",
 
 				SessionID: "session-1",
 
-				Status:    tt.status,
+				Status: tt.status,
 
 				CreatedAt: time.Now(),
-
 			}
 
 			assert.Equal(t, tt.expected, result.IsSuccessful())
@@ -286,20 +253,16 @@ func TestTaskResult_IsSuccessful(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_IsFailed tests failure status check.
 
 func TestTaskResult_IsFailed(t *testing.T) {
 
 	tests := []struct {
+		name string
 
-		name     string
-
-		status   string
+		status string
 
 		expected bool
-
 	}{
 
 		{"failed is failed", TaskStatusFailed, true},
@@ -309,10 +272,7 @@ func TestTaskResult_IsFailed(t *testing.T) {
 		{"pending is not failed", TaskStatusPending, false},
 
 		{"running is not failed", TaskStatusRunning, false},
-
 	}
-
-
 
 	for _, tt := range tests {
 
@@ -320,14 +280,13 @@ func TestTaskResult_IsFailed(t *testing.T) {
 
 			result := &TaskResult{
 
-				ID:        "result-id",
+				ID: "result-id",
 
 				SessionID: "session-1",
 
-				Status:    tt.status,
+				Status: tt.status,
 
 				CreatedAt: time.Now(),
-
 			}
 
 			assert.Equal(t, tt.expected, result.IsFailed())
@@ -338,18 +297,14 @@ func TestTaskResult_IsFailed(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_LatencyMs tests latency handling.
 
 func TestTaskResult_LatencyMs(t *testing.T) {
 
 	tests := []struct {
+		name string
 
-		name      string
-
-		latency   int
-
+		latency int
 	}{
 
 		{"zero latency", 0},
@@ -361,10 +316,7 @@ func TestTaskResult_LatencyMs(t *testing.T) {
 		{"slow execution", 1000},
 
 		{"very slow execution", 10000},
-
 	}
-
-
 
 	for _, tt := range tests {
 
@@ -372,14 +324,13 @@ func TestTaskResult_LatencyMs(t *testing.T) {
 
 			result := &TaskResult{
 
-				ID:        "result-id",
+				ID: "result-id",
 
 				SessionID: "session-1",
 
 				LatencyMs: tt.latency,
 
 				CreatedAt: time.Now(),
-
 			}
 
 			assert.Equal(t, tt.latency, result.LatencyMs)
@@ -390,45 +341,38 @@ func TestTaskResult_LatencyMs(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_InputOutputComplex tests handling of complex input and output.
 
 func TestTaskResult_InputOutputComplex(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:   "result-id",
+		ID: "result-id",
 
 		Input: map[string]interface{}{
 
-			"string":  "value",
+			"string": "value",
 
-			"number":  123,
+			"number": 123,
 
-			"bool":    true,
+			"bool": true,
 
-			"array":   []string{"a", "b", "c"},
+			"array": []string{"a", "b", "c"},
 
-			"object":  map[string]interface{}{"nested": "value"},
-
+			"object": map[string]interface{}{"nested": "value"},
 		},
 
 		Output: map[string]interface{}{
 
-			"result":  "success",
+			"result": "success",
 
-			"count":   42,
+			"count": 42,
 
-			"items":   []string{"item1", "item2"},
-
+			"items": []string{"item1", "item2"},
 		},
 
 		CreatedAt: time.Now(),
-
 	}
-
-
 
 	assert.NotNil(t, result.Input)
 
@@ -440,8 +384,6 @@ func TestTaskResult_InputOutputComplex(t *testing.T) {
 
 	assert.Len(t, result.Input["array"].([]string), 3)
 
-
-
 	assert.NotNil(t, result.Output)
 
 	assert.Equal(t, "success", result.Output["result"])
@@ -452,27 +394,22 @@ func TestTaskResult_InputOutputComplex(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_NilInputOutput tests handling of nil input and output.
 
 func TestTaskResult_NilInputOutput(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:        "result-id",
+		ID: "result-id",
 
 		SessionID: "session-1",
 
-		Input:     nil,
+		Input: nil,
 
-		Output:    nil,
+		Output: nil,
 
 		CreatedAt: time.Now(),
-
 	}
-
-
 
 	assert.Nil(t, result.Input)
 
@@ -480,27 +417,22 @@ func TestTaskResult_NilInputOutput(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_EmptyInputOutput tests handling of empty input and output.
 
 func TestTaskResult_EmptyInputOutput(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:        "result-id",
+		ID: "result-id",
 
 		SessionID: "session-1",
 
-		Input:     map[string]interface{}{},
+		Input: map[string]interface{}{},
 
-		Output:    map[string]interface{}{},
+		Output: map[string]interface{}{},
 
 		CreatedAt: time.Now(),
-
 	}
-
-
 
 	assert.Empty(t, result.Input)
 
@@ -508,18 +440,14 @@ func TestTaskResult_EmptyInputOutput(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_ErrorField tests handling of error field.
 
 func TestTaskResult_ErrorField(t *testing.T) {
 
 	tests := []struct {
-
-		name  string
+		name string
 
 		error string
-
 	}{
 
 		{"no error", ""},
@@ -527,10 +455,7 @@ func TestTaskResult_ErrorField(t *testing.T) {
 		{"simple error", "task failed"},
 
 		{"detailed error", "timeout: operation took too long"},
-
 	}
-
-
 
 	for _, tt := range tests {
 
@@ -538,14 +463,13 @@ func TestTaskResult_ErrorField(t *testing.T) {
 
 			result := &TaskResult{
 
-				ID:        "result-id",
+				ID: "result-id",
 
 				SessionID: "session-1",
 
-				Error:     tt.error,
+				Error: tt.error,
 
 				CreatedAt: time.Now(),
-
 			}
 
 			assert.Equal(t, tt.error, result.Error)
@@ -556,35 +480,29 @@ func TestTaskResult_ErrorField(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_MetadataComplex tests handling of complex metadata.
 
 func TestTaskResult_MetadataComplex(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:   "result-id",
+		ID: "result-id",
 
 		Metadata: map[string]interface{}{
 
-			"string":  "value",
+			"string": "value",
 
-			"number":  123,
+			"number": 123,
 
-			"bool":    true,
+			"bool": true,
 
-			"array":   []string{"a", "b", "c"},
+			"array": []string{"a", "b", "c"},
 
-			"object":  map[string]interface{}{"nested": "value"},
-
+			"object": map[string]interface{}{"nested": "value"},
 		},
 
 		CreatedAt: time.Now(),
-
 	}
-
-
 
 	assert.NotNil(t, result.Metadata)
 
@@ -600,23 +518,18 @@ func TestTaskResult_MetadataComplex(t *testing.T) {
 
 }
 
-
-
 // TestTaskResult_NilMetadata tests handling of nil metadata.
 
 func TestTaskResult_NilMetadata(t *testing.T) {
 
 	result := &TaskResult{
 
-		ID:       "result-id",
+		ID: "result-id",
 
 		Metadata: nil,
 
 		CreatedAt: time.Now(),
-
 	}
-
-
 
 	assert.Nil(t, result.Metadata)
 

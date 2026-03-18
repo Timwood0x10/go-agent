@@ -20,8 +20,8 @@ import (
 // It depends on the DBTX interface to support both database connections and transactions.
 // dbPool is retained for transaction operations that require BeginTx.
 type KnowledgeRepository struct {
-	db      postgres.DBTX
-	dbPool  *sql.DB
+	db     postgres.DBTX
+	dbPool *sql.DB
 }
 
 // NewKnowledgeRepository creates a new KnowledgeRepository instance.

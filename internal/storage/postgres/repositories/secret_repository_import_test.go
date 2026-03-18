@@ -4,6 +4,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"log"
 	"testing"
 	"time"
 
@@ -15,7 +16,11 @@ import (
 
 func TestSecretRepository_Import_JSON(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -57,7 +62,11 @@ func TestSecretRepository_Import_JSON(t *testing.T) {
 
 func TestSecretRepository_Import_YAML(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -93,7 +102,11 @@ func TestSecretRepository_Import_YAML(t *testing.T) {
 
 func TestSecretRepository_Import_CSV(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -164,7 +177,11 @@ func TestSecretRepository_Import_DuplicateKeys(t *testing.T) {
 
 func TestSecretRepository_Import_InvalidFormat(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -183,7 +200,11 @@ func TestSecretRepository_Import_InvalidFormat(t *testing.T) {
 
 func TestSecretRepository_Import_EmptyData(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)

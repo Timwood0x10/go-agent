@@ -235,7 +235,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			slog.Warn("Failed to add user message to memory", "error", err)
 		}
 
-// Build input with context
+		// Build input with context
 		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, a.sessionID)
 		if err != nil {
 			slog.Warn("Failed to build context, using raw input", "error", err)

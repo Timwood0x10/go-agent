@@ -30,11 +30,11 @@ func NewMemoryQueryCache() *MemoryQueryCache {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-	
+
 	// Start cleanup goroutine with proper lifecycle management
 	m.wg.Add(1)
 	go m.cleanup()
-	
+
 	return m
 }
 
@@ -44,7 +44,7 @@ func (m *MemoryQueryCache) Close() {
 	m.stopOnce.Do(func() {
 		m.cancel()
 		m.wg.Wait()
-		
+
 		// Clear all items
 		m.mu.Lock()
 		m.items = make(map[string]*cacheItem)
@@ -101,7 +101,7 @@ func (m *MemoryQueryCache) Clear() {
 // This goroutine runs until the context is cancelled or Close is called.
 func (m *MemoryQueryCache) cleanup() {
 	defer m.wg.Done()
-	
+
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -110,7 +110,7 @@ func (m *MemoryQueryCache) cleanup() {
 		case <-m.ctx.Done():
 			// Context cancelled, stop cleanup
 			return
-			
+
 		case <-ticker.C:
 			m.mu.Lock()
 			now := time.Now()

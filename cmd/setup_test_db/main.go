@@ -32,7 +32,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create pool: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		if err := pool.Close(); err != nil {
+			log.Fatal("Failed to close pool: ", err)
+		}
+	}()
 
 	fmt.Println("Connected to database successfully")
 

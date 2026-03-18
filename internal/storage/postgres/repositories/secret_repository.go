@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"time"
 
@@ -374,7 +375,11 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	if err != nil {
 		return 0, fmt.Errorf("fetch secrets for rotation: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Fatal("Failed to close rows: ", err)
+		}
+	}()
 
 	var secrets []*storage_models.Secret
 	for rows.Next() {

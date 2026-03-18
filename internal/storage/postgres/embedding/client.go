@@ -290,7 +290,7 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 			slog.Error("Failed to close response body", "error", err)
 		}
 	}()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
@@ -329,7 +329,7 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 			slog.Error("Failed to close response body", "error", err)
 		}
 	}()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("service returned status %d", resp.StatusCode)
 	}

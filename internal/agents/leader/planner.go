@@ -69,9 +69,9 @@ func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]
 	if profile == nil {
 		return nil, fmt.Errorf("profile cannot be nil")
 	}
-	
+
 	tasks := make([]*models.Task, 0)
-	
+
 	// Create a default task for processing user input
 	task := &models.Task{
 		TaskID:      generateTaskID(),
@@ -82,14 +82,14 @@ func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]
 		Priority:    1,
 		CreatedAt:   time.Now(),
 	}
-	
+
 	tasks = append(tasks, task)
-	
+
 	// Limit total tasks
 	if len(tasks) > p.maxTasks {
 		tasks = tasks[:p.maxTasks]
 	}
-	
+
 	return tasks, nil
 }
 

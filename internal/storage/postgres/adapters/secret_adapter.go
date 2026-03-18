@@ -37,10 +37,10 @@ type ImportData struct {
 
 // SecretImportItem represents a single secret for import.
 type SecretImportItem struct {
-	Key        string                 `json:"key"`
-	Value      string                 `json:"value"`
-	ExpiresAt  string                 `json:"expires_at,omitempty"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Key       string                 `json:"key"`
+	Value     string                 `json:"value"`
+	ExpiresAt string                 `json:"expires_at,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ParseFrom converts various input formats to standard JSON format.
