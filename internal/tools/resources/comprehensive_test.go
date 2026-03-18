@@ -523,8 +523,8 @@ func TestFashionSearch(t *testing.T) {
 // TestStyleRecommender tests the StyleRecommender tool.
 func TestStyleRecommender(t *testing.T) {
 	t.Run("missing required parameters", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		_, err := tool.Execute(context.Background(), map[string]interface{}{
 			"occasion": "casual",
@@ -538,8 +538,8 @@ func TestStyleRecommender(t *testing.T) {
 	})
 
 	t.Run("get recommendations", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":     "female",
@@ -562,8 +562,8 @@ func TestStyleRecommender(t *testing.T) {
 	})
 
 	t.Run("get recommendations without budget", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":   "male",
@@ -579,8 +579,8 @@ func TestStyleRecommender(t *testing.T) {
 	})
 
 	t.Run("get recommendations with only budget_min", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":     "female",
@@ -597,8 +597,8 @@ func TestStyleRecommender(t *testing.T) {
 	})
 
 	t.Run("get recommendations with only budget_max", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":     "female",
@@ -615,8 +615,8 @@ func TestStyleRecommender(t *testing.T) {
 	})
 
 	t.Run("get recommendations with zero budget values", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommender(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommender(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":     "female",
@@ -636,7 +636,7 @@ func TestStyleRecommender(t *testing.T) {
 	t.Run("recommender returns error", func(t *testing.T) {
 		// Create a mock recommender that returns an error
 		errorRecommender := &errorStyleRecommender{}
-		tool := NewStyleRecommender(errorRecommender)
+		tool := NewAgentRecommender(errorRecommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":   "female",
@@ -655,8 +655,8 @@ func TestStyleRecommender(t *testing.T) {
 // TestStyleRecommenderWithTrends tests the StyleRecommender tool with trends.
 func TestStyleRecommenderWithTrends(t *testing.T) {
 	t.Run("get trends", func(t *testing.T) {
-		recommender := NewMockStyleRecommender()
-		tool := NewStyleRecommenderWithTrends(recommender)
+		recommender := NewMockAgentRecommender()
+		tool := NewAgentRecommenderWithTrends(recommender)
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"gender":     "female",
@@ -1311,10 +1311,10 @@ func TestResultToJSONError(t *testing.T) {
 
 // TestMockStyleRecommender tests the mock style recommender.
 func TestMockStyleRecommender(t *testing.T) {
-	recommender := NewMockStyleRecommender()
+	recommender := NewMockAgentRecommender()
 
 	t.Run("get recommendations", func(t *testing.T) {
-		profile := &StyleProfile{
+		profile := &AgentProfile{
 			Gender:   "female",
 			AgeRange: "25-35",
 			BodyType: "slim",
@@ -1399,8 +1399,8 @@ func TestFashionFilters(t *testing.T) {
 		if filters.Category != "" {
 			t.Error("Category should be empty")
 		}
-		if len(filters.Style) != 0 {
-			t.Error("Style should be empty")
+		if len(filters.AgentPreferences) != 0 {
+			t.Error("AgentPreferences should be empty")
 		}
 		if len(filters.Colors) != 0 {
 			t.Error("Colors should be empty")
@@ -1409,21 +1409,21 @@ func TestFashionFilters(t *testing.T) {
 
 	t.Run("filters with values", func(t *testing.T) {
 		filters := &FashionFilters{
-			Category: "shoes",
-			Style:    []string{"casual", "formal"},
-			Colors:   []string{"red", "blue", "black"},
-			PriceMin: 50.0,
-			PriceMax: 200.0,
-			Brands:   []string{"nike", "adidas"},
-			Occasion: "casual",
-			Season:   "summer",
+			Category:         "shoes",
+			AgentPreferences: []string{"casual", "formal"},
+			Colors:           []string{"red", "blue", "black"},
+			PriceMin:         50.0,
+			PriceMax:         200.0,
+			Brands:           []string{"nike", "adidas"},
+			Occasion:         "casual",
+			Season:           "summer",
 		}
 
 		if filters.Category != "shoes" {
 			t.Errorf("Category = %v, want shoes", filters.Category)
 		}
-		if len(filters.Style) != 2 {
-			t.Errorf("Style length = %d, want 2", len(filters.Style))
+		if len(filters.AgentPreferences) != 2 {
+			t.Errorf("AgentPreferences length = %d, want 2", len(filters.AgentPreferences))
 		}
 		if filters.PriceMin != 50.0 {
 			t.Errorf("PriceMin = %v, want 50.0", filters.PriceMin)
@@ -1434,10 +1434,10 @@ func TestFashionFilters(t *testing.T) {
 	})
 }
 
-// TestStyleProfile tests StyleProfile struct.
-func TestStyleProfile(t *testing.T) {
+// TestAgentProfile tests AgentProfile struct.
+func TestAgentProfile(t *testing.T) {
 	t.Run("minimal profile", func(t *testing.T) {
-		profile := &StyleProfile{
+		profile := &AgentProfile{
 			Gender:   "female",
 			Occasion: "casual",
 		}
@@ -1451,7 +1451,7 @@ func TestStyleProfile(t *testing.T) {
 	})
 
 	t.Run("profile with budget", func(t *testing.T) {
-		profile := &StyleProfile{
+		profile := &AgentProfile{
 			Gender:   "male",
 			Occasion: "formal",
 			BudgetRange: &BudgetRange{
@@ -1523,9 +1523,9 @@ func TestOutfitSuggestion(t *testing.T) {
 	}
 }
 
-// TestStyleTrend tests StyleTrend struct.
-func TestStyleTrend(t *testing.T) {
-	trend := &StyleTrend{
+// TestAgentTrend tests AgentTrend struct.
+func TestAgentTrend(t *testing.T) {
+	trend := &AgentTrend{
 		TrendID:     "sustainable_fashion",
 		Name:        "Sustainable Fashion",
 		Category:    "lifestyle",
@@ -1926,46 +1926,46 @@ func NewMockFashionSearcher() *MockFashionSearcher {
 func (m *MockFashionSearcher) Search(ctx context.Context, query string, filters *FashionFilters) ([]*FashionItem, error) {
 	items := []*FashionItem{
 		{
-			ItemID:   "item-1",
-			Name:     "Summer Dress",
-			Brand:    "Brand A",
-			Category: "dress",
-			Price:    150.0,
-			URL:      "https://example.com/item1",
-			ImageURL: "https://example.com/item1.jpg",
-			Style:    []string{"casual", "minimalist"},
-			Colors:   []string{"red", "blue", "white"},
-			Occasion: "casual",
-			Season:   "summer",
-			Metadata: map[string]interface{}{"rating": 4.5},
+			ItemID:           "item-1",
+			Name:             "Summer Dress",
+			Brand:            "Brand A",
+			Category:         "dress",
+			Price:            150.0,
+			URL:              "https://example.com/item1",
+			ImageURL:         "https://example.com/item1.jpg",
+			AgentPreferences: []string{"casual", "minimalist"},
+			Colors:           []string{"red", "blue", "white"},
+			Occasion:         "casual",
+			Season:           "summer",
+			Metadata:         map[string]interface{}{"rating": 4.5},
 		},
 		{
-			ItemID:   "item-2",
-			Name:     "Running Shoes",
-			Brand:    "Nike",
-			Category: "shoes",
-			Price:    120.0,
-			URL:      "https://example.com/item2",
-			ImageURL: "https://example.com/item2.jpg",
-			Style:    []string{"sporty", "casual"},
-			Colors:   []string{"black", "white", "red"},
-			Occasion: "sport",
-			Season:   "summer",
-			Metadata: map[string]interface{}{"rating": 4.8},
+			ItemID:           "item-2",
+			Name:             "Running Shoes",
+			Brand:            "Nike",
+			Category:         "shoes",
+			Price:            120.0,
+			URL:              "https://example.com/item2",
+			ImageURL:         "https://example.com/item2.jpg",
+			AgentPreferences: []string{"sporty", "casual"},
+			Colors:           []string{"black", "white", "red"},
+			Occasion:         "sport",
+			Season:           "summer",
+			Metadata:         map[string]interface{}{"rating": 4.8},
 		},
 		{
-			ItemID:   "item-3",
-			Name:     "Leather Jacket",
-			Brand:    "Brand B",
-			Category: "outerwear",
-			Price:    250.0,
-			URL:      "https://example.com/item3",
-			ImageURL: "https://example.com/item3.jpg",
-			Style:    []string{"formal", "edgy"},
-			Colors:   []string{"black", "brown"},
-			Occasion: "formal",
-			Season:   "autumn",
-			Metadata: map[string]interface{}{"rating": 4.2},
+			ItemID:           "item-3",
+			Name:             "Leather Jacket",
+			Brand:            "Brand B",
+			Category:         "outerwear",
+			Price:            250.0,
+			URL:              "https://example.com/item3",
+			ImageURL:         "https://example.com/item3.jpg",
+			AgentPreferences: []string{"formal", "edgy"},
+			Colors:           []string{"black", "brown"},
+			Occasion:         "formal",
+			Season:           "autumn",
+			Metadata:         map[string]interface{}{"rating": 4.2},
 		},
 	}
 
@@ -2028,12 +2028,12 @@ func (e *errorFashionSearcher) Search(ctx context.Context, query string, filters
 type errorStyleRecommender struct{}
 
 // GetRecommendations returns an error.
-func (e *errorStyleRecommender) GetRecommendations(ctx context.Context, profile *StyleProfile) (*StyleRecommendation, error) {
+func (e *errorStyleRecommender) GetRecommendations(ctx context.Context, profile *AgentProfile) (*AgentRecommendation, error) {
 	return nil, errors.New("recommendation failed")
 }
 
 // GetTrends returns an error.
-func (e *errorStyleRecommender) GetTrends(ctx context.Context, season string) ([]*StyleTrend, error) {
+func (e *errorStyleRecommender) GetTrends(ctx context.Context, season string) ([]*AgentTrend, error) {
 	return nil, errors.New("trends failed")
 }
 

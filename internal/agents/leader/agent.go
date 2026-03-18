@@ -11,6 +11,8 @@ import (
 	"goagent/internal/core/models"
 	"goagent/internal/memory"
 	"goagent/internal/protocol/ahp"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Agent represents the Leader Agent interface.
@@ -321,15 +323,21 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		}
 
 		// Async distillation
-		go func() {
-			distilled, err := a.memoryManager.DistillTask(context.Background(), taskID)
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			distilled, err := a.memoryManager.DistillTask(ctx, taskID)
 			if err != nil {
 				slog.Warn("Failed to distill task", "error", err)
-				return
+				return err
 			}
 
-			if err := a.memoryManager.StoreDistilledTask(context.Background(), taskID, distilled); err != nil {
-				slog.Warn("Failed to store distilled task", "error", err)
+			return a.memoryManager.StoreDistilledTask(ctx, taskID, distilled)
+		})
+
+		// Don't wait for async operations to complete
+		go func() {
+			if err := g.Wait(); err != nil {
+				slog.Error("Error in async distillation", "error", err)
 			}
 		}()
 	}

@@ -72,7 +72,7 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 
 	// Use configured batch reconciliation limit
 	batchLimit := r.embeddingConfig.ReconcileBatchSize
-	
+
 	// Find knowledge chunks with pending embedding status that haven't been processed recently
 	query := `
 		SELECT id, tenant_id, content

@@ -8,6 +8,16 @@ import (
 	"goagent/internal/core/models"
 )
 
+var embeddingConfig = &EmbeddingConfig{
+	DefaultModel:         "text-embedding-ada-002",
+	DefaultVersion:       1,
+	MaxRetries:           3,
+	MaxBatchSize:         32,
+	MaxVectorSearchLimit: 1000,
+	ReconcileBatchSize:   1000,
+	EmbeddingTimeout:     30 * time.Second,
+}
+
 // TestPool_Coverage tests additional pool scenarios to improve coverage.
 func TestPool_Coverage(t *testing.T) {
 	t.Run("test Stats returns valid values", func(t *testing.T) {
@@ -226,7 +236,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -249,7 +259,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -272,7 +282,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		err = searcher.DeleteEmbedding(context.Background(), "users", "test; DROP")
 		if err != nil {
@@ -290,7 +300,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		err = searcher.CreateVectorTable(context.Background(), "users; DROP", "")
 		if err != nil {
@@ -308,7 +318,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -334,7 +344,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -360,7 +370,7 @@ func TestVectorSearcher_Coverage(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

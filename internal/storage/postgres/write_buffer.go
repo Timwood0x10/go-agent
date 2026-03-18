@@ -13,15 +13,15 @@ import (
 // WriteBuffer provides write batching to reduce database and embedding load.
 // This implements an in-memory buffer with periodic flushing to batch database operations.
 type WriteBuffer struct {
-	db            *Pool
-	buffer        chan *WriteItem
-	batchSize     int
-	flushInterval time.Duration
-	queue         *EmbeddingQueue
+	db              *Pool
+	buffer          chan *WriteItem
+	batchSize       int
+	flushInterval   time.Duration
+	queue           *EmbeddingQueue
 	embeddingConfig *EmbeddingConfig
-	mu            sync.Mutex
-	wg            sync.WaitGroup
-	stopped       bool
+	mu              sync.Mutex
+	wg              sync.WaitGroup
+	stopped         bool
 }
 
 // WriteItem represents a single write operation to be batched.
@@ -45,13 +45,13 @@ func NewWriteBuffer(pool *Pool, queue *EmbeddingQueue, batchSize int, flushInter
 		embeddingConfig = DefaultEmbeddingConfig()
 	}
 	return &WriteBuffer{
-		db:               pool,
-		buffer:           make(chan *WriteItem, batchSize*2), // Double size to avoid blocking
-		batchSize:        batchSize,
-		flushInterval:    flushInterval,
-		queue:            queue,
-		embeddingConfig:  embeddingConfig,
-		stopped:          false,
+		db:              pool,
+		buffer:          make(chan *WriteItem, batchSize*2), // Double size to avoid blocking
+		batchSize:       batchSize,
+		flushInterval:   flushInterval,
+		queue:           queue,
+		embeddingConfig: embeddingConfig,
+		stopped:         false,
 	}
 }
 

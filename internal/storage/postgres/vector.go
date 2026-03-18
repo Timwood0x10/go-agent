@@ -10,8 +10,8 @@ import (
 
 // VectorSearcher handles vector similarity search.
 type VectorSearcher struct {
-	db               DBTX
-	embeddingConfig  *EmbeddingConfig
+	db              DBTX
+	embeddingConfig *EmbeddingConfig
 }
 
 // NewVectorSearcher creates a new VectorSearcher.

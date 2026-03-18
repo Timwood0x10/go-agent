@@ -96,19 +96,19 @@ func TestGetCacheKey(t *testing.T) {
 
 func TestFallbackClient(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		strategy FallbackStrategy
 	}{
 		{
-			name:    "fallback to cache",
+			name:     "fallback to cache",
 			strategy: FallbackToCache,
 		},
 		{
-			name:    "fallback to keyword",
+			name:     "fallback to keyword",
 			strategy: FallbackToKeyword,
 		},
 		{
-			name:    "fallback to error",
+			name:     "fallback to error",
 			strategy: FallbackToError,
 		},
 	}

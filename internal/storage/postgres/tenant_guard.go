@@ -38,15 +38,18 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 	return nil
 }
 
-// MustSetTenantContext sets the tenant context and panics on failure.
+// MustSetTenantContext sets the tenant context and returns error on failure.
 // This should only be used in initialization paths where failure is fatal.
 // Args:
 // ctx - database operation context.
 // tenantID - tenant identifier.
-func (g *TenantGuard) MustSetTenantContext(ctx context.Context, tenantID string) {
+// Returns:
+// error - if tenant context setup fails.
+func (g *TenantGuard) MustSetTenantContext(ctx context.Context, tenantID string) error {
 	if err := g.SetTenantContext(ctx, tenantID); err != nil {
-		panic(fmt.Sprintf("failed to set tenant context: %v", err))
+		return fmt.Errorf("failed to set tenant context: %w", err)
 	}
+	return nil
 }
 
 // WithTenant executes a function within a tenant context.

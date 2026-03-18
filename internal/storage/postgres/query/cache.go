@@ -321,6 +321,8 @@ func trimSpace(s string) string {
 }
 
 // Register types for gob encoding
+// This init function registers types with the gob encoder for serialization.
+// It is required for proper encoding/decoding of SearchResult and map[string]interface{} types.
 func init() {
 	gob.Register(&SearchResult{})
 	gob.Register(map[string]interface{}{})

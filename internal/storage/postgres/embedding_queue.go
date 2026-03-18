@@ -14,9 +14,9 @@ import (
 // EmbeddingQueue manages async embedding tasks with idempotency and retry logic.
 // This provides eventual consistency for embedding operations using a database-backed queue.
 type EmbeddingQueue struct {
-	db               *Pool
-	embeddingConfig  *EmbeddingConfig
-	stopped          bool
+	db              *Pool
+	embeddingConfig *EmbeddingConfig
+	stopped         bool
 }
 
 // EmbeddingTask represents a single embedding task.
@@ -220,7 +220,7 @@ func (q *EmbeddingQueue) Reconcile(ctx context.Context, threshold time.Duration)
 	// Use configured default model and version
 	defaultModel := q.embeddingConfig.DefaultModel
 	defaultVersion := q.embeddingConfig.DefaultVersion
-	
+
 	// Find knowledge chunks with pending embedding status that haven't been processed recently
 	_, err := q.db.Exec(ctx, `
 		INSERT INTO embedding_queue (task_id, table_name, content, tenant_id, embedding_model, embedding_version, dedupe_key, status, queued_at)

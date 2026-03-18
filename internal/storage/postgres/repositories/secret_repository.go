@@ -325,17 +325,18 @@ func (r *SecretRepository) decrypt(ciphertext []byte) ([]byte, error) {
 // RotateKey re-encrypts all secrets with a new encryption key.
 // TODO: implement key rotation functionality (expected by 2026-04-15)
 // Implementation requirements:
-// 1. Start transaction for atomic operation
-// 2. Retrieve all secrets with current encryption key (SELECT ... FOR UPDATE)
-// 3. For each secret:
-//    a. Decrypt using old encryption key (AES-256-GCM)
-//    b. Re-encrypt using new encryption key
-//    c. Update database with new encrypted values
-//    d. Increment key_version
-// 4. Commit transaction if all succeed, rollback if any fail
-// 5. Add audit logging for key rotation events
-// 6. Test with various secret types and sizes
-// Dependencies: 
+//  1. Start transaction for atomic operation
+//  2. Retrieve all secrets with current encryption key (SELECT ... FOR UPDATE)
+//  3. For each secret:
+//     a. Decrypt using old encryption key (AES-256-GCM)
+//     b. Re-encrypt using new encryption key
+//     c. Update database with new encrypted values
+//     d. Increment key_version
+//  4. Commit transaction if all succeed, rollback if any fail
+//  5. Add audit logging for key rotation events
+//  6. Test with various secret types and sizes
+//
+// Dependencies:
 // - Need secure key exchange mechanism for distributing new key
 // - Need rollback mechanism if rotation fails mid-way
 // Args:
@@ -369,18 +370,19 @@ func (r *SecretRepository) Export(ctx context.Context, tenantID string) ([]byte,
 // TODO: implement secret import functionality (expected by 2026-04-15)
 // Current limitation: Export only contains metadata, not actual encrypted values
 // Implementation requirements:
-// 1. Parse exported secret metadata (JSON format)
-// 2. Choose import strategy:
-//    a) Prompt user for each secret value interactively
-//    b) Provide API endpoint for secure secret value submission
-//    c) Implement key sharing mechanism between source and destination systems
-// 3. For each secret:
-//    a. Validate secret value format and constraints
-//    b. Encrypt using current encryption key (AES-256-GCM)
-//    c. Insert into database with proper tenant isolation
-//    d. Handle version compatibility if encryption algorithm differs
-// 4. Add validation to prevent duplicate secret keys within same tenant
-// 5. Add transaction support for atomic import operations
+//  1. Parse exported secret metadata (JSON format)
+//  2. Choose import strategy:
+//     a) Prompt user for each secret value interactively
+//     b) Provide API endpoint for secure secret value submission
+//     c) Implement key sharing mechanism between source and destination systems
+//  3. For each secret:
+//     a. Validate secret value format and constraints
+//     b. Encrypt using current encryption key (AES-256-GCM)
+//     c. Insert into database with proper tenant isolation
+//     d. Handle version compatibility if encryption algorithm differs
+//  4. Add validation to prevent duplicate secret keys within same tenant
+//  5. Add transaction support for atomic import operations
+//
 // Dependencies:
 // - Need user interface or API for collecting actual secret values
 // - Need secure channel for transmitting secret values

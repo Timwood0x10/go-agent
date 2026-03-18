@@ -63,13 +63,13 @@ func (f *FallbackClient) getFromCache(ctx context.Context, text string) ([]float
 	cacheKey := f.client.getCacheKey(text, "query")
 
 	if f.client.redis == nil {
-			return nil, ErrEmbeddingFailed
-		}
-		
-		cached, err := f.client.redis.Get(ctx, cacheKey)
-		if err != nil {
-			return nil, ErrEmbeddingFailed
-		}
+		return nil, ErrEmbeddingFailed
+	}
+
+	cached, err := f.client.redis.Get(ctx, cacheKey)
+	if err != nil {
+		return nil, ErrEmbeddingFailed
+	}
 	var embedding []float64
 	if err := json.Unmarshal([]byte(cached), &embedding); err != nil {
 		return nil, ErrEmbeddingFailed
@@ -112,13 +112,13 @@ func (f *FallbackClient) getBatchFromCache(ctx context.Context, texts []string) 
 	allFound := true
 
 	for i, text := range texts {
-			cacheKey := f.client.getCacheKey(text, "query")
-			
-			cached, err := f.client.redis.Get(ctx, cacheKey)
-			if err != nil {
-				allFound = false
-				continue
-			}
+		cacheKey := f.client.getCacheKey(text, "query")
+
+		cached, err := f.client.redis.Get(ctx, cacheKey)
+		if err != nil {
+			allFound = false
+			continue
+		}
 		var embedding []float64
 		if err := json.Unmarshal([]byte(cached), &embedding); err != nil {
 			allFound = false

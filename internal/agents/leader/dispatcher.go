@@ -9,6 +9,8 @@ import (
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
 	"goagent/internal/protocol/ahp"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // TaskExecutorFunc is a function type for executing tasks directly.
@@ -90,45 +92,34 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 		return nil, apperrors.ErrInvalidInput
 	}
 
-	// Limit parallel execution
+	// Create errgroup for concurrent task execution
+	g, ctx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, d.maxParallel)
-	var wg sync.WaitGroup
+
 	results := make([]*models.TaskResult, len(tasks))
-	errCh := make(chan error, len(tasks))
 
 	for i, task := range tasks {
-		wg.Add(1)
-		go func(idx int, t *models.Task) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+		task := task // capture loop variable
+		g.Go(func() error {
 			select {
 			case <-ctx.Done():
-				errCh <- ctx.Err()
-				return
+				return ctx.Err()
 			default:
+				// Acquire semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
 				// Execute task
-				result := d.executeTask(ctx, t)
-				results[idx] = result
+				result := d.executeTask(ctx, task)
+				results[i] = result
+				return nil
 			}
-		}(i, task)
+		})
 	}
 
-	wg.Wait()
-	close(errCh)
-
-	// Collect all errors
-	var errors []error
-	for err := range errCh {
-		if err != nil {
-			errors = append(errors, err)
-		}
-	}
-
-	// Return aggregated error if any
-	if len(errors) > 0 {
-		return results, fmt.Errorf("%d task(s) failed: %v", len(errors), errors)
+	// Wait for all goroutines to complete
+	if err := g.Wait(); err != nil {
+		return results, fmt.Errorf("task dispatch failed: %w", err)
 	}
 
 	return results, nil

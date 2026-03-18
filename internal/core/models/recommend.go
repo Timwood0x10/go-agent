@@ -19,19 +19,19 @@ type RecommendResult struct {
 
 // RecommendItem represents a single recommended item.
 type RecommendItem struct {
-	ItemID      string         `json:"item_id"`
-	Category    string         `json:"category"`
-	Name        string         `json:"name"`
-	Brand       string         `json:"brand"`
-	Price       float64        `json:"price"`
-	URL         string         `json:"url"`
-	ImageURL    string         `json:"image_url"`
-	Style       []StyleTag     `json:"style"`
-	Colors      []string       `json:"colors"`
-	Description string         `json:"description"`
-	MatchReason string         `json:"match_reason"`
-	Content     string         `json:"content"` // add Content field saved by agI
-	Metadata    map[string]any `json:"metadata"`
+	ItemID           string         `json:"item_id"`
+	Category         string         `json:"category"`
+	Name             string         `json:"name"`
+	Brand            string         `json:"brand"`
+	Price            float64        `json:"price"`
+	URL              string         `json:"url"`
+	ImageURL         string         `json:"image_url"`
+	AgentPreferences []StyleTag     `json:"style"`
+	Colors           []string       `json:"colors"`
+	Description      string         `json:"description"`
+	MatchReason      string         `json:"match_reason"`
+	Content          string         `json:"content"` // add Content field saved by agI
+	Metadata         map[string]any `json:"metadata"`
 }
 
 // NewRecommendResult creates a new RecommendResult.

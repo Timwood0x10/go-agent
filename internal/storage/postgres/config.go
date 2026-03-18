@@ -18,30 +18,30 @@ type Config struct {
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
 	QueryTimeout    time.Duration
-	Embedding      *EmbeddingConfig
+	Embedding       *EmbeddingConfig
 }
 
 // EmbeddingConfig represents embedding-related configuration.
 type EmbeddingConfig struct {
-	DefaultModel        string
-	DefaultVersion      int
-	MaxRetries          int
-	MaxBatchSize        int
+	DefaultModel         string
+	DefaultVersion       int
+	MaxRetries           int
+	MaxBatchSize         int
 	MaxVectorSearchLimit int
-	ReconcileBatchSize  int
-	EmbeddingTimeout    time.Duration
+	ReconcileBatchSize   int
+	EmbeddingTimeout     time.Duration
 }
 
 // DefaultEmbeddingConfig returns the default embedding configuration.
 func DefaultEmbeddingConfig() *EmbeddingConfig {
 	return &EmbeddingConfig{
-		DefaultModel:        "intfloat/e5-large",
-		DefaultVersion:      1,
-		MaxRetries:          3,
-		MaxBatchSize:        32,
+		DefaultModel:         "intfloat/e5-large",
+		DefaultVersion:       1,
+		MaxRetries:           3,
+		MaxBatchSize:         32,
 		MaxVectorSearchLimit: 1000,
-		ReconcileBatchSize:  1000,
-		EmbeddingTimeout:    30 * time.Second,
+		ReconcileBatchSize:   1000,
+		EmbeddingTimeout:     30 * time.Second,
 	}
 }
 
