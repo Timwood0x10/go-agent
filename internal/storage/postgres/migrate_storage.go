@@ -15,7 +15,7 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id TEXT NOT NULL,
 			content TEXT NOT NULL,
-			embedding VECTOR(1024) NOT NULL,
+			embedding VECTOR(1024),
 			embedding_model TEXT NOT NULL DEFAULT 'intfloat/e5-large',
 			embedding_version INT NOT NULL DEFAULT 1,
 			embedding_status TEXT DEFAULT 'completed',

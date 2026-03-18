@@ -143,6 +143,12 @@ func (p *Pool) Ping(ctx context.Context) error {
 	return p.db.PingContext(ctx)
 }
 
+// GetDB returns the underlying *sql.DB for repository initialization.
+// This is needed for repository constructors that require *sql.DB.
+func (p *Pool) GetDB() *sql.DB {
+	return p.db
+}
+
 // Exec executes a query without returning rows.
 func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	// Add query timeout if not already set in context
