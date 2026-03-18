@@ -33,7 +33,7 @@ func NewRepository(pool *Pool) *Repository {
 		Session:   NewSessionRepository(pool),
 		Recommend: NewRecommendRepository(pool),
 		Profile:   NewProfileRepository(pool),
-		Vector:    NewVectorSearcher(pool),
+		Vector:    NewVectorSearcher(pool, pool.cfg.Embedding),
 		pool:      pool,
 	}
 }
@@ -65,7 +65,7 @@ func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) 
 		Session:   NewSessionRepositoryWithDB(tx),
 		Recommend: NewRecommendRepositoryWithDB(tx),
 		Profile:   NewProfileRepositoryWithDB(tx),
-		Vector:    NewVectorSearcherWithDB(tx),
+		Vector:    NewVectorSearcherWithDB(tx, r.pool.cfg.Embedding),
 		tx:        tx,
 	}
 
@@ -90,7 +90,7 @@ func (r *Repository) WithTransaction(ctx context.Context) (*Repository, error) {
 		Session:   NewSessionRepositoryWithDB(tx),
 		Recommend: NewRecommendRepositoryWithDB(tx),
 		Profile:   NewProfileRepositoryWithDB(tx),
-		Vector:    NewVectorSearcherWithDB(tx),
+		Vector:    NewVectorSearcherWithDB(tx, r.pool.cfg.Embedding),
 		tx:        tx,
 	}
 

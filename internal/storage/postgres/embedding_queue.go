@@ -14,8 +14,9 @@ import (
 // EmbeddingQueue manages async embedding tasks with idempotency and retry logic.
 // This provides eventual consistency for embedding operations using a database-backed queue.
 type EmbeddingQueue struct {
-	db      *Pool
-	stopped bool
+	db               *Pool
+	embeddingConfig  *EmbeddingConfig
+	stopped          bool
 }
 
 // EmbeddingTask represents a single embedding task.
@@ -29,9 +30,19 @@ type EmbeddingTask struct {
 }
 
 // NewEmbeddingQueue creates a new EmbeddingQueue instance.
+// Args:
+// pool - database connection pool.
+// embeddingConfig - embedding configuration for retry settings.
 // Returns new EmbeddingQueue instance.
-func NewEmbeddingQueue(pool *Pool) *EmbeddingQueue {
-	return &EmbeddingQueue{db: pool}
+func NewEmbeddingQueue(pool *Pool, embeddingConfig *EmbeddingConfig) *EmbeddingQueue {
+	if embeddingConfig == nil {
+		embeddingConfig = DefaultEmbeddingConfig()
+	}
+	return &EmbeddingQueue{
+		db:              pool,
+		embeddingConfig: embeddingConfig,
+		stopped:         false,
+	}
 }
 
 // Enqueue adds an embedding task to the queue with idempotency protection.
@@ -165,7 +176,8 @@ func (q *EmbeddingQueue) MarkFailed(ctx context.Context, taskID string, errMessa
 		return fmt.Errorf("get retry count: %w", err)
 	}
 
-	maxRetries := 3
+	// Use configured max retries
+	maxRetries := q.embeddingConfig.MaxRetries
 	if retryCount >= maxRetries {
 		// Move to dead letter queue
 		_, err := q.db.Exec(ctx, `
@@ -205,17 +217,21 @@ func (q *EmbeddingQueue) MarkFailed(ctx context.Context, taskID string, errMessa
 // threshold - time threshold to consider a task orphaned.
 // Returns error if reconciliation fails.
 func (q *EmbeddingQueue) Reconcile(ctx context.Context, threshold time.Duration) error {
+	// Use configured default model and version
+	defaultModel := q.embeddingConfig.DefaultModel
+	defaultVersion := q.embeddingConfig.DefaultVersion
+	
 	// Find knowledge chunks with pending embedding status that haven't been processed recently
 	_, err := q.db.Exec(ctx, `
 		INSERT INTO embedding_queue (task_id, table_name, content, tenant_id, embedding_model, embedding_version, dedupe_key, status, queued_at)
-		SELECT id, 'knowledge_chunks_1024', content, tenant_id, 'intfloat/e5-large', 1, 
-		       md5(content || 'intfloat/e5-large' || '1'), 'pending', NOW()
+		SELECT id, 'knowledge_chunks_1024', content, tenant_id, $2, $3, 
+		       md5(content || $2 || $3), 'pending', NOW()
 		FROM knowledge_chunks_1024
 		WHERE embedding_status = 'pending'
 		  AND embedding_queued_at < NOW() - $1
 		  AND embedding_processed_at IS NULL
 		ON CONFLICT (dedupe_key) DO NOTHING
-	`, threshold)
+	`, threshold, defaultModel, defaultVersion)
 
 	if err != nil {
 		return fmt.Errorf("reconcile orphaned embeddings: %w", err)

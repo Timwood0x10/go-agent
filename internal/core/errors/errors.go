@@ -39,6 +39,8 @@ var (
 	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
 	ErrServiceUnavailable = errors.New("service is temporarily unavailable")
 	ErrInvalidState       = errors.New("invalid state")
+	ErrSecretExpired      = errors.New("secret has expired")
+	ErrNotImplemented     = errors.New("feature not implemented yet")
 )
 
 // Sentinel errors for LLM module.

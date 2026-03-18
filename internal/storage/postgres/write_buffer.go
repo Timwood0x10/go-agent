@@ -18,6 +18,7 @@ type WriteBuffer struct {
 	batchSize     int
 	flushInterval time.Duration
 	queue         *EmbeddingQueue
+	embeddingConfig *EmbeddingConfig
 	mu            sync.Mutex
 	wg            sync.WaitGroup
 	stopped       bool
@@ -37,15 +38,20 @@ type WriteItem struct {
 // queue - embedding queue for async processing.
 // batchSize - number of items to batch before flushing.
 // flushInterval - maximum time between flushes.
+// embeddingConfig - embedding configuration for model and version settings.
 // Returns new WriteBuffer instance.
-func NewWriteBuffer(pool *Pool, queue *EmbeddingQueue, batchSize int, flushInterval time.Duration) *WriteBuffer {
+func NewWriteBuffer(pool *Pool, queue *EmbeddingQueue, batchSize int, flushInterval time.Duration, embeddingConfig *EmbeddingConfig) *WriteBuffer {
+	if embeddingConfig == nil {
+		embeddingConfig = DefaultEmbeddingConfig()
+	}
 	return &WriteBuffer{
-		db:            pool,
-		buffer:        make(chan *WriteItem, batchSize*2), // Double size to avoid blocking
-		batchSize:     batchSize,
-		flushInterval: flushInterval,
-		queue:         queue,
-		stopped:       false,
+		db:               pool,
+		buffer:           make(chan *WriteItem, batchSize*2), // Double size to avoid blocking
+		batchSize:        batchSize,
+		flushInterval:    flushInterval,
+		queue:            queue,
+		embeddingConfig:  embeddingConfig,
+		stopped:          false,
 	}
 }
 
@@ -175,7 +181,8 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 				return fmt.Errorf("insert experience: %w", err)
 			}
 
-			// Add more table types as needed
+		default:
+			return fmt.Errorf("unsupported table type: %s (currently only knowledge_chunks_1024 and experiences_1024 are supported)", item.Table)
 		}
 	}
 
@@ -191,8 +198,8 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 			Table:    item.Table,
 			Content:  item.Content,
 			TenantID: item.TenantID,
-			Model:    "intfloat/e5-large",
-			Version:  1,
+			Model:    b.embeddingConfig.DefaultModel,
+			Version:  b.embeddingConfig.DefaultVersion,
 		}
 		if err := b.queue.Enqueue(ctx, task); err != nil {
 			// Log error but don't fail the batch write

@@ -10,17 +10,38 @@ import (
 
 // VectorSearcher handles vector similarity search.
 type VectorSearcher struct {
-	db DBTX
+	db               DBTX
+	embeddingConfig  *EmbeddingConfig
 }
 
 // NewVectorSearcher creates a new VectorSearcher.
-func NewVectorSearcher(pool *Pool) *VectorSearcher {
-	return &VectorSearcher{db: pool.db}
+// Args:
+// pool - database connection pool.
+// embeddingConfig - embedding configuration for search limit settings.
+// Returns new VectorSearcher instance.
+func NewVectorSearcher(pool *Pool, embeddingConfig *EmbeddingConfig) *VectorSearcher {
+	if embeddingConfig == nil {
+		embeddingConfig = DefaultEmbeddingConfig()
+	}
+	return &VectorSearcher{
+		db:              pool.db,
+		embeddingConfig: embeddingConfig,
+	}
 }
 
 // NewVectorSearcherWithDB creates a new VectorSearcher with a transaction or connection.
-func NewVectorSearcherWithDB(db DBTX) *VectorSearcher {
-	return &VectorSearcher{db: db}
+// Args:
+// db - database transaction or connection.
+// embeddingConfig - embedding configuration for search limit settings.
+// Returns new VectorSearcher instance.
+func NewVectorSearcherWithDB(db DBTX, embeddingConfig *EmbeddingConfig) *VectorSearcher {
+	if embeddingConfig == nil {
+		embeddingConfig = DefaultEmbeddingConfig()
+	}
+	return &VectorSearcher{
+		db:              db,
+		embeddingConfig: embeddingConfig,
+	}
 }
 
 // SearchResult represents a vector search result.
@@ -39,8 +60,10 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 	}
 
 	// Validate limit to prevent excessive results
-	if limit <= 0 || limit > 1000 {
-		return nil, fmt.Errorf("invalid limit: %d (must be 1-1000)", limit)
+	// Use configured max vector search limit
+	maxLimit := v.embeddingConfig.MaxVectorSearchLimit
+	if limit <= 0 || limit > maxLimit {
+		return nil, fmt.Errorf("invalid limit: %d (must be 1-%d)", limit, maxLimit)
 	}
 
 	query := fmt.Sprintf(`
@@ -92,12 +115,18 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 	}
 
 	// Validate embedding dimensions
+	// Use configured max dimension or default to 2000
+	maxDimension := 2000
+	if v.embeddingConfig != nil && v.embeddingConfig.MaxVectorSearchLimit > 0 {
+		// Use a reasonable multiple of search limit as max dimension
+		maxDimension = v.embeddingConfig.MaxVectorSearchLimit * 2
+	}
 	if len(embedding) == 0 {
 		return fmt.Errorf("embedding cannot be empty")
 	}
 
-	if len(embedding) > 2000 { // Reasonable upper limit
-		return fmt.Errorf("embedding dimension too large: %d (max 2000)", len(embedding))
+	if len(embedding) > maxDimension {
+		return fmt.Errorf("embedding dimension too large: %d (max %d)", len(embedding), maxDimension)
 	}
 
 	// Validate id
@@ -159,7 +188,9 @@ func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, me
 	}
 
 	// Validate dimension (should be between 1 and 2000)
-	dim := 1536 // Default dimension for common embedding models
+	// Default dimension for common embedding models (OpenAI: 1536, e5-large: 1024)
+	// This should be configurable based on the model being used
+	dim := 1536
 	if dim < 1 || dim > 2000 {
 		return fmt.Errorf("invalid dimension: %d (must be 1-2000)", dim)
 	}

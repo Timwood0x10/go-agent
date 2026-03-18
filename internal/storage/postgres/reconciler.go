@@ -12,6 +12,7 @@ import (
 type EmbeddingReconciler struct {
 	db               *Pool
 	queue            *EmbeddingQueue
+	embeddingConfig  *EmbeddingConfig
 	interval         time.Duration
 	missingThreshold time.Duration
 	stopped          bool
@@ -21,13 +22,18 @@ type EmbeddingReconciler struct {
 // Args:
 // db - database connection pool.
 // queue - embedding queue for re-enqueuing tasks.
+// embeddingConfig - embedding configuration for model and version settings.
 // interval - time between reconciliation scans.
 // missingThreshold - time after which a task is considered orphaned.
 // Returns new EmbeddingReconciler instance.
-func NewEmbeddingReconciler(db *Pool, queue *EmbeddingQueue, interval, missingThreshold time.Duration) *EmbeddingReconciler {
+func NewEmbeddingReconciler(db *Pool, queue *EmbeddingQueue, embeddingConfig *EmbeddingConfig, interval, missingThreshold time.Duration) *EmbeddingReconciler {
+	if embeddingConfig == nil {
+		embeddingConfig = DefaultEmbeddingConfig()
+	}
 	return &EmbeddingReconciler{
 		db:               db,
 		queue:            queue,
+		embeddingConfig:  embeddingConfig,
 		interval:         interval,
 		missingThreshold: missingThreshold,
 		stopped:          false,
@@ -64,6 +70,9 @@ func (r *EmbeddingReconciler) Start(ctx context.Context) {
 func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 	slog.Debug("Starting embedding reconciliation")
 
+	// Use configured batch reconciliation limit
+	batchLimit := r.embeddingConfig.ReconcileBatchSize
+	
 	// Find knowledge chunks with pending embedding status that haven't been processed recently
 	query := `
 		SELECT id, tenant_id, content
@@ -71,10 +80,10 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 		WHERE embedding_status = 'pending'
 		  AND embedding_queued_at < NOW() - $1
 		  AND embedding_processed_at IS NULL
-		LIMIT 1000
+		LIMIT $2
 	`
 
-	rows, err := r.db.Query(ctx, query, r.missingThreshold)
+	rows, err := r.db.Query(ctx, query, r.missingThreshold, batchLimit)
 	if err != nil {
 		return err
 	}
@@ -88,14 +97,15 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 			continue
 		}
 
+		// Use configured default model and version
 		// Re-enqueue the task
 		task := &EmbeddingTask{
 			TaskID:   id,
 			Table:    "knowledge_chunks_1024",
 			Content:  content,
 			TenantID: tenantID,
-			Model:    "intfloat/e5-large",
-			Version:  1,
+			Model:    r.embeddingConfig.DefaultModel,
+			Version:  r.embeddingConfig.DefaultVersion,
 		}
 
 		if err := r.queue.Enqueue(ctx, task); err != nil {

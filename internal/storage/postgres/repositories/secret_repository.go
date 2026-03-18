@@ -7,7 +7,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +19,7 @@ import (
 // SecretRepository provides data access for encrypted sensitive data.
 // This implements secure storage and retrieval of secrets with encryption.
 type SecretRepository struct {
-	db          *sql.DB
+	db            *sql.DB
 	encryptionKey []byte
 }
 
@@ -31,7 +30,7 @@ type SecretRepository struct {
 // Returns new SecretRepository instance.
 func NewSecretRepository(db *sql.DB, encryptionKey []byte) *SecretRepository {
 	return &SecretRepository{
-		db:          db,
+		db:            db,
 		encryptionKey: encryptionKey,
 	}
 }
@@ -324,14 +323,27 @@ func (r *SecretRepository) decrypt(ciphertext []byte) ([]byte, error) {
 }
 
 // RotateKey re-encrypts all secrets with a new encryption key.
+// TODO: implement key rotation functionality (expected by 2026-04-15)
+// Implementation requirements:
+// 1. Start transaction for atomic operation
+// 2. Retrieve all secrets with current encryption key (SELECT ... FOR UPDATE)
+// 3. For each secret:
+//    a. Decrypt using old encryption key (AES-256-GCM)
+//    b. Re-encrypt using new encryption key
+//    c. Update database with new encrypted values
+//    d. Increment key_version
+// 4. Commit transaction if all succeed, rollback if any fail
+// 5. Add audit logging for key rotation events
+// 6. Test with various secret types and sizes
+// Dependencies: 
+// - Need secure key exchange mechanism for distributing new key
+// - Need rollback mechanism if rotation fails mid-way
 // Args:
 // ctx - database operation context.
-// newKey - new encryption key.
+// newKey - new encryption key (32 bytes for AES-256).
 // Returns number of updated secrets or error if operation fails.
 func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64, error) {
-	// This is a complex operation that requires careful handling
-	// For now, we'll return an error to indicate this is not implemented
-	return 0, fmt.Errorf("key rotation not implemented yet")
+	return 0, errors.ErrNotImplemented
 }
 
 // Export exports secrets (for backup purposes).
@@ -354,10 +366,28 @@ func (r *SecretRepository) Export(ctx context.Context, tenantID string) ([]byte,
 }
 
 // Import imports secrets (for restore purposes).
+// TODO: implement secret import functionality (expected by 2026-04-15)
+// Current limitation: Export only contains metadata, not actual encrypted values
+// Implementation requirements:
+// 1. Parse exported secret metadata (JSON format)
+// 2. Choose import strategy:
+//    a) Prompt user for each secret value interactively
+//    b) Provide API endpoint for secure secret value submission
+//    c) Implement key sharing mechanism between source and destination systems
+// 3. For each secret:
+//    a. Validate secret value format and constraints
+//    b. Encrypt using current encryption key (AES-256-GCM)
+//    c. Insert into database with proper tenant isolation
+//    d. Handle version compatibility if encryption algorithm differs
+// 4. Add validation to prevent duplicate secret keys within same tenant
+// 5. Add transaction support for atomic import operations
+// Dependencies:
+// - Need user interface or API for collecting actual secret values
+// - Need secure channel for transmitting secret values
 // Args:
 // ctx - database operation context.
 // tenantID - tenant identifier for isolation.
-// data - exported secrets data.
+// data - exported secrets data (JSON format, contains metadata but not actual encrypted values).
 // Returns number of imported secrets or error if import fails.
 func (r *SecretRepository) Import(ctx context.Context, tenantID string, data []byte) (int64, error) {
 	var secrets []*storage_models.Secret
@@ -365,14 +395,14 @@ func (r *SecretRepository) Import(ctx context.Context, tenantID string, data []b
 		return 0, fmt.Errorf("unmarshal secrets: %w", err)
 	}
 
+	// Current implementation validates import format only
+	// Actual secret values cannot be imported without user input or secure channel
 	var count int64
-	for _, secret := range secrets {
-		// We need to get the actual value, which isn't exported
-		// This is a limitation - for a real implementation, we'd need a different approach
+	for range secrets {
 		count++
 	}
 
-	return count, nil
+	return count, errors.ErrNotImplemented
 }
 
 // GetKeyVersion retrieves the current key version for a secret.
