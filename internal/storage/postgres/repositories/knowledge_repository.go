@@ -4,8 +4,10 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"goagent/internal/core/errors"
@@ -31,32 +33,121 @@ func NewKnowledgeRepository(db postgres.DBTX, dbPool *sql.DB) *KnowledgeReposito
 	return &KnowledgeRepository{db: db, dbPool: dbPool}
 }
 
+// float64ToVectorString converts []float64 to pgvector format string.
+func float64ToVectorString(vec []float64) string {
+	if len(vec) == 0 {
+		return "[]"
+	}
+
+	strs := make([]string, len(vec))
+	for i, v := range vec {
+		strs[i] = fmt.Sprintf("%f", v)
+	}
+	return "[" + strings.Join(strs, ",") + "]"
+}
+
+// parseVectorString converts pgvector string format to []float64.
+func parseVectorString(vecStr string) ([]float64, error) {
+	// pgvector stores vectors in text format like "[0.1,0.2,0.3,...]"
+	// or in binary format which needs special handling
+	if len(vecStr) == 0 {
+		return []float64{}, nil
+	}
+
+	// Remove brackets and split by comma
+	vecStr = strings.Trim(vecStr, "[]")
+	if vecStr == "" {
+		return []float64{}, nil
+	}
+
+	parts := strings.Split(vecStr, ",")
+	result := make([]float64, len(parts))
+	for i, part := range parts {
+		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
+		if err != nil || val != 1 {
+			return nil, fmt.Errorf("failed to parse vector component: %w", err)
+		}
+	}
+
+	return result, nil
+}
+
 // Create inserts a new knowledge chunk into the database.
 // Args:
 // ctx - database operation context.
 // chunk - knowledge chunk to create.
 // Returns error if insert operation fails.
 func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.KnowledgeChunk) error {
-	query := `
-		INSERT INTO knowledge_chunks_1024
-		(id, tenant_id, content, embedding, embedding_model, embedding_version, 
-		 embedding_status, source_type, source, metadata, document_id, 
-		 chunk_index, content_hash, access_count, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-		ON CONFLICT (content_hash) DO UPDATE SET
-			access_count = knowledge_chunks_1024.access_count + 1,
-			updated_at = NOW()
-		RETURNING id
-	`
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(chunk.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Handle nil or empty embedding
+	var embeddingStr interface{}
+	if len(chunk.Embedding) == 0 {
+		// Empty embedding: set to NULL in database
+		embeddingStr = nil
+	} else {
+		// Convert embedding vector to pgvector format
+		embeddingStr = float64ToVectorString(chunk.Embedding)
+	}
+
+	// Handle optional document_id
+	var documentID interface{}
+	if chunk.DocumentID != "" {
+		documentID = chunk.DocumentID
+	} else {
+		documentID = nil
+	}
+
+	// Build query with conditional embedding handling
+	var query string
+	var args []interface{}
+
+	if embeddingStr == nil {
+		query = `
+			INSERT INTO knowledge_chunks_1024
+			(tenant_id, content, embedding, embedding_model, embedding_version,
+			 embedding_status, source_type, source, metadata, document_id,
+			 chunk_index, content_hash, access_count, created_at, updated_at)
+			VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			ON CONFLICT (content_hash) DO UPDATE SET
+				access_count = knowledge_chunks_1024.access_count + 1,
+				updated_at = NOW()
+			RETURNING id
+		`
+		args = []interface{}{
+			chunk.TenantID, chunk.Content,
+			chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+			chunk.SourceType, chunk.Source, metadataJSON, documentID,
+			chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+			chunk.CreatedAt, chunk.UpdatedAt,
+		}
+	} else {
+		query = `
+			INSERT INTO knowledge_chunks_1024
+			(tenant_id, content, embedding, embedding_model, embedding_version,
+			 embedding_status, source_type, source, metadata, document_id,
+			 chunk_index, content_hash, access_count, created_at, updated_at)
+			VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			ON CONFLICT (content_hash) DO UPDATE SET
+				access_count = knowledge_chunks_1024.access_count + 1,
+				updated_at = NOW()
+			RETURNING id
+		`
+		args = []interface{}{
+			chunk.TenantID, chunk.Content, embeddingStr,
+			chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+			chunk.SourceType, chunk.Source, metadataJSON, documentID,
+			chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+			chunk.CreatedAt, chunk.UpdatedAt,
+		}
+	}
 
 	var id string
-	err := r.db.QueryRowContext(ctx, query,
-		chunk.ID, chunk.TenantID, chunk.Content, chunk.Embedding,
-		chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
-		chunk.SourceType, chunk.Source, chunk.Metadata, chunk.DocumentID,
-		chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
-		chunk.CreatedAt, chunk.UpdatedAt,
-	).Scan(&id)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("create knowledge chunk: %w", err)
@@ -71,6 +162,7 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.
 // ctx - database operation context.
 // chunks - knowledge chunks to create.
 // Returns error if any insert operation fails or if transaction pool is not available.
+// Note: This method fills the ID field for each chunk after successful insertion.
 func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage_models.KnowledgeChunk) error {
 	if len(chunks) == 0 {
 		return nil
@@ -91,38 +183,51 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 
 	}()
 
-	query := `
-		INSERT INTO knowledge_chunks_1024
-		(id, tenant_id, content, embedding, embedding_model, embedding_version, 
-		 embedding_status, source_type, source, metadata, document_id, 
-		 chunk_index, content_hash, access_count, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-		ON CONFLICT (content_hash) DO UPDATE SET
-			access_count = knowledge_chunks_1024.access_count + 1,
-			updated_at = NOW()
-	`
-
-	stmt, err := tx.PrepareContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("prepare statement: %w", err)
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			slog.Error("Failed to close statement", "error", err)
+	for i, chunk := range chunks {
+		// Convert metadata to JSON for database storage
+		metadataJSON, err := json.Marshal(chunk.Metadata)
+		if err != nil {
+			return fmt.Errorf("marshal metadata: %w", err)
 		}
-	}()
 
-	for _, chunk := range chunks {
-		_, err := stmt.ExecContext(ctx,
-			chunk.ID, chunk.TenantID, chunk.Content, chunk.Embedding,
+		// Convert embedding vector to pgvector format
+		embeddingStr := float64ToVectorString(chunk.Embedding)
+
+		// Handle optional document_id
+		var documentID interface{}
+		if chunk.DocumentID != "" {
+			documentID = chunk.DocumentID
+		} else {
+			documentID = nil
+		}
+
+		query := `
+			INSERT INTO knowledge_chunks_1024
+			(tenant_id, content, embedding, embedding_model, embedding_version,
+			 embedding_status, source_type, source, metadata, document_id,
+			 chunk_index, content_hash, access_count, created_at, updated_at)
+			VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			ON CONFLICT (content_hash) DO UPDATE SET
+				access_count = knowledge_chunks_1024.access_count + 1,
+				updated_at = NOW()
+			RETURNING id
+		`
+
+		var id string
+		err = tx.QueryRowContext(ctx, query,
+			chunk.TenantID, chunk.Content, embeddingStr,
 			chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
-			chunk.SourceType, chunk.Source, chunk.Metadata, chunk.DocumentID,
+			chunk.SourceType, chunk.Source, metadataJSON, documentID,
 			chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
 			chunk.CreatedAt, chunk.UpdatedAt,
-		)
+		).Scan(&id)
+
 		if err != nil {
-			return fmt.Errorf("create knowledge chunk: %w", err)
+			return fmt.Errorf("create knowledge chunk %d: %w", i, err)
 		}
+
+		// Fill the ID for the chunk
+		chunks[i].ID = id
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -143,18 +248,20 @@ func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_
 	}
 
 	query := `
-		SELECT id, tenant_id, content, embedding, embedding_model, embedding_version,
-			   embedding_status, source_type, source, metadata, document_id,
+		SELECT id, tenant_id, content, embedding::text, embedding_model, embedding_version,
+			   embedding_status, source_type, source, metadata::text, document_id,
 			   chunk_index, content_hash, access_count, created_at, updated_at
 		FROM knowledge_chunks_1024
 		WHERE id = $1
 	`
 
 	chunk := &storage_models.KnowledgeChunk{}
+	var embeddingStr, metadataStr string
+	var documentID sql.NullString
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&chunk.ID, &chunk.TenantID, &chunk.Content, &chunk.Embedding,
+		&chunk.ID, &chunk.TenantID, &chunk.Content, &embeddingStr,
 		&chunk.EmbeddingModel, &chunk.EmbeddingVersion, &chunk.EmbeddingStatus,
-		&chunk.SourceType, &chunk.Source, &chunk.Metadata, &chunk.DocumentID,
+		&chunk.SourceType, &chunk.Source, &metadataStr, &documentID,
 		&chunk.ChunkIndex, &chunk.ContentHash, &chunk.AccessCount,
 		&chunk.CreatedAt, &chunk.UpdatedAt,
 	)
@@ -166,6 +273,24 @@ func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_
 		return nil, fmt.Errorf("get knowledge chunk by id: %w", err)
 	}
 
+	// Parse embedding string to float64 array
+	chunk.Embedding, err = parseVectorString(embeddingStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse embedding: %w", err)
+	}
+
+	// Parse metadata JSON string to map
+	if metadataStr != "" {
+		if err := json.Unmarshal([]byte(metadataStr), &chunk.Metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata: %w", err)
+		}
+	}
+
+	// Handle nullable document_id
+	if documentID.Valid {
+		chunk.DocumentID = documentID.String
+	}
+
 	return chunk, nil
 }
 
@@ -175,18 +300,35 @@ func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_
 // chunk - knowledge chunk with updated values.
 // Returns error if update operation fails.
 func (r *KnowledgeRepository) Update(ctx context.Context, chunk *storage_models.KnowledgeChunk) error {
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(chunk.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding vector to pgvector format
+	embeddingStr := float64ToVectorString(chunk.Embedding)
+
+	// Handle optional document_id
+	var documentID interface{}
+	if chunk.DocumentID != "" {
+		documentID = chunk.DocumentID
+	} else {
+		documentID = nil
+	}
+
 	query := `
 		UPDATE knowledge_chunks_1024
-		SET content = $2, embedding = $3, embedding_status = $4,
+		SET content = $2, embedding = $3::vector, embedding_status = $4,
 			source_type = $5, source = $6, metadata = $7,
-			document_id = $8, chunk_index = $9, updated_at = NOW()
+			document_id = $8, chunk_index = $9, access_count = $10, updated_at = NOW()
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		chunk.ID, chunk.Content, chunk.Embedding, chunk.EmbeddingStatus,
-		chunk.SourceType, chunk.Source, chunk.Metadata,
-		chunk.DocumentID, chunk.ChunkIndex,
+		chunk.ID, chunk.Content, embeddingStr, chunk.EmbeddingStatus,
+		chunk.SourceType, chunk.Source, metadataJSON,
+		documentID, chunk.ChunkIndex, chunk.AccessCount,
 	)
 	if err != nil {
 		return fmt.Errorf("update knowledge chunk: %w", err)

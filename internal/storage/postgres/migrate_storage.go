@@ -31,8 +31,7 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 			content_hash TEXT UNIQUE,
 			access_count INTEGER DEFAULT 0,
 			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW(),
-			CHECK (embedding_dim = 1024)
+			updated_at TIMESTAMP DEFAULT NOW()
 		)`,
 
 		// Enable RLS for knowledge_chunks_1024
@@ -92,10 +91,6 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 		`CREATE POLICY tenant_isolation_experiences_1024 ON experiences_1024
 		USING (tenant_id = current_setting('app.tenant_id', true))`,
 
-		`CREATE TRIGGER tsvector_update_experiences_1024 BEFORE INSERT OR UPDATE ON experiences_1024
-		FOR EACH ROW EXECUTE FUNCTION
-		tsvector_update_trigger(tsv, 'pg_catalog.simple', COALESCE(input, '') || ' ' || COALESCE(output, ''))`,
-
 		// Create indexes for experiences_1024
 		`CREATE INDEX IF NOT EXISTS idx_experiences_1024_embedding 
 		ON experiences_1024 
@@ -139,10 +134,6 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 
 		`CREATE POLICY tenant_isolation_tools ON tools
 		USING (tenant_id = current_setting('app.tenant_id', true))`,
-
-		`CREATE TRIGGER tsvector_update_tools BEFORE INSERT OR UPDATE ON tools
-		FOR EACH ROW EXECUTE FUNCTION
-		tsvector_update_trigger(tsv, 'pg_catalog.simple', COALESCE(name, '') || ' ' || COALESCE(description, ''))`,
 
 		// Create indexes for tools
 		`CREATE INDEX IF NOT EXISTS idx_tools_tenant_name 
