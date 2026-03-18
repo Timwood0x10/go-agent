@@ -87,7 +87,7 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	reconciledCount := 0
 	for rows.Next() {

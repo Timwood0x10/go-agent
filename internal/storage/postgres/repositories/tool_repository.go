@@ -208,7 +208,7 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
@@ -256,7 +256,7 @@ func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID st
 	if err != nil {
 		return nil, fmt.Errorf("keyword search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
@@ -301,7 +301,7 @@ func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int
 	if err != nil {
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
@@ -342,7 +342,7 @@ func (r *ToolRepository) ListByAgentType(ctx context.Context, agentType, tenantI
 	if err != nil {
 		return nil, fmt.Errorf("list tools by agent type: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
@@ -451,7 +451,7 @@ func (r *ToolRepository) ListByTags(ctx context.Context, tags []string, tenantID
 	if err != nil {
 		return nil, fmt.Errorf("list tools by tags: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {

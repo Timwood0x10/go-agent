@@ -53,7 +53,9 @@ func TestTaskPlanner_Plan(t *testing.T) {
 	planner := NewTaskPlanner(3)
 
 	profile := &models.UserProfile{
-		Style:     []models.StyleTag{models.StyleCasual},
+		Preferences: map[string]any{
+			"style": []models.StyleTag{models.StyleCasual},
+		},
 		Occasions: []models.Occasion{models.OccasionDaily},
 		Budget:    models.NewPriceRange(100, 500),
 	}

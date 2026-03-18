@@ -240,7 +240,7 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	chunks := make([]*storage_models.KnowledgeChunk, 0)
 	for rows.Next() {
@@ -292,7 +292,7 @@ func (r *KnowledgeRepository) SearchByKeyword(ctx context.Context, query, tenant
 	if err != nil {
 		return nil, fmt.Errorf("keyword search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	chunks := make([]*storage_models.KnowledgeChunk, 0)
 	for rows.Next() {
@@ -338,7 +338,7 @@ func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, te
 	if err != nil {
 		return nil, fmt.Errorf("list chunks by document: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	chunks := make([]*storage_models.KnowledgeChunk, 0)
 	for rows.Next() {

@@ -66,12 +66,30 @@ func NewTaskPlannerWithConfig(maxTasks int, subAgents []SubAgentConfig) TaskPlan
 
 // Plan creates tasks based on user profile.
 func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]*models.Task, error) {
-	// TODO: Implement task planning logic
+	if profile == nil {
+		return nil, fmt.Errorf("profile cannot be nil")
+	}
+	
 	tasks := make([]*models.Task, 0)
-
+	
+	// Create a default task for processing user input
+	task := &models.Task{
+		TaskID:      generateTaskID(),
+		TaskType:    models.AgentTypeTop,
+		AgentType:   models.AgentTypeTop,
+		UserProfile: profile,
+		Payload:     map[string]any{"action": "analyze_profile"},
+		Priority:    1,
+		CreatedAt:   time.Now(),
+	}
+	
+	tasks = append(tasks, task)
+	
 	// Limit total tasks
-	// TODO: Implement task planning logic
-
+	if len(tasks) > p.maxTasks {
+		tasks = tasks[:p.maxTasks]
+	}
+	
 	return tasks, nil
 }
 

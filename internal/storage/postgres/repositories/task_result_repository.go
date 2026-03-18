@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"goagent/internal/core/errors"
 	storage_models "goagent/internal/storage/postgres/models"
@@ -208,7 +209,11 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	results := make([]*storage_models.TaskResult, 0)
 	for rows.Next() {
@@ -267,7 +272,11 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 	if err != nil {
 		return nil, fmt.Errorf("list task results by type: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	results := make([]*storage_models.TaskResult, 0)
 	for rows.Next() {
@@ -321,7 +330,11 @@ func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, ten
 	if err != nil {
 		return nil, fmt.Errorf("list task results by session: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	results := make([]*storage_models.TaskResult, 0)
 	for rows.Next() {
@@ -438,7 +451,7 @@ func (r *TaskResultRepository) GetStatistics(ctx context.Context, tenantID strin
 	if err != nil {
 		return nil, fmt.Errorf("get task result statistics: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make(map[string]int64)
 	for rows.Next() {

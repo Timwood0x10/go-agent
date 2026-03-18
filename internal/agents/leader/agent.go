@@ -205,9 +205,16 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	a.setStatus(models.AgentStatusBusy)
 	defer a.setStatus(models.AgentStatusReady)
 
-	strInput, ok := input.(string)
-	if !ok {
-		return nil, errors.ErrInvalidInput
+	var strInput string
+	switch v := input.(type) {
+	case string:
+		strInput = v
+	case []byte:
+		strInput = string(v)
+	case fmt.Stringer:
+		strInput = v.String()
+	default:
+		return nil, fmt.Errorf("%w: expected string, []byte, or fmt.Stringer, got %T", errors.ErrInvalidInput, input)
 	}
 
 	// Memory: Initialize session and add user input
@@ -226,12 +233,10 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			slog.Warn("Failed to add user message to memory", "error", err)
 		}
 
-		// Build input with context
+// Build input with context
 		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, a.sessionID)
 		if err != nil {
 			slog.Warn("Failed to build context, using raw input", "error", err)
-			// nolint: ineffectualassign // Kept for potential future use
-			inputWithContext = strInput
 		} else {
 			strInput = inputWithContext
 		}

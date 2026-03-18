@@ -41,7 +41,8 @@ func TestSessionMemory(t *testing.T) {
 
 	t.Run("add message", func(t *testing.T) {
 		memory := NewSessionMemory(100, time.Minute)
-		// Test code: memory.Set is used to set test datan	// nolint: errcheck // This is intentional in test code		memory.Set(context.Background(), "sess1", "user1", nil)
+		// Create session first
+		memory.Set(context.Background(), "sess1", "user1", nil)
 
 		err := memory.AddMessage(context.Background(), "sess1", Message{Role: "user", Content: "test"})
 		if err != nil {
@@ -51,7 +52,8 @@ func TestSessionMemory(t *testing.T) {
 
 	t.Run("delete session", func(t *testing.T) {
 		memory := NewSessionMemory(100, time.Minute)
-		// Test code: memory.Set is used to set test datan	// nolint: errcheck // This is intentional in test code		memory.Set(context.Background(), "sess1", "user1", nil)
+		// Create session first
+		memory.Set(context.Background(), "sess1", "user1", nil)
 
 		err := memory.Delete(context.Background(), "sess1")
 		if err != nil {
@@ -66,7 +68,8 @@ func TestSessionMemory(t *testing.T) {
 
 	t.Run("size", func(t *testing.T) {
 		memory := NewSessionMemory(100, time.Minute)
-		// Test code: memory.Set is used to set test datan	// nolint: errcheck // This is intentional in test code		memory.Set(context.Background(), "sess1", "user1", nil)
+		// Create session first
+		memory.Set(context.Background(), "sess1", "user1", nil)
 
 		if memory.Size() != 1 {
 			t.Errorf("expected size 1, got %d", memory.Size())

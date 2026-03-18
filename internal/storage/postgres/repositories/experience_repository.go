@@ -168,7 +168,7 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	experiences := make([]*storage_models.Experience, 0)
 	for rows.Next() {
@@ -216,7 +216,7 @@ func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID
 	if err != nil {
 		return nil, fmt.Errorf("list experiences by type: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	experiences := make([]*storage_models.Experience, 0)
 	for rows.Next() {
@@ -289,7 +289,7 @@ func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantI
 	if err != nil {
 		return nil, fmt.Errorf("list experiences by agent: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	experiences := make([]*storage_models.Experience, 0)
 	for rows.Next() {
@@ -384,7 +384,7 @@ func (r *ExperienceRepository) GetStatistics(ctx context.Context, tenantID strin
 	if err != nil {
 		return nil, fmt.Errorf("get experience statistics: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make(map[string]int64)
 	for rows.Next() {

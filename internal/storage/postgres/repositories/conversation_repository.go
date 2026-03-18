@@ -348,7 +348,7 @@ func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID
 	if err != nil {
 		return nil, fmt.Errorf("get recent sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	sessions := make([]string, 0)
 	for rows.Next() {

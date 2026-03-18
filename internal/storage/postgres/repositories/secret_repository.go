@@ -156,7 +156,7 @@ func (r *SecretRepository) List(ctx context.Context, tenantID string) ([]*storag
 	if err != nil {
 		return nil, fmt.Errorf("list secrets: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	secrets := make([]*storage_models.Secret, 0)
 	for rows.Next() {
