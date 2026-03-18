@@ -102,10 +102,11 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 
 // Write queues a write operation for batch processing.
 // This is non-blocking and returns immediately if the buffer has capacity.
+// If the buffer is full, it returns an error instead of spawning a goroutine.
 // Args:
 // ctx - context for cancellation.
 // item - write operation to queue.
-// Returns error if buffer is stopped or item is invalid.
+// Returns error if buffer is stopped, item is invalid, or buffer is full.
 func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 	if b.stopped {
 		return errors.ErrServiceUnavailable
@@ -121,24 +122,9 @@ func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Buffer is full, trigger immediate flush
-		go func() {
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case b.buffer <- item:
-					return
-				case <-ticker.C:
-					if b.stopped {
-						return
-					}
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-		return nil
+		// Buffer is full, return error immediately
+		// This prevents goroutine leaks and provides backpressure
+		return errors.ErrBufferFull
 	}
 }
 

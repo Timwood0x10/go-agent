@@ -319,8 +319,14 @@ func TestLoadFromEnvInvalidPort(t *testing.T) {
 		},
 	}
 
-	os.Setenv("SERVER_PORT", "invalid")
-	defer os.Unsetenv("SERVER_PORT")
+	if err := os.Setenv("SERVER_PORT", "invalid"); err != nil {
+		t.Fatalf("Failed to set SERVER_PORT: %v", err)
+	}
+	defer func() {
+		if err := os.Unsetenv("SERVER_PORT"); err != nil {
+			t.Logf("Failed to unset SERVER_PORT: %v", err)
+		}
+	}()
 
 	// Should not fail, just ignore invalid value
 	if err := LoadFromEnv(cfg); err != nil {

@@ -9,21 +9,26 @@ import (
 	"time"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
 // KnowledgeRepository provides data access for knowledge chunks.
 // This implements CRUD operations and vector search for RAG knowledge base.
+// It depends on the DBTX interface to support both database connections and transactions.
+// dbPool is retained for transaction operations that require BeginTx.
 type KnowledgeRepository struct {
-	db *sql.DB
+	db      postgres.DBTX
+	dbPool  *sql.DB
 }
 
 // NewKnowledgeRepository creates a new KnowledgeRepository instance.
 // Args:
-// db - database connection.
+// db - database connection or transaction implementing DBTX interface.
+// dbPool - optional database pool for transaction operations (can be nil for transaction-bound repositories).
 // Returns new KnowledgeRepository instance.
-func NewKnowledgeRepository(db *sql.DB) *KnowledgeRepository {
-	return &KnowledgeRepository{db: db}
+func NewKnowledgeRepository(db postgres.DBTX, dbPool *sql.DB) *KnowledgeRepository {
+	return &KnowledgeRepository{db: db, dbPool: dbPool}
 }
 
 // Create inserts a new knowledge chunk into the database.
@@ -65,13 +70,17 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.
 // Args:
 // ctx - database operation context.
 // chunks - knowledge chunks to create.
-// Returns error if any insert operation fails.
+// Returns error if any insert operation fails or if transaction pool is not available.
 func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage_models.KnowledgeChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
+	if r.dbPool == nil {
+		return errors.ErrNoTransaction
+	}
+
+	tx, err := r.dbPool.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -123,12 +132,16 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	return nil
 }
 
-// GetByID retrieves a knowledge chunk by its ID.
+// GetByID retrieves a knowledge chunk by ID.
 // Args:
 // ctx - database operation context.
-// id - knowledge chunk identifier.
-// Returns knowledge chunk or error if not found.
+// id - knowledge chunk ID, must be non-empty.
+// Returns knowledge chunk or error if not found or invalid argument.
 func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_models.KnowledgeChunk, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
 	query := `
 		SELECT id, tenant_id, content, embedding, embedding_model, embedding_version,
 			   embedding_status, source_type, source, metadata, document_id,

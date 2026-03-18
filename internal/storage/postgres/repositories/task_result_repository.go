@@ -9,20 +9,22 @@ import (
 	"log/slog"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
 // TaskResultRepository provides data access for task execution results.
 // This implements CRUD operations and vector search for task results.
+// It depends on the DBTX interface to support both database connections and transactions.
 type TaskResultRepository struct {
-	db *sql.DB
+	db postgres.DBTX
 }
 
 // NewTaskResultRepository creates a new TaskResultRepository instance.
 // Args:
-// db - database connection.
+// db - database connection or transaction implementing DBTX interface.
 // Returns new TaskResultRepository instance.
-func NewTaskResultRepository(db *sql.DB) *TaskResultRepository {
+func NewTaskResultRepository(db postgres.DBTX) *TaskResultRepository {
 	return &TaskResultRepository{db: db}
 }
 
@@ -69,12 +71,16 @@ func (r *TaskResultRepository) Create(ctx context.Context, result *storage_model
 	return nil
 }
 
-// GetByID retrieves a task result by its ID.
+// GetByID retrieves a task result by ID.
 // Args:
 // ctx - database operation context.
-// id - task result identifier.
-// Returns task result or error if not found.
+// id - task result ID, must be non-empty.
+// Returns task result or error if not found or invalid argument.
 func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage_models.TaskResult, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
 	query := `
 		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
 			   embedding_model, embedding_version, status, error, latency_ms, metadata, created_at

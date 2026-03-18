@@ -7,20 +7,22 @@ import (
 	"fmt"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
 // ExperienceRepository provides data access for agent experiences.
 // This implements CRUD operations and vector search for experience storage.
+// It depends on the DBTX interface to support both database connections and transactions.
 type ExperienceRepository struct {
-	db *sql.DB
+	db postgres.DBTX
 }
 
 // NewExperienceRepository creates a new ExperienceRepository instance.
 // Args:
-// db - database connection.
+// db - database connection or transaction implementing DBTX interface.
 // Returns new ExperienceRepository instance.
-func NewExperienceRepository(db *sql.DB) *ExperienceRepository {
+func NewExperienceRepository(db postgres.DBTX) *ExperienceRepository {
 	return &ExperienceRepository{db: db}
 }
 
@@ -54,12 +56,16 @@ func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.E
 	return nil
 }
 
-// GetByID retrieves an experience by its ID.
+// GetByID retrieves an experience by ID.
 // Args:
 // ctx - database operation context.
-// id - experience identifier.
-// Returns experience or error if not found.
+// id - experience ID, must be non-empty.
+// Returns experience or error if not found or invalid argument.
 func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage_models.Experience, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
 	query := `
 		SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
 			   score, success, agent_id, metadata, decay_at, created_at

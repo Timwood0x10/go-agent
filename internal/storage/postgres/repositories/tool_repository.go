@@ -7,20 +7,22 @@ import (
 	"fmt"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
 // ToolRepository provides data access for tool definitions.
 // This implements CRUD operations and semantic search for tools.
+// It depends on the DBTX interface to support both database connections and transactions.
 type ToolRepository struct {
-	db *sql.DB
+	db postgres.DBTX
 }
 
 // NewToolRepository creates a new ToolRepository instance.
 // Args:
-// db - database connection.
+// db - database connection or transaction implementing DBTX interface.
 // Returns new ToolRepository instance.
-func NewToolRepository(db *sql.DB) *ToolRepository {
+func NewToolRepository(db postgres.DBTX) *ToolRepository {
 	return &ToolRepository{db: db}
 }
 
@@ -63,12 +65,16 @@ func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) 
 	return nil
 }
 
-// GetByID retrieves a tool by its ID.
+// GetByID retrieves a tool by ID.
 // Args:
 // ctx - database operation context.
-// id - tool identifier.
-// Returns tool or error if not found.
+// id - tool ID, must be non-empty.
+// Returns tool or error if not found or invalid argument.
 func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_models.Tool, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
 	query := `
 		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
 			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at

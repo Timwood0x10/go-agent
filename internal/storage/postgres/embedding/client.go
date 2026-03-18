@@ -284,8 +284,13 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 	if err != nil {
 		return nil, fmt.Errorf("call service: %w", err)
 	}
-	defer resp.Body.Close()
-	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Response body close error is logged but not critical
+			slog.Error("Failed to close response body", "error", err)
+		}
+	}()
+	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
@@ -318,8 +323,13 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("call service: %w", err)
 	}
-	defer resp.Body.Close()
-	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Response body close error is logged but not critical
+			slog.Error("Failed to close response body", "error", err)
+		}
+	}()
+	
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("service returned status %d", resp.StatusCode)
 	}

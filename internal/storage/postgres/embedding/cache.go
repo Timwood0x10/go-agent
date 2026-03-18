@@ -174,6 +174,14 @@ func (c *EmbeddingCache) Clear(ctx context.Context) error {
 	return nil
 }
 
+// Close stops the cache and cleans up resources.
+// This should be called when the cache is no longer needed to prevent goroutine leaks.
+func (c *EmbeddingCache) Close() {
+	if c.memory != nil {
+		c.memory.Close()
+	}
+}
+
 // GetStats returns cache statistics.
 func (c *EmbeddingCache) GetStats(ctx context.Context) (*CacheStats, error) {
 	if !c.enabled {
@@ -239,8 +247,12 @@ func sha256Sum(data []byte) [32]byte {
 
 // MemoryCache provides in-memory caching as a fallback.
 type MemoryCache struct {
-	mu    sync.RWMutex
-	items map[string]cacheItem
+	mu       sync.RWMutex
+	items    map[string]cacheItem
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	stopOnce sync.Once
 }
 
 type cacheItem struct {
@@ -249,13 +261,34 @@ type cacheItem struct {
 }
 
 // NewMemoryCache creates a new in-memory cache.
+// The cleanup goroutine runs periodically to remove expired items.
 func NewMemoryCache() *MemoryCache {
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &MemoryCache{
-		items: make(map[string]cacheItem),
+		items:  make(map[string]cacheItem),
+		ctx:    ctx,
+		cancel: cancel,
 	}
-	// Start cleanup goroutine
+	
+	// Start cleanup goroutine with proper lifecycle management
+	m.wg.Add(1)
 	go m.cleanup()
+	
 	return m
+}
+
+// Close stops the cleanup goroutine and cleans up resources.
+// This should be called when the cache is no longer needed to prevent goroutine leaks.
+func (m *MemoryCache) Close() {
+	m.stopOnce.Do(func() {
+		m.cancel()
+		m.wg.Wait()
+		
+		// Clear all items
+		m.mu.Lock()
+		m.items = make(map[string]cacheItem)
+		m.mu.Unlock()
+	})
 }
 
 // Get retrieves a value from memory cache.
@@ -311,19 +344,29 @@ func (m *MemoryCache) Keys(pattern string) []string {
 }
 
 // cleanup removes expired items periodically.
+// This goroutine runs until the context is cancelled or Close is called.
 func (m *MemoryCache) cleanup() {
+	defer m.wg.Done()
+	
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		m.mu.Lock()
-		now := time.Now()
-		for k, item := range m.items {
-			if now.After(item.expiration) {
-				delete(m.items, k)
+	for {
+		select {
+		case <-m.ctx.Done():
+			// Context cancelled, stop cleanup
+			return
+			
+		case <-ticker.C:
+			m.mu.Lock()
+			now := time.Now()
+			for k, item := range m.items {
+				if now.After(item.expiration) {
+					delete(m.items, k)
+				}
 			}
+			m.mu.Unlock()
 		}
-		m.mu.Unlock()
 	}
 }
 

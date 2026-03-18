@@ -9,20 +9,22 @@ import (
 	"time"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
 // ConversationRepository provides data access for conversation history.
 // This implements CRUD operations for storing and retrieving conversation messages.
+// It depends on the DBTX interface to support both database connections and transactions.
 type ConversationRepository struct {
-	db *sql.DB
+	db postgres.DBTX
 }
 
 // NewConversationRepository creates a new ConversationRepository instance.
 // Args:
-// db - database connection.
+// db - database connection or transaction implementing DBTX interface.
 // Returns new ConversationRepository instance.
-func NewConversationRepository(db *sql.DB) *ConversationRepository {
+func NewConversationRepository(db postgres.DBTX) *ConversationRepository {
 	return &ConversationRepository{db: db}
 }
 
@@ -53,12 +55,16 @@ func (r *ConversationRepository) Create(ctx context.Context, conv *storage_model
 	return nil
 }
 
-// GetByID retrieves a conversation message by its ID.
+// GetByID retrieves a conversation by ID.
 // Args:
 // ctx - database operation context.
-// id - conversation message identifier.
-// Returns conversation message or error if not found.
+// id - conversation ID, must be non-empty.
+// Returns conversation or error if not found or invalid argument.
 func (r *ConversationRepository) GetByID(ctx context.Context, id string) (*storage_models.Conversation, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
 	query := `
 		SELECT id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at
 		FROM conversations
