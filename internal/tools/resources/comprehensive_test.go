@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package resources
 
 import (
@@ -2049,3 +2050,6 @@ func (e *errorWeatherProvider) GetCurrent(ctx context.Context, location string) 
 func (e *errorWeatherProvider) GetForecast(ctx context.Context, location string, days int) ([]*WeatherData, error) {
 	return nil, errors.New("forecast failed")
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

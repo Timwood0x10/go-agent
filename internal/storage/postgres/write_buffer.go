@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -156,7 +157,12 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slog.Error("Failed to rollback transaction", "error", err)
+		}
+
+	}()
 
 	// Batch insert into database
 	for _, item := range batch {

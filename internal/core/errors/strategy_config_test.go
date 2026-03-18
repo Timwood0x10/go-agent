@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package errors
 
 import (
@@ -226,3 +227,6 @@ func TestGetAlertMessage(t *testing.T) {
 		})
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

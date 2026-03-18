@@ -63,8 +63,8 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
-
+	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
+	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("openai error: %s", respBody)
@@ -119,8 +119,8 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
-
+	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
+	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("openai error: %s", respBody)

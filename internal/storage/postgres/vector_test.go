@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -388,3 +389,5 @@ func TestVectorSearcher_Integration(t *testing.T) {
 		_ = searcher.DeleteEmbedding(context.Background(), "integration_test", "embedding-2")
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

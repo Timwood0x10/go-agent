@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package engine
 
 import (
@@ -103,3 +104,5 @@ func TestReloader(t *testing.T) {
 	// Skip tests that require full setup
 	t.Skip("Reloader tests require full setup")
 }
+
+// nolint: errcheck // Test code may ignore return values

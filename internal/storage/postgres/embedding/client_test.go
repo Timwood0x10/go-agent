@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package embedding
 
 import (
@@ -226,3 +227,5 @@ func TestCacheStats(t *testing.T) {
 		t.Errorf("TotalKeys should be 0 initially, got %d", stats.TotalKeys)
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

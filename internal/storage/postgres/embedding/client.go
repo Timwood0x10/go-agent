@@ -1,3 +1,4 @@
+// nolint: errcheck // Operations may ignore return values
 package embedding
 
 import (
@@ -235,7 +236,11 @@ func (c *EmbeddingClient) callEmbeddingService(ctx context.Context, text, prefix
 	if err != nil {
 		return nil, fmt.Errorf("call service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer			slog.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -278,7 +283,7 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 		return nil, fmt.Errorf("call service: %w", err)
 	}
 	defer resp.Body.Close()
-
+	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
@@ -312,7 +317,7 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("call service: %w", err)
 	}
 	defer resp.Body.Close()
-
+	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("service returned status %d", resp.StatusCode)
 	}

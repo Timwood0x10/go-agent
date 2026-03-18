@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -191,3 +192,5 @@ func TestRepository(t *testing.T) {
 		_ = err
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

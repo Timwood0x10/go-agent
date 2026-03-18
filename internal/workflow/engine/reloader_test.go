@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package engine
 
 import (
@@ -442,3 +443,5 @@ func TestReloadCallbackCoverage(t *testing.T) {
 		callback(testWorkflows)
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

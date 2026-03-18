@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -93,3 +94,5 @@ func TestVectorSearcher_Mock(t *testing.T) {
 	// Real database connection is needed for proper testing
 	t.Skip("Skipping VectorSearcher tests - requires real database connection")
 }
+
+// nolint: errcheck // Test code may ignore return values

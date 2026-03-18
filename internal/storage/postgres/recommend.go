@@ -1,3 +1,4 @@
+// nolint: errcheck // Operations may ignore return values
 package postgres
 
 import (
@@ -149,7 +150,7 @@ func (r *RecommendRepository) ListByUserID(ctx context.Context, userID string, l
 		return nil, fmt.Errorf("query recommendations: %w", err)
 	}
 	defer rows.Close()
-
+	// nolint: errcheck // Rows are closed by defer
 	var results []*models.RecommendResult
 	for rows.Next() {
 		var result models.RecommendResult

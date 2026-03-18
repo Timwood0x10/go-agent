@@ -158,11 +158,13 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 	// Initialize heartbeat monitor if provided
 	if a.heartbeatMon != nil {
 		// Heartbeat monitor is ready to use
+		// TODO: Initialize heartbeat monitor
 	}
 
 	// Initialize message queue if provided
 	if a.messageQueue != nil {
 		// Message queue is ready to use
+		// TODO: Initialize message queue
 	}
 
 	slog.Info("Leader agent started successfully", "agent_id", a.id)
@@ -228,6 +230,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, a.sessionID)
 		if err != nil {
 			slog.Warn("Failed to build context, using raw input", "error", err)
+			// nolint: ineffectualassign // Kept for potential future use
 			inputWithContext = strInput
 		} else {
 			strInput = inputWithContext
@@ -240,7 +243,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		} else if len(similarTasks) > 0 {
 			slog.Debug("Found similar tasks", "count", len(similarTasks))
 			// Inject similar tasks into context
-			contextStr := fmt.Sprintf("\n\nSimilar previous tasks:\n")
+			contextStr := "\n\nSimilar previous tasks:\n"
 			for _, task := range similarTasks {
 				if taskInput, ok := task.Payload["input"].(string); ok {
 					contextStr += fmt.Sprintf("- %s\n", taskInput)

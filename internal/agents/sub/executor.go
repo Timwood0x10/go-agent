@@ -190,7 +190,7 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 	}
 
 	// Check if this is a travel request - use Preferences map
-	if profile.Preferences != nil && len(profile.Preferences) > 0 {
+	if len(profile.Preferences) > 0 {
 		// Copy all preferences to promptData (lowercase keys)
 		for k, v := range profile.Preferences {
 			promptData[k] = v

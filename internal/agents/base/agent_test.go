@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package base
 
 import (
@@ -457,3 +458,5 @@ func TestConfigValidation(t *testing.T) {
 		})
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

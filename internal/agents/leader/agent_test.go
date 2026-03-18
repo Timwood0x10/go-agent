@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package leader
 
 import (
@@ -337,11 +338,15 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Start then set to busy
-	agent.Start(context.Background())
+	if err := agent.Start(context.Background()); err != nil {
+		t.Errorf("Start() error = %v", err)
+	}
 	// Note: can't easily set to busy without proper implementation
 
 	// Process after stop should auto-start
-	agent.Stop(context.Background())
+	if err := agent.Stop(context.Background()); err != nil {
+		t.Errorf("Stop() error = %v", err)
+	}
 	result, err := agent.Process(context.Background(), "test")
 	if err != nil {
 		t.Errorf("Process() error = %v", err)
@@ -425,3 +430,5 @@ func TestLeaderAgent_Heartbeat(t *testing.T) {
 		t.Error("IsAlive() should return true after heartbeat")
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

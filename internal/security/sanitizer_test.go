@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package security
 
 import (
@@ -36,3 +37,5 @@ func TestSafeLogger(t *testing.T) {
 		t.Error("Expected password to be masked")
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

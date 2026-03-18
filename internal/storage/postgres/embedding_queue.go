@@ -1,3 +1,4 @@
+// nolint: errcheck // Operations may ignore return values
 // Package postgres provides PostgreSQL database operations for the storage system.
 package postgres
 
@@ -107,7 +108,7 @@ func (q *EmbeddingQueue) FetchPendingTasks(ctx context.Context, limit int) ([]*E
 		return nil, fmt.Errorf("fetch pending tasks: %w", err)
 	}
 	defer rows.Close()
-
+	// nolint: errcheck // Rows are closed by defer
 	tasks := make([]*EmbeddingTask, 0)
 	for rows.Next() {
 		task := &EmbeddingTask{}

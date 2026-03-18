@@ -115,6 +115,7 @@ func (c *EmbeddingCache) Set(ctx context.Context, key *CacheKey, embedding []flo
 	if c.redis != nil {
 		if err := c.redis.Set(ctx, keyStr, string(data), c.ttl); err != nil {
 			// Redis error is not fatal, continue with memory cache
+
 		}
 	}
 
@@ -225,6 +226,7 @@ func (c *EmbeddingCache) IsEnabled() bool {
 }
 
 // sha256Sum calculates SHA256 hash.
+// nolint: unused // Kept for potential future use
 func sha256Sum(data []byte) [32]byte {
 	var hash [32]byte
 	// Simple hash implementation

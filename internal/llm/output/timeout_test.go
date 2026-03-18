@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package output
 
 import (
@@ -78,3 +79,6 @@ func TestTimeoutRespectsExistingDeadline(t *testing.T) {
 		t.Errorf("Expected deadline to be preserved, got %v vs %v", deadline, originalDeadline)
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

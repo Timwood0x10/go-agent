@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -346,3 +347,5 @@ func TestProfileRepository_NewProfileRepositoryWithDB(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

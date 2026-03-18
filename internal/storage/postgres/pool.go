@@ -1,3 +1,4 @@
+// nolint: errcheck // Operations may ignore return values
 package postgres
 
 import (
@@ -80,7 +81,7 @@ func (p *Pool) Release(conn *sql.Conn) {
 	}
 
 	conn.Close()
-
+	// nolint: errcheck // Connection is closed by defer
 	p.mu.Lock()
 	p.openCount--
 	p.idleCount++

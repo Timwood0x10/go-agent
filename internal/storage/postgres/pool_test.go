@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -434,3 +435,5 @@ func TestManagedRows(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"goagent/internal/core/errors"
@@ -74,7 +75,12 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slog.Error("Failed to rollback transaction", "error", err)
+		}
+
+	}()
 
 	query := `
 		INSERT INTO knowledge_chunks_1024
@@ -91,7 +97,11 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err != nil {
 		return fmt.Errorf("prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			slog.Error("Failed to close statement", "error", err)
+		}
+	}()
 
 	for _, chunk := range chunks {
 		_, err := stmt.ExecContext(ctx,

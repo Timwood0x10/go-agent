@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 // Package memory provides unified memory management for the StyleAgent framework.
 package memory
 
@@ -485,3 +486,6 @@ func countOccurrences(s, substr string) int {
 	}
 	return count
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

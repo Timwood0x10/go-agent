@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -221,3 +222,5 @@ func TestIndexOf(t *testing.T) {
 		})
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

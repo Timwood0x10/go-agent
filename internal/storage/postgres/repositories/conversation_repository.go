@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"goagent/internal/core/errors"
@@ -100,7 +101,11 @@ func (r *ConversationRepository) GetBySession(ctx context.Context, sessionID, te
 	if err != nil {
 		return nil, fmt.Errorf("get conversations by session: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	conversations := make([]*storage_models.Conversation, 0)
 	for rows.Next() {
@@ -188,7 +193,11 @@ func (r *ConversationRepository) GetByUser(ctx context.Context, userID, tenantID
 	if err != nil {
 		return nil, fmt.Errorf("get conversations by user: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	conversations := make([]*storage_models.Conversation, 0)
 	for rows.Next() {
@@ -226,7 +235,11 @@ func (r *ConversationRepository) GetByAgent(ctx context.Context, agentID, tenant
 	if err != nil {
 		return nil, fmt.Errorf("get conversations by agent: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	conversations := make([]*storage_models.Conversation, 0)
 	for rows.Next() {

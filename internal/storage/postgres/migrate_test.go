@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -276,3 +277,5 @@ func TestMigrate_Integration(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

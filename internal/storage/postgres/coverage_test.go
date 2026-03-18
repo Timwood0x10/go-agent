@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -561,3 +562,5 @@ func TestProfileRepository_Coverage(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package observability
 
 import (
@@ -331,3 +332,5 @@ func TestLogTracer_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

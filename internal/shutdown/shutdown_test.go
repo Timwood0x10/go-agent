@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package shutdown
 
 import (
@@ -136,3 +137,5 @@ func TestSignalHandler(t *testing.T) {
 		// Just verify no panic
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

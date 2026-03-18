@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package config
 
 import (
@@ -166,29 +167,80 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 
 	// Set environment variables
-	os.Setenv("SERVER_HOST", "0.0.0.0")
-	os.Setenv("SERVER_PORT", "9000")
-	os.Setenv("LLM_API_KEY", "test-api-key")
-	os.Setenv("LLM_PROVIDER", "openai")
-	os.Setenv("LLM_BASE_URL", "https://api.openai.com")
-	os.Setenv("LLM_MODEL", "gpt-4")
-	os.Setenv("DB_HOST", "db.example.com")
-	os.Setenv("DB_PORT", "5433")
-	os.Setenv("DB_USERNAME", "user")
-	os.Setenv("DB_PASSWORD", "pass")
-	os.Setenv("DB_DATABASE", "testdb")
+	// Test code: os.Setenv is used to set environment variables for testing
+	// nolint: errcheck // This is intentional in test code
+	if err := os.Setenv("SERVER_HOST", "0.0.0.0"); err != nil {
+		t.Fatalf("Failed to set SERVER_HOST: %v", err)
+	}
+
+	// Test code: os.Setenv is used to set environment variables for testing
+	// nolint: errcheck // This is intentional in test code
+	if err := os.Setenv("SERVER_PORT", "9000"); err != nil {
+		t.Fatalf("Failed to set SERVER_PORT: %v", err)
+	}
+	if err := os.Setenv("LLM_API_KEY", "test-api-key"); err != nil {
+		t.Fatalf("Failed to set LLM_API_KEY: %v", err)
+	}
+	if err := os.Setenv("LLM_PROVIDER", "openai"); err != nil {
+		t.Fatalf("Failed to set LLM_PROVIDER: %v", err)
+	}
+	if err := os.Setenv("LLM_BASE_URL", "https://api.openai.com"); err != nil {
+		t.Fatalf("Failed to set LLM_BASE_URL: %v", err)
+	}
+	if err := os.Setenv("LLM_MODEL", "gpt-4"); err != nil {
+		t.Fatalf("Failed to set LLM_MODEL: %v", err)
+	}
+	if err := os.Setenv("DB_HOST", "db.example.com"); err != nil {
+		t.Fatalf("Failed to set DB_HOST: %v", err)
+	}
+	if err := os.Setenv("DB_PORT", "5433"); err != nil {
+		t.Fatalf("Failed to set DB_PORT: %v", err)
+	}
+	if err := os.Setenv("DB_USERNAME", "user"); err != nil {
+		t.Fatalf("Failed to set DB_USERNAME: %v", err)
+	}
+	if err := os.Setenv("DB_PASSWORD", "pass"); err != nil {
+		t.Fatalf("Failed to set DB_PASSWORD: %v", err)
+	}
+	if err := os.Setenv("DB_DATABASE", "testdb"); err != nil {
+		t.Fatalf("Failed to set DB_DATABASE: %v", err)
+	}
 	defer func() {
-		os.Unsetenv("SERVER_HOST")
-		os.Unsetenv("SERVER_PORT")
-		os.Unsetenv("LLM_API_KEY")
-		os.Unsetenv("LLM_PROVIDER")
-		os.Unsetenv("LLM_BASE_URL")
-		os.Unsetenv("LLM_MODEL")
-		os.Unsetenv("DB_HOST")
-		os.Unsetenv("DB_PORT")
-		os.Unsetenv("DB_USERNAME")
-		os.Unsetenv("DB_PASSWORD")
-		os.Unsetenv("DB_DATABASE")
+		// Test code: os.Unsetenv is used to clean up environment variables in test
+		// nolint: errcheck // This is intentional in test code
+		if err := os.Unsetenv("SERVER_HOST"); err != nil {
+			t.Fatalf("Failed to unset SERVER_HOST: %v", err)
+		}
+		if err := os.Unsetenv("SERVER_PORT"); err != nil {
+			t.Fatalf("Failed to unset SERVER_PORT: %v", err)
+		}
+		if err := os.Unsetenv("LLM_API_KEY"); err != nil {
+			t.Fatalf("Failed to unset LLM_API_KEY: %v", err)
+		}
+		if err := os.Unsetenv("LLM_PROVIDER"); err != nil {
+			t.Fatalf("Failed to unset LLM_PROVIDER: %v", err)
+		}
+		if err := os.Unsetenv("LLM_BASE_URL"); err != nil {
+			t.Fatalf("Failed to unset LLM_BASE_URL: %v", err)
+		}
+		if err := os.Unsetenv("LLM_MODEL"); err != nil {
+			t.Fatalf("Failed to unset LLM_MODEL: %v", err)
+		}
+		if err := os.Unsetenv("DB_HOST"); err != nil {
+			t.Fatalf("Failed to unset DB_HOST: %v", err)
+		}
+		if err := os.Unsetenv("DB_PORT"); err != nil {
+			t.Fatalf("Failed to unset DB_PORT: %v", err)
+		}
+		if err := os.Unsetenv("DB_USERNAME"); err != nil {
+			t.Fatalf("Failed to unset DB_USERNAME: %v", err)
+		}
+		if err := os.Unsetenv("DB_PASSWORD"); err != nil {
+			t.Fatalf("Failed to unset DB_PASSWORD: %v", err)
+		}
+		if err := os.Unsetenv("DB_DATABASE"); err != nil {
+			t.Fatalf("Failed to unset DB_DATABASE: %v", err)
+		}
 	}()
 
 	// Load from environment
@@ -240,8 +292,14 @@ func TestLoadFromEnvOpenRouterAPIKey(t *testing.T) {
 		},
 	}
 
-	os.Setenv("OPENROUTER_API_KEY", "openrouter-key")
-	defer os.Unsetenv("OPENROUTER_API_KEY")
+	if err := os.Setenv("OPENROUTER_API_KEY", "openrouter-key"); err != nil {
+		t.Fatalf("Failed to set OPENROUTER_API_KEY: %v", err)
+	}
+	defer func() {
+		if err := os.Unsetenv("OPENROUTER_API_KEY"); err != nil {
+			t.Fatalf("Failed to unset OPENROUTER_API_KEY: %v", err)
+		}
+	}()
 
 	if err := LoadFromEnv(cfg); err != nil {
 		t.Fatalf("LoadFromEnv() error = %v", err)
@@ -911,3 +969,5 @@ func TestValidOutputFormats(t *testing.T) {
 		}
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values
