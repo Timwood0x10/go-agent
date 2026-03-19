@@ -909,3 +909,490 @@ INFO Vector search succeeded results_count=5
 - PostgreSQL Binary Protocol: https://www.postgresql.org/docs/current/protocol.html
 - Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
 - PostgreSQL Type Casting: https://www.postgresql.org/docs/current/sql-createcast.html
+
+---
+
+## Bug #4: ExperienceRepository 多个字段处理错误导致测试失败
+
+### Date
+2026-03-19
+
+### Severity
+High - 导致 ExperienceRepository 所有测试失败，影响经验检索功能
+
+### Affected Files
+- `internal/storage/postgres/repositories/experience_repository.go`
+- `internal/storage/postgres/repositories/experience_repository_test.go`
+
+### Bug Description
+
+#### 症状
+1. `TestExperienceRepository_Create` 测试通过，但其他涉及 metadata 的测试全部失败
+2. `TestExperienceRepository_UpdateScore` 和 `TestExperienceRepository_UpdateEmbedding` 测试失败，提示 `updated_at` 列不存在
+3. `TestExperienceRepository_SearchByVector` 测试失败，提示向量格式错误
+4. `TestExperienceRepository_ListByType`、`TestExperienceRepository_ListByAgent` 测试失败，返回 0 个结果
+5. `TestExperienceRepository_CleanupExpired` 测试失败，时区不一致导致查询条件失效
+
+#### 错误信息
+```
+# metadata 字段错误
+Error: "sql: Scan error on column index 11, name \"metadata\": unsupported Scan, storing driver.Value type []uint8 into type *map[string]interface {}"
+
+# updated_at 列错误
+Error: "pq: column \"updated_at\" of relation \"experiences_1024\" does not exist"
+
+# 向量格式错误
+Error: "pq: invalid input syntax for type vector: \"{0,0.0009765625,...}\""
+
+# 查询返回 0 结果
+Error: "\"0\" is not greater than or equal to \"1\""
+```
+
+### Root Cause Analysis
+
+#### 问题 1：metadata 字段未转换为文本格式
+
+##### 错误代码
+```go
+// GetByID 方法
+query := `
+    SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+           score, success, agent_id, metadata, decay_at, created_at  // ← metadata 未转换
+    FROM experiences_1024
+    WHERE id = $1
+`
+
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+    &exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,  // ← 直接扫描到 map[string]interface{}
+    &exp.DecayAt, &exp.CreatedAt,
+)
+```
+
+##### 问题分析
+- PostgreSQL JSONB 类型默认以二进制格式返回
+- Go 代码期望直接扫描到 `map[string]interface{}` 类型
+- 类型不匹配导致扫描失败
+- 影响所有涉及 metadata 的查询方法
+
+#### 问题 2：embedding 字段未转换为文本格式
+
+##### 错误代码
+```go
+// SearchByVector 方法
+query := `
+    SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+           score, success, agent_id, metadata, decay_at, created_at,
+           1 - (embedding <=> $1) as similarity  // ← embedding 未转换
+    FROM experiences_1024
+    WHERE tenant_id = $2
+      AND (decay_at IS NULL OR decay_at > NOW())
+    ORDER BY embedding <=> $1
+    LIMIT $3
+`
+
+err := rows.Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,  // ← 直接扫描到 []float64
+    &exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+    &exp.DecayAt, &exp.CreatedAt, &similarity,
+)
+```
+
+##### 问题分析
+- pgvector 类型默认以二进制格式返回
+- Go 代码期望直接扫描到 `[]float64` 类型
+- 类型不匹配导致扫描失败
+- 影响所有涉及 embedding 的查询方法
+
+#### 问题 3：UpdateScore 和 UpdateEmbedding 方法尝试更新不存在的列
+
+##### 错误代码
+```go
+// UpdateScore 方法
+query := `
+    UPDATE experiences_1024
+    SET score = $2, updated_at = NOW()  // ← updated_at 列不存在
+    WHERE id = $1
+`
+
+// UpdateEmbedding 方法
+query := `
+    UPDATE experiences_1024
+    SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()  // ← updated_at 列不存在
+    WHERE id = $1
+`
+```
+
+##### 问题分析
+- `experiences_1024` 表只有 `created_at` 列，没有 `updated_at` 列
+- 代码尝试更新不存在的列导致 SQL 错误
+- 这两个方法完全无法执行
+
+#### 问题 4：Create 方法零值 DecayAt 处理不当
+
+##### 错误代码
+```go
+// Create 方法
+query := `
+    INSERT INTO experiences_1024
+    (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+     score, success, agent_id, metadata, decay_at, created_at)
+    VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)  // ← 总是传递 decay_at
+    RETURNING id
+`
+
+err = r.db.QueryRowContext(ctx, query,
+    exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+    exp.EmbeddingModel, exp.EmbeddingVersion,
+    exp.Score, exp.Success, exp.AgentID, metadataJSON,
+    exp.DecayAt, exp.CreatedAt,  // ← 即使 DecayAt 为零值也传递
+).Scan(&id)
+```
+
+##### 问题分析
+- 当 `DecayAt` 为零值时，会被存储为 `0001-01-01 00:00:00`
+- 查询条件 `decay_at > NOW()` 会过滤掉这些记录
+- 导致测试创建的数据无法被查询到
+- `ListByType`、`ListByAgent` 等方法返回空结果
+
+#### 问题 5：SearchByVector 方法向量格式错误
+
+##### 错误代码
+```go
+// SearchByVector 方法
+rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)  // ← 直接传递 []float64
+```
+
+##### 问题分析
+- pgvector 期望的向量格式是字符串 `[0.1,0.2,0.3]`
+- Go 的 slice 格式 `{0.1,0.2,0.3}` 无法被 pgvector 解析
+- 导致 SQL 语法错误
+
+#### 问题 6：CleanupExpired 测试时区不一致
+
+##### 问题代码
+```go
+// 测试代码
+expiredExp := &storage_models.Experience{
+    DecayAt: time.Now().Add(-1 * time.Hour),  // ← 使用本地时间
+}
+```
+
+##### 问题分析
+- 测试代码使用本地时间（CST +0800）
+- 数据库使用 UTC 时间
+- 时区转换导致时间比较错误
+- 过期的 experience 被认为未过期
+
+### Solution
+
+#### 1. 修复所有查询方法，添加 ::text 转换
+
+##### GetByID 方法
+```go
+query := `
+    SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+           score, success, agent_id, metadata::text, decay_at, created_at
+    FROM experiences_1024
+    WHERE id = $1
+`
+
+exp := &storage_models.Experience{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+    &exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
+    &exp.DecayAt, &exp.CreatedAt,
+)
+
+// Parse embedding string to float64 array
+exp.Embedding, err = parseVectorString(embeddingStr)
+if err != nil {
+    return nil, fmt.Errorf("parse embedding: %w", err)
+}
+
+// Parse metadata JSON string to map
+if metadataStr != "" {
+    if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+        return nil, fmt.Errorf("parse metadata: %w", err)
+    }
+}
+```
+
+##### SearchByVector 方法
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+           score, success, agent_id, metadata::text, decay_at, created_at,
+           1 - (embedding <=> $1::vector) as similarity
+    FROM experiences_1024
+    WHERE tenant_id = $2
+      AND (decay_at IS NULL OR decay_at > NOW())
+    ORDER BY embedding <=> $1::vector
+    LIMIT $3
+`
+
+rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
+
+// 在扫描循环中解析
+for rows.Next() {
+    exp := &storage_models.Experience{}
+    var similarity float64
+    var embeddingStr, metadataStr string
+    
+    err := rows.Scan(
+        &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+        &embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+        &exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
+        &exp.DecayAt, &exp.CreatedAt, &similarity,
+    )
+    
+    // Parse embedding and metadata
+    exp.Embedding, err = parseVectorString(embeddingStr)
+    if metadataStr != "" {
+        json.Unmarshal([]byte(metadataStr), &exp.Metadata)
+    }
+}
+```
+
+##### ListByType 和 ListByAgent 方法
+类似地添加 `::text` 转换和解析逻辑。
+
+#### 2. 修复 UpdateScore 和 UpdateEmbedding 方法
+
+##### UpdateScore 方法
+```go
+query := `
+    UPDATE experiences_1024
+    SET score = $2  // ← 移除 updated_at
+    WHERE id = $1
+`
+```
+
+##### UpdateEmbedding 方法
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    UPDATE experiences_1024
+    SET embedding = $2::vector, embedding_model = $3, embedding_version = $4  // ← 移除 updated_at
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
+```
+
+#### 3. 修复 Create 方法，处理零值 DecayAt
+
+```go
+func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.Experience) error {
+    // Convert metadata to JSON for database storage
+    metadataJSON, err := json.Marshal(exp.Metadata)
+    if err != nil {
+        return fmt.Errorf("marshal metadata: %w", err)
+    }
+
+    // Convert embedding to pgvector format
+    embeddingStr := float64ToVectorString(exp.Embedding)
+
+    // Build query with optional decay_at
+    var query string
+    var args []interface{}
+
+    if exp.DecayAt.IsZero() {
+        // Don't set decay_at, let database use default value
+        query = `
+            INSERT INTO experiences_1024
+            (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+             score, success, agent_id, metadata, created_at)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+        `
+        args = []interface{}{
+            exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+            exp.EmbeddingModel, exp.EmbeddingVersion,
+            exp.Score, exp.Success, exp.AgentID, metadataJSON,
+            exp.CreatedAt,
+        }
+    } else {
+        // Set decay_at explicitly
+        query = `
+            INSERT INTO experiences_1024
+            (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+             score, success, agent_id, metadata, decay_at, created_at)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING id
+        `
+        args = []interface{}{
+            exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+            exp.EmbeddingModel, exp.EmbeddingVersion,
+            exp.Score, exp.Success, exp.AgentID, metadataJSON,
+            exp.DecayAt, exp.CreatedAt,
+        }
+    }
+
+    var id string
+    err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
+
+    if err != nil {
+        return fmt.Errorf("create experience: %w", err)
+    }
+
+    exp.ID = id
+    return nil
+}
+```
+
+#### 4. 修复 CleanupExpired 测试，使用 UTC 时间
+
+```go
+// Create an expired experience
+expiredExp := &storage_models.Experience{
+    TenantID:         "tenant-1",
+    Type:             storage_models.ExperienceTypeQuery,
+    Input:            "test input",
+    Embedding:        createTestEmbedding(),
+    EmbeddingModel:   "e5-large",
+    EmbeddingVersion: 1,
+    DecayAt:          time.Now().UTC().Add(-1 * time.Hour), // ← 使用 UTC 时间
+    CreatedAt:        time.Now().UTC(),
+}
+
+// Create a non-expired experience
+validExp := &storage_models.Experience{
+    TenantID:         "tenant-1",
+    Type:             storage_models.ExperienceTypeQuery,
+    Input:            "test input",
+    Embedding:        createTestEmbedding(),
+    EmbeddingModel:   "e5-large",
+    EmbeddingVersion: 1,
+    DecayAt:          time.Now().UTC().Add(30 * 24 * time.Hour), // ← 使用 UTC 时间
+    CreatedAt:        time.Now().UTC(),
+}
+```
+
+### Verification
+
+#### 测试结果
+修复前后对比：
+
+**修复前：**
+```
+--- FAIL: TestExperienceRepository_UpdateScore (0.01s)
+--- FAIL: TestExperienceRepository_UpdateEmbedding (0.01s)
+--- FAIL: TestExperienceRepository_ListByType (0.01s)
+--- FAIL: TestExperienceRepository_ListByAgent (0.01s)
+--- FAIL: TestExperienceRepository_CleanupExpired (0.01s)
+```
+
+**修复后：**
+```
+✅ TestExperienceRepository_Create - PASS
+✅ TestExperienceRepository_GetByID - PASS
+✅ TestExperienceRepository_GetByID_NotFound - PASS
+✅ TestExperienceRepository_Update - PASS
+✅ TestExperienceRepository_Delete - PASS
+✅ TestExperienceRepository_SearchByVector - PASS
+✅ TestExperienceRepository_ListByType - PASS
+✅ TestExperienceRepository_UpdateScore - PASS
+✅ TestExperienceRepository_ListByAgent - PASS
+✅ TestExperienceRepository_UpdateEmbedding - PASS
+✅ TestExperienceRepository_CleanupExpired - PASS
+✅ TestExperienceRepository_GetStatistics - PASS
+✅ TestExperienceRepository_ConcurrentOperations - PASS
+✅ TestExperienceRepository_AllTypes - PASS
+✅ TestExperienceRepository_ContextCancelled - PASS
+```
+
+#### 功能验证
+- ✅ Experience 创建和查询正常工作
+- ✅ 向量相似度搜索返回正确结果
+- ✅ 按类型和代理 ID 列表查询正常
+- ✅ 过期 experience 清理功能正常
+- ✅ 统计信息查询正常
+- ✅ 并发操作处理正确
+
+#### 代码质量检查
+- ✅ `go build` - 编译成功
+- ✅ `go vet` - 无警告
+- ✅ `gofmt` - 格式正确
+- ✅ 所有测试通过
+
+### Lessons Learned
+
+1. **PostgreSQL 扩展类型的一致性处理**：
+   - 所有涉及 pgvector 和 JSONB 的查询都需要统一的处理方式
+   - 应该在代码审查时检查类型转换的一致性
+   - 建议创建统一的辅助函数来处理这些类型
+
+2. **数据库表结构变更的影响**：
+   - 添加或删除列时需要检查所有相关的 SQL 查询
+   - 应该使用数据库迁移工具来管理表结构变更
+   - 建议在文档中记录表结构
+
+3. **时间处理的最佳实践**：
+   - 数据库应用应该统一使用 UTC 时间
+   - 测试代码也应该使用 UTC 时间以确保一致性
+   - 只在用户界面层进行时区转换
+
+4. **零值处理的防御性编程**：
+   - 对于可选字段，应该明确处理零值情况
+   - 可以使用数据库默认值而不是显式传递零值
+   - 建议在模型层添加验证逻辑
+
+### Best Practices
+
+1. **统一的类型转换辅助函数**：
+   ```go
+   // 向量转换
+   func float64ToVectorString(vec []float64) string
+   func parseVectorString(vecStr string) ([]float64, error)
+   
+   // JSON 转换
+   func marshalMetadata(metadata map[string]interface{}) ([]byte, error)
+   func unmarshalMetadata(data []byte) (map[string]interface{}, error)
+   ```
+
+2. **数据库查询的防御性编程**：
+   ```go
+   // 检查扫描错误
+   if err := rows.Scan(...); err != nil {
+       log.Warn("Failed to scan row", "error", err)
+       continue  // 跳过错误行
+   }
+   
+   // 处理空值
+   if metadataStr == "" {
+       exp.Metadata = make(map[string]interface{})
+   }
+   ```
+
+3. **时间处理的一致性**：
+   ```go
+   // 始终使用 UTC 时间
+   createdAt := time.Now().UTC()
+   decayAt := time.Now().UTC().Add(30 * 24 * time.Hour)
+   ```
+
+4. **可选字段的条件处理**：
+   ```go
+   // 条件性构建 SQL 查询
+   if exp.DecayAt.IsZero() {
+       // 使用数据库默认值
+   } else {
+       // 显式设置值
+   }
+   ```
+
+### References
+- pgvector Type Casting: https://github.com/pgvector/pgvector#usage
+- PostgreSQL JSONB: https://www.postgresql.org/docs/current/datatype-json.html
+- Go Time Handling: https://go.dev/doc/effective_go#time
+- PostgreSQL Default Values: https://www.postgresql.org/docs/current/ddl-default.html

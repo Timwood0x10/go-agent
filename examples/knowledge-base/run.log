@@ -1,0 +1,276 @@
+go run main.go --save ./example.md
+2026/03/19 14:40:53 Importing document: ./example.md
+2026/03/19 14:40:53 Document split into 7 chunks
+2026/03/19 14:40:53 Processing chunk 1/7...
+2026/03/19 14:40:53 Processing chunk 2/7...
+2026/03/19 14:40:53 Processing chunk 3/7...
+2026/03/19 14:40:53 Processing chunk 4/7...
+2026/03/19 14:40:53 Processing chunk 5/7...
+2026/03/19 14:40:53 Processing chunk 6/7...
+2026/03/19 14:40:53 Processing chunk 7/7...
+2026/03/19 14:40:54 Successfully imported 7/7 chunks
+2026/03/19 14:40:54 Document imported successfully. Document ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2
+
+
+----
+
+
+混合检索是如何设计的呢？
+2026/03/19 14:41:48 Searching for: 混合检索是如何设计的呢？ (tenant: default)
+2026/03/19 14:41:48 INFO Checking embedding client client_nil=false enabled=true
+2026/03/19 14:41:48 INFO Checking embedding circuit breaker
+2026/03/19 14:41:48 INFO Getting embeddings for queries
+2026/03/19 14:41:48 INFO Embeddings obtained original_len=1024 rewritten_len=1024
+2026/03/19 14:41:48 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=5
+2026/03/19 14:41:48 INFO Vector search query vector_length=9726 vector_preview=[0.027615,-0.022419,0.029855,0.011216,-0.026503,0.038523,-0.051842,-0.010105,-0.022080,0.008727,0.04
+2026/03/19 14:41:48 INFO Vector search query succeeded
+2026/03/19 14:41:48 INFO Vector search completed rows_scanned=5 chunks_returned=5
+2026/03/19 14:41:48 INFO Vector search succeeded results_count=5
+2026/03/19 14:41:48 INFO Before score filter results_count=5 min_score=0.6
+2026/03/19 14:41:48 INFO Result before filter index=0 score=0.8510771013407791 content=" LLM生成答案\n```\n\n### 2. 语义搜索\n\n为应用添加智能语义搜索功能：\n\n```go\n/..."
+2026/03/19 14:41:48 INFO Result before filter index=1 score=0.8438935038472272 content=" queryEmbedding, tenantID, 10)\n```\n\n### 2. 多租户隔离\n\n..."
+2026/03/19 14:41:48 INFO Result before filter index=2 score=0.8273870533436413 content="# 示例文档 - GoAgent Storage模块\n\n## 概述\n\nGoAgent Storage..."
+2026/03/19 14:41:48 INFO Result before filter index=3 score=0.827012706917361 content="# 性能优化\n\n### 1. 索引优化\n\n确保关键字段有索引：\n\n```sql\nCREATE IND..."
+2026/03/19 14:41:48 INFO Result before filter index=4 score=0.8256451252199051 content="自动加密**: 自动加密敏感字段\n- **密钥轮换**: 支持定期轮换密钥\n\n## 架构设计\n\n##..."
+2026/03/19 14:41:48 INFO After score filter results_count=5
+2026/03/19 14:41:48 Search returned 5 results
+2026/03/19 14:41:48   Result 0: score=0.851, content= LLM生成答案
+```
+
+### 2. 语义搜索
+
+为应用添加智能语义搜索功能：
+
+```go
+/...
+2026/03/19 14:41:48   Result 1: score=0.844, content= queryEmbedding, tenantID, 10)
+```
+
+### 2. 多租户隔离
+
+...
+2026/03/19 14:41:48   Result 2: score=0.827, content=# 示例文档 - GoAgent Storage模块
+
+## 概述
+
+GoAgent Storage...
+2026/03/19 14:41:48   Result 3: score=0.827, content=# 性能优化
+
+### 1. 索引优化
+
+确保关键字段有索引：
+
+```sql
+CREATE IND...
+2026/03/19 14:41:48   Result 4: score=0.826, content=自动加密**: 自动加密敏感字段
+- **密钥轮换**: 支持定期轮换密钥
+
+## 架构设计
+
+##...
+
+Found 5 relevant results:
+
+[1] Score: 0.851
+Content:  LLM生成答案
+```
+
+### 2. 语义搜索
+
+为应用添加智能语义搜索功能：
+
+```go
+// 语义搜索
+results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
+
+// 混合搜索
+results := retrievalService.Search(ctx, req)
+```
+
+### 3. 推荐系统
+
+基于向量相似度的内容推荐：
+
+```go
+// 找到相似内容
+similarItems := kbRepo.SearchByVector(ctx, itemEmbedding, tenantID, 5)
+```
+
+### 4. 知识库管理
+
+构建企业知识库或文档管理系统：
+
+```go
+// 导入文档
+kb.ImportDocuments(ctx, tenantID, docPath)
+
+// 知识问答
+answer := kb.Chat(ctx, tenantID, question)
+```
+
+## 性能优化
+
+### 1. 索引优化
+
+确保关键字段有索引：
+
+```sql
+CREATE IND
+Source: document
+
+[2] Score: 0.844
+Content:  queryEmbedding, tenantID, 10)
+```
+
+### 2. 多租户隔离
+
+通过RLS（Row Level Security）和Tenant Guard实现严格的多租户数据隔离：
+
+- **自动隔离**: 所有操作自动应用租户过滤
+- **双重保护**: 数据库RLS + 应用层Tenant Guard
+- **安全验证**: 验证所有跨租户访问
+
+示例：
+```go
+// 设置租户上下文
+tenantGuard.SetTenantContext(ctx, "tenant-001")
+
+// 后续所有操作自动隔离
+results := kbRepo.SearchByVector(ctx, embedding, "tenant-001", limit)
+```
+
+### 3. 混合检索
+
+结合向量检索和BM25全文检索，提高检索准确性：
+
+- **向量检索**: 基于语义相似度
+- **BM25检索**: 基于关键词匹配
+- **结果融合**: 使用RRF算法合并结果
+- **时间衰减**: 新知识优先
+
+示例：
+```go
+req := &SearchReque
+Source: document
+
+[3] Score: 0.827
+Content: # 示例文档 - GoAgent Storage模块
+
+## 概述
+
+GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
+
+## 核心功能
+
+### 1. 向量存储与检索
+
+Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
+
+- **高维向量存储**: 支持1024维向量存储
+- **余弦相似度**: 使用余弦相似度进行向量检索
+- **批量操作**: 支持批量插入和检索
+- **索引优化**: 自动创建向量索引提高查询性能
+
+示例：
+```go
+// 创建知识块
+chunk := &KnowledgeChunk{
+    Content:   "这是知识内容",
+    Embedding: []float64{0.1, 0.2, ...}, // 1024维向量
+}
+
+// 向量检索
+results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
+```
+
+### 2. 多租户隔离
+
+
+Source: document
+
+[4] Score: 0.827
+Content: # 性能优化
+
+### 1. 索引优化
+
+确保关键字段有索引：
+
+```sql
+CREATE INDEX idx_tenant_id ON knowledge_chunks_1024(tenant_id);
+CREATE INDEX idx_document_id ON knowledge_chunks_1024(document_id);
+CREATE INDEX idx_embedding_status ON knowledge_chunks_1024(embedding_status);
+```
+
+### 2. 批量操作
+
+使用批量接口提高性能：
+
+```go
+// 批量插入
+kbRepo.CreateBatch(ctx, chunks)
+
+// 批量检索
+embeddings := embeddingClient.EmbedBatch(ctx, texts)
+```
+
+### 3. 连接池配置
+
+优化连接池参数：
+
+```go
+config := &postgres.Config{
+    MaxOpenConns:    25,
+    MaxIdleConns:    10
+Source: document
+
+[5] Score: 0.826
+Content: 自动加密**: 自动加密敏感字段
+- **密钥轮换**: 支持定期轮换密钥
+
+## 架构设计
+
+### 分层架构
+
+Storage模块采用清晰的分层架构：
+
+```
+应用层 (Application)
+    ↓
+服务层 (Services)
+    ↓
+数据访问层 (Repositories)
+    ↓
+核心层 (Core)
+    ↓
+PostgreSQL + pgvector
+```
+
+### 核心组件
+
+1. **Pool**: 数据库连接池管理
+2. **TenantGuard**: 租户隔离守卫
+3. **RetrievalGuard**: 检索限流熔断
+4. **Repository**: 统一数据访问接口
+5. **Service**: 业务逻辑服务
+
+## 使用场景
+
+### 1. RAG系统
+
+Storage模块非常适合构建RAG（Retrieval-Augmented Generation）系统：
+
+```
+用户问题 → 向量化 → 检索知识库 → 构建上下文 → LLM生成答案
+```
+
+### 2. 语义搜索
+
+为应用添加智能语义搜索功能：
+
+```go
+
+---
+
+ go run main.go --list
+2026/03/19 14:42:53 Documents:
+2026/03/19 14:42:53   - ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2, Source: ./example.md, Chunks: 7

@@ -4,6 +4,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"goagent/internal/core/errors"
@@ -29,24 +30,56 @@ func NewExperienceRepository(db postgres.DBTX) *ExperienceRepository {
 // Create inserts a new experience into the database.
 // Args:
 // ctx - database operation context.
-// exp - experience to create.
+// exp - experience to create. ID should be empty to let database generate it.
 // Returns error if insert operation fails.
 func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.Experience) error {
-	query := `
-		INSERT INTO experiences_1024
-		(id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-		 score, success, agent_id, metadata, decay_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING id
-	`
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(exp.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(exp.Embedding)
+
+	// Build query with optional decay_at
+	var query string
+	var args []interface{}
+
+	if exp.DecayAt.IsZero() {
+		// Don't set decay_at, let database use default value
+		query = `
+			INSERT INTO experiences_1024
+			(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+			 score, success, agent_id, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12)
+			RETURNING id
+		`
+		args = []interface{}{
+			exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+			exp.EmbeddingModel, exp.EmbeddingVersion,
+			exp.Score, exp.Success, exp.AgentID, metadataJSON,
+			exp.CreatedAt,
+		}
+	} else {
+		// Set decay_at explicitly
+		query = `
+			INSERT INTO experiences_1024
+			(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+			 score, success, agent_id, metadata, decay_at, created_at)
+			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)
+			RETURNING id
+		`
+		args = []interface{}{
+			exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+			exp.EmbeddingModel, exp.EmbeddingVersion,
+			exp.Score, exp.Success, exp.AgentID, metadataJSON,
+			exp.DecayAt, exp.CreatedAt,
+		}
+	}
 
 	var id string
-	err := r.db.QueryRowContext(ctx, query,
-		exp.ID, exp.TenantID, exp.Type, exp.Input, exp.Output,
-		exp.Embedding, exp.EmbeddingModel, exp.EmbeddingVersion,
-		exp.Score, exp.Success, exp.AgentID, exp.Metadata,
-		exp.DecayAt, exp.CreatedAt,
-	).Scan(&id)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("create experience: %w", err)
@@ -67,17 +100,18 @@ func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage
 	}
 
 	query := `
-		SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			   score, success, agent_id, metadata, decay_at, created_at
+		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+			   score, success, agent_id, metadata::text, decay_at, created_at
 		FROM experiences_1024
 		WHERE id = $1
 	`
 
 	exp := &storage_models.Experience{}
+	var embeddingStr, metadataStr string
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
-		&exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
-		&exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+		&embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+		&exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
 		&exp.DecayAt, &exp.CreatedAt,
 	)
 
@@ -86,6 +120,19 @@ func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get experience by id: %w", err)
+	}
+
+	// Parse embedding string to float64 array
+	exp.Embedding, err = parseVectorString(embeddingStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse embedding: %w", err)
+	}
+
+	// Parse metadata JSON string to map
+	if metadataStr != "" {
+		if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata: %w", err)
+		}
 	}
 
 	return exp, nil
@@ -97,18 +144,27 @@ func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage
 // exp - experience with updated values.
 // Returns error if update operation fails.
 func (r *ExperienceRepository) Update(ctx context.Context, exp *storage_models.Experience) error {
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(exp.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(exp.Embedding)
+
 	query := `
 		UPDATE experiences_1024
-		SET type = $2, input = $3, output = $4, embedding = $5,
+		SET type = $2, input = $3, output = $4, embedding = $5::vector,
 			embedding_model = $6, embedding_version = $7, score = $8,
 			success = $9, agent_id = $10, metadata = $11
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		exp.ID, exp.Type, exp.Input, exp.Output, exp.Embedding,
+		exp.ID, exp.Type, exp.Input, exp.Output, embeddingStr,
 		exp.EmbeddingModel, exp.EmbeddingVersion, exp.Score,
-		exp.Success, exp.AgentID, exp.Metadata,
+		exp.Success, exp.AgentID, metadataJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("update experience: %w", err)
@@ -159,18 +215,21 @@ func (r *ExperienceRepository) Delete(ctx context.Context, id string) error {
 // limit - maximum number of results to return.
 // Returns list of similar experiences ordered by similarity.
 func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*storage_models.Experience, error) {
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(embedding)
+
 	query := `
-		SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			   score, success, agent_id, metadata, decay_at, created_at,
-			   1 - (embedding <=> $1) as similarity
+		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+			   score, success, agent_id, metadata::text, decay_at, created_at,
+			   1 - (embedding <=> $1::vector) as similarity
 		FROM experiences_1024
 		WHERE tenant_id = $2
 		  AND (decay_at IS NULL OR decay_at > NOW())
-		ORDER BY embedding <=> $1
+		ORDER BY embedding <=> $1::vector
 		LIMIT $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)
+	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
@@ -180,15 +239,30 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 	for rows.Next() {
 		exp := &storage_models.Experience{}
 		var similarity float64
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
-			&exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
-			&exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+			&embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+			&exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
 			&exp.DecayAt, &exp.CreatedAt, &similarity,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		exp.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+				exp.Metadata = make(map[string]interface{})
+			}
+		}
+
 		if exp.Metadata == nil {
 			exp.Metadata = make(map[string]interface{})
 		}
@@ -208,8 +282,8 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 // Returns list of experiences ordered by score (descending).
 func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID string, limit int) ([]*storage_models.Experience, error) {
 	query := `
-		SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			   score, success, agent_id, metadata, decay_at, created_at
+		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+			   score, success, agent_id, metadata::text, decay_at, created_at
 		FROM experiences_1024
 		WHERE type = $1
 		  AND tenant_id = $2
@@ -227,15 +301,30 @@ func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID
 	experiences := make([]*storage_models.Experience, 0)
 	for rows.Next() {
 		exp := &storage_models.Experience{}
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
-			&exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
-			&exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+			&embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+			&exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
 			&exp.DecayAt, &exp.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		exp.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+				exp.Metadata = make(map[string]interface{})
+			}
+		}
+
 		experiences = append(experiences, exp)
 	}
 
@@ -251,7 +340,7 @@ func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID
 func (r *ExperienceRepository) UpdateScore(ctx context.Context, id string, score float64) error {
 	query := `
 		UPDATE experiences_1024
-		SET score = $2, updated_at = NOW()
+		SET score = $2
 		WHERE id = $1
 	`
 
@@ -281,8 +370,8 @@ func (r *ExperienceRepository) UpdateScore(ctx context.Context, id string, score
 // Returns list of experiences ordered by created time (descending).
 func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantID string, limit int) ([]*storage_models.Experience, error) {
 	query := `
-		SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			   score, success, agent_id, metadata, decay_at, created_at
+		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+			   score, success, agent_id, metadata::text, decay_at, created_at
 		FROM experiences_1024
 		WHERE agent_id = $1
 		  AND tenant_id = $2
@@ -300,15 +389,30 @@ func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantI
 	experiences := make([]*storage_models.Experience, 0)
 	for rows.Next() {
 		exp := &storage_models.Experience{}
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
-			&exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
-			&exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+			&embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+			&exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
 			&exp.DecayAt, &exp.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		exp.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+				exp.Metadata = make(map[string]interface{})
+			}
+		}
+
 		experiences = append(experiences, exp)
 	}
 
@@ -324,13 +428,16 @@ func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantI
 // version - embedding model version.
 // Returns error if update operation fails.
 func (r *ExperienceRepository) UpdateEmbedding(ctx context.Context, id string, embedding []float64, model string, version int) error {
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(embedding)
+
 	query := `
 		UPDATE experiences_1024
-		SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()
+		SET embedding = $2::vector, embedding_model = $3, embedding_version = $4
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query, id, embedding, model, version)
+	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
 		return fmt.Errorf("update embedding: %w", err)
 	}

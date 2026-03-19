@@ -909,3 +909,490 @@ INFO Vector search succeeded results_count=5
 - PostgreSQL Binary Protocol: https://www.postgresql.org/docs/current/protocol.html
 - Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
 - PostgreSQL Type Casting: https://www.postgresql.org/docs/current/sql-createcast.html
+
+---
+
+## Bug #4: ExperienceRepository Multiple Field Handling Errors Causing Test Failures
+
+### Date
+2026-03-19
+
+### Severity
+High - Causes all ExperienceRepository tests to fail, affecting experience retrieval functionality
+
+### Affected Files
+- `internal/storage/postgres/repositories/experience_repository.go`
+- `internal/storage/postgres/repositories/experience_repository_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestExperienceRepository_Create` test passes, but all other tests involving metadata fail
+2. `TestExperienceRepository_UpdateScore` and `TestExperienceRepository_UpdateEmbedding` tests fail with `updated_at` column not found error
+3. `TestExperienceRepository_SearchByVector` test fails with vector format error
+4. `TestExperienceRepository_ListByType` and `TestExperienceRepository_ListByAgent` tests fail, returning 0 results
+5. `TestExperienceRepository_CleanupExpired` test fails due to timezone inconsistency
+
+#### Error Messages
+```
+# metadata field error
+Error: "sql: Scan error on column index 11, name \"metadata\": unsupported Scan, storing driver.Value type []uint8 into type *map[string]interface {}"
+
+# updated_at column error
+Error: "pq: column \"updated_at\" of relation \"experiences_1024\" does not exist"
+
+# vector format error
+Error: "pq: invalid input syntax for type vector: \"{0,0.0009765625,...}\""
+
+# query returns 0 results
+Error: "\"0\" is not greater than or equal to \"1\""
+```
+
+### Root Cause Analysis
+
+#### Issue 1: metadata field not converted to text format
+
+##### Incorrect Code
+```go
+// GetByID method
+query := `
+    SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+           score, success, agent_id, metadata, decay_at, created_at  // ← metadata not converted
+    FROM experiences_1024
+    WHERE id = $1
+`
+
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+    &exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,  // ← Direct scan to map[string]interface{}
+    &exp.DecayAt, &exp.CreatedAt,
+)
+```
+
+##### Issue Analysis
+- PostgreSQL JSONB type returns data in binary format by default
+- Go code expects direct scan to `map[string]interface{}` type
+- Type mismatch causes scan failure
+- Affects all query methods involving metadata
+
+#### Issue 2: embedding field not converted to text format
+
+##### Incorrect Code
+```go
+// SearchByVector method
+query := `
+    SELECT id, tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+           score, success, agent_id, metadata, decay_at, created_at,
+           1 - (embedding <=> $1) as similarity  // ← embedding not converted
+    FROM experiences_1024
+    WHERE tenant_id = $2
+      AND (decay_at IS NULL OR decay_at > NOW())
+    ORDER BY embedding <=> $1
+    LIMIT $3
+`
+
+err := rows.Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &exp.Embedding, &exp.EmbeddingModel, &exp.EmbeddingVersion,  // ← Direct scan to []float64
+    &exp.Score, &exp.Success, &exp.AgentID, &exp.Metadata,
+    &exp.DecayAt, &exp.CreatedAt, &similarity,
+)
+```
+
+##### Issue Analysis
+- pgvector type returns data in binary format by default
+- Go code expects direct scan to `[]float64` type
+- Type mismatch causes scan failure
+- Affects all query methods involving embedding
+
+#### Issue 3: UpdateScore and UpdateEmbedding methods attempt to update non-existent columns
+
+##### Incorrect Code
+```go
+// UpdateScore method
+query := `
+    UPDATE experiences_1024
+    SET score = $2, updated_at = NOW()  // ← updated_at column doesn't exist
+    WHERE id = $1
+`
+
+// UpdateEmbedding method
+query := `
+    UPDATE experiences_1024
+    SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()  // ← updated_at column doesn't exist
+    WHERE id = $1
+`
+```
+
+##### Issue Analysis
+- `experiences_1024` table only has `created_at` column, no `updated_at` column
+- Code attempts to update non-existent column causing SQL error
+- These two methods cannot execute at all
+
+#### Issue 4: Create method handles zero-value DecayAt incorrectly
+
+##### Incorrect Code
+```go
+// Create method
+query := `
+    INSERT INTO experiences_1024
+    (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+     score, success, agent_id, metadata, decay_at, created_at)
+    VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)  // ← Always passes decay_at
+    RETURNING id
+`
+
+err = r.db.QueryRowContext(ctx, query,
+    exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+    exp.EmbeddingModel, exp.EmbeddingVersion,
+    exp.Score, exp.Success, exp.AgentID, metadataJSON,
+    exp.DecayAt, exp.CreatedAt,  // ← Even when DecayAt is zero value
+).Scan(&id)
+```
+
+##### Issue Analysis
+- When `DecayAt` is zero value, it gets stored as `0001-01-01 00:00:00`
+- Query condition `decay_at > NOW()` filters out these records
+- Causes test-created data to be unqueryable
+- `ListByType`, `ListByAgent` and other methods return empty results
+
+#### Issue 5: SearchByVector method vector format error
+
+##### Incorrect Code
+```go
+// SearchByVector method
+rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)  // ← Directly pass []float64
+```
+
+##### Issue Analysis
+- pgvector expects vector format as string `[0.1,0.2,0.3]`
+- Go's slice format `{0.1,0.2,0.3}` cannot be parsed by pgvector
+- Causes SQL syntax error
+
+#### Issue 6: CleanupExpired test timezone inconsistency
+
+##### Problem Code
+```go
+// Test code
+expiredExp := &storage_models.Experience{
+    DecayAt: time.Now().Add(-1 * time.Hour),  // ← Uses local time
+}
+```
+
+##### Issue Analysis
+- Test code uses local time (CST +0800)
+- Database uses UTC time
+- Timezone conversion causes incorrect time comparison
+- Expired experience is considered not expired
+
+### Solution
+
+#### 1. Fix all query methods, add ::text conversion
+
+##### GetByID method
+```go
+query := `
+    SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+           score, success, agent_id, metadata::text, decay_at, created_at
+    FROM experiences_1024
+    WHERE id = $1
+`
+
+exp := &storage_models.Experience{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+    &embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+    &exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
+    &exp.DecayAt, &exp.CreatedAt,
+)
+
+// Parse embedding string to float64 array
+exp.Embedding, err = parseVectorString(embeddingStr)
+if err != nil {
+    return nil, fmt.Errorf("parse embedding: %w", err)
+}
+
+// Parse metadata JSON string to map
+if metadataStr != "" {
+    if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+        return nil, fmt.Errorf("parse metadata: %w", err)
+    }
+}
+```
+
+##### SearchByVector method
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+           score, success, agent_id, metadata::text, decay_at, created_at,
+           1 - (embedding <=> $1::vector) as similarity
+    FROM experiences_1024
+    WHERE tenant_id = $2
+      AND (decay_at IS NULL OR decay_at > NOW())
+    ORDER BY embedding <=> $1::vector
+    LIMIT $3
+`
+
+rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
+
+// Parse in scan loop
+for rows.Next() {
+    exp := &storage_models.Experience{}
+    var similarity float64
+    var embeddingStr, metadataStr string
+    
+    err := rows.Scan(
+        &exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+        &embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+        &exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
+        &exp.DecayAt, &exp.CreatedAt, &similarity,
+    )
+    
+    // Parse embedding and metadata
+    exp.Embedding, err = parseVectorString(embeddingStr)
+    if metadataStr != "" {
+        json.Unmarshal([]byte(metadataStr), &exp.Metadata)
+    }
+}
+```
+
+##### ListByType and ListByAgent methods
+Similarly add `::text` conversion and parsing logic.
+
+#### 2. Fix UpdateScore and UpdateEmbedding methods
+
+##### UpdateScore method
+```go
+query := `
+    UPDATE experiences_1024
+    SET score = $2  // ← Remove updated_at
+    WHERE id = $1
+`
+```
+
+##### UpdateEmbedding method
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    UPDATE experiences_1024
+    SET embedding = $2::vector, embedding_model = $3, embedding_version = $4  // ← Remove updated_at
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
+```
+
+#### 3. Fix Create method, handle zero-value DecayAt
+
+```go
+func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.Experience) error {
+    // Convert metadata to JSON for database storage
+    metadataJSON, err := json.Marshal(exp.Metadata)
+    if err != nil {
+        return fmt.Errorf("marshal metadata: %w", err)
+    }
+
+    // Convert embedding to pgvector format
+    embeddingStr := float64ToVectorString(exp.Embedding)
+
+    // Build query with optional decay_at
+    var query string
+    var args []interface{}
+
+    if exp.DecayAt.IsZero() {
+        // Don't set decay_at, let database use default value
+        query = `
+            INSERT INTO experiences_1024
+            (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+             score, success, agent_id, metadata, created_at)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+        `
+        args = []interface{}{
+            exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+            exp.EmbeddingModel, exp.EmbeddingVersion,
+            exp.Score, exp.Success, exp.AgentID, metadataJSON,
+            exp.CreatedAt,
+        }
+    } else {
+        // Set decay_at explicitly
+        query = `
+            INSERT INTO experiences_1024
+            (tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+             score, success, agent_id, metadata, decay_at, created_at)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING id
+        `
+        args = []interface{}{
+            exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+            exp.EmbeddingModel, exp.EmbeddingVersion,
+            exp.Score, exp.Success, exp.AgentID, metadataJSON,
+            exp.DecayAt, exp.CreatedAt,
+        }
+    }
+
+    var id string
+    err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
+
+    if err != nil {
+        return fmt.Errorf("create experience: %w", err)
+    }
+
+    exp.ID = id
+    return nil
+}
+```
+
+#### 4. Fix CleanupExpired test, use UTC time
+
+```go
+// Create an expired experience
+expiredExp := &storage_models.Experience{
+    TenantID:         "tenant-1",
+    Type:             storage_models.ExperienceTypeQuery,
+    Input:            "test input",
+    Embedding:        createTestEmbedding(),
+    EmbeddingModel:   "e5-large",
+    EmbeddingVersion: 1,
+    DecayAt:          time.Now().UTC().Add(-1 * time.Hour), // ← Use UTC time
+    CreatedAt:        time.Now().UTC(),
+}
+
+// Create a non-expired experience
+validExp := &storage_models.Experience{
+    TenantID:         "tenant-1",
+    Type:             storage_models.ExperienceTypeQuery,
+    Input:            "test input",
+    Embedding:        createTestEmbedding(),
+    EmbeddingModel:   "e5-large",
+    EmbeddingVersion: 1,
+    DecayAt:          time.Now().UTC().Add(30 * 24 * time.Hour), // ← Use UTC time
+    CreatedAt:        time.Now().UTC(),
+}
+```
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+--- FAIL: TestExperienceRepository_UpdateScore (0.01s)
+--- FAIL: TestExperienceRepository_UpdateEmbedding (0.01s)
+--- FAIL: TestExperienceRepository_ListByType (0.01s)
+--- FAIL: TestExperienceRepository_ListByAgent (0.01s)
+--- FAIL: TestExperienceRepository_CleanupExpired (0.01s)
+```
+
+**After:**
+```
+✅ TestExperienceRepository_Create - PASS
+✅ TestExperienceRepository_GetByID - PASS
+✅ TestExperienceRepository_GetByID_NotFound - PASS
+✅ TestExperienceRepository_Update - PASS
+✅ TestExperienceRepository_Delete - PASS
+✅ TestExperienceRepository_SearchByVector - PASS
+✅ TestExperienceRepository_ListByType - PASS
+✅ TestExperienceRepository_UpdateScore - PASS
+✅ TestExperienceRepository_ListByAgent - PASS
+✅ TestExperienceRepository_UpdateEmbedding - PASS
+✅ TestExperienceRepository_CleanupExpired - PASS
+✅ TestExperienceRepository_GetStatistics - PASS
+✅ TestExperienceRepository_ConcurrentOperations - PASS
+✅ TestExperienceRepository_AllTypes - PASS
+✅ TestExperienceRepository_ContextCancelled - PASS
+```
+
+#### Functional verification
+- ✅ Experience creation and query work normally
+- ✅ Vector similarity search returns correct results
+- ✅ List by type and agent ID queries work normally
+- ✅ Expired experience cleanup works correctly
+- ✅ Statistics query works correctly
+- ✅ Concurrent operations handled correctly
+
+#### Code quality checks
+- ✅ `go build` - Compilation successful
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+- ✅ All tests pass
+
+### Lessons Learned
+
+1. **Consistent handling of PostgreSQL extension types**:
+   - All queries involving pgvector and JSONB need unified handling
+   - Should check type conversion consistency during code review
+   - Recommend creating unified helper functions to handle these types
+
+2. **Impact of database schema changes**:
+   - Need to check all related SQL queries when adding or removing columns
+   - Should use database migration tools to manage schema changes
+   - Recommend documenting table structure in documentation
+
+3. **Best practices for time handling**:
+   - Database applications should consistently use UTC time
+   - Test code should also use UTC time to ensure consistency
+   - Only perform timezone conversion at the user interface layer
+
+4. **Defensive programming for zero-value handling**:
+   - Should explicitly handle zero-value cases for optional fields
+   - Can use database default values instead of explicitly passing zero values
+   - Recommend adding validation logic at the model layer
+
+### Best Practices
+
+1. **Unified type conversion helper functions**:
+   ```go
+   // Vector conversion
+   func float64ToVectorString(vec []float64) string
+   func parseVectorString(vecStr string) ([]float64, error)
+   
+   // JSON conversion
+   func marshalMetadata(metadata map[string]interface{}) ([]byte, error)
+   func unmarshalMetadata(data []byte) (map[string]interface{}, error)
+   ```
+
+2. **Defensive programming for database queries**:
+   ```go
+   // Check scan errors
+   if err := rows.Scan(...); err != nil {
+       log.Warn("Failed to scan row", "error", err)
+       continue  // Skip error row
+   }
+   
+   // Handle empty values
+   if metadataStr == "" {
+       exp.Metadata = make(map[string]interface{})
+   }
+   ```
+
+3. **Consistency in time handling**:
+   ```go
+   // Always use UTC time
+   createdAt := time.Now().UTC()
+   decayAt := time.Now().UTC().Add(30 * 24 * time.Hour)
+   ```
+
+4. **Conditional handling of optional fields**:
+   ```go
+   // Conditionally build SQL query
+   if exp.DecayAt.IsZero() {
+       // Use database default value
+   } else {
+       // Explicitly set value
+   }
+   ```
+
+### References
+- pgvector Type Casting: https://github.com/pgvector/pgvector#usage
+- PostgreSQL JSONB: https://www.postgresql.org/docs/current/datatype-json.html
+- Go Time Handling: https://go.dev/doc/effective_go#time
+- PostgreSQL Default Values: https://www.postgresql.org/docs/current/ddl-default.html
