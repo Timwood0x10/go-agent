@@ -16,6 +16,7 @@ import (
 	"goagent/internal/core/errors"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
+	"goagent/internal/storage/postgres/repositories"
 )
 
 // SearchRequest represents a search request with configuration.
@@ -79,6 +80,7 @@ type RetrievalService struct {
 	embeddingClient *embedding.EmbeddingClient
 	tenantGuard     *postgres.TenantGuard
 	retrievalGuard  *postgres.RetrievalGuard
+	kbRepo          *repositories.KnowledgeRepository
 	logger          *slog.Logger
 }
 
@@ -88,18 +90,21 @@ type RetrievalService struct {
 // embeddingClient - embedding service client for vector search.
 // tenantGuard - tenant isolation guard.
 // retrievalGuard - rate limiting and circuit breaker for retrieval.
+// kbRepo - knowledge repository for data access.
 // Returns new RetrievalService instance.
 func NewRetrievalService(
 	pool *postgres.Pool,
 	embeddingClient *embedding.EmbeddingClient,
 	tenantGuard *postgres.TenantGuard,
 	retrievalGuard *postgres.RetrievalGuard,
+	kbRepo *repositories.KnowledgeRepository,
 ) *RetrievalService {
 	return &RetrievalService{
 		db:              pool,
 		embeddingClient: embeddingClient,
 		tenantGuard:     tenantGuard,
 		retrievalGuard:  retrievalGuard,
+		kbRepo:          kbRepo,
 		logger:          slog.Default(),
 	}
 }
@@ -108,13 +113,13 @@ func NewRetrievalService(
 func DefaultRetrievalPlan() *RetrievalPlan {
 	return &RetrievalPlan{
 		SearchKnowledge:     true,
-		SearchExperience:    true,
-		SearchTools:         true,
+		SearchExperience:    false, // TODO: Implement when ExperienceRepository is available
+		SearchTools:         false, // TODO: Implement when ToolRepository is available
 		SearchTaskResults:   false,
-		KnowledgeWeight:     0.4,
-		ExperienceWeight:    0.3,
-		ToolsWeight:         0.2,
-		TaskResultsWeight:   0.1,
+		KnowledgeWeight:     1.0,  // Only knowledge is enabled
+		ExperienceWeight:    0.0,
+		ToolsWeight:         0.0,
+		TaskResultsWeight:   0.0,
 		EnableQueryRewrite:  false,
 		EnableKeywordSearch: true,
 		EnableTimeDecay:     true,
@@ -169,24 +174,34 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 	var vectorResults []*SearchResult
 	var vectorErr error
 
+	s.logger.Info("Checking embedding client", "client_nil", s.embeddingClient == nil, "enabled", s.embeddingClient != nil && s.embeddingClient.IsEnabled())
+
 	if s.embeddingClient != nil && s.embeddingClient.IsEnabled() {
 		// Check embedding circuit breaker
+		s.logger.Info("Checking embedding circuit breaker")
 		if err := s.retrievalGuard.CheckEmbeddingCircuitBreaker(); err == nil {
+			s.logger.Info("Getting embeddings for queries")
 			originalEmbedding := s.getEmbedding(ctx, originalQuery)
 			rewrittenEmbedding := s.getEmbedding(ctx, rewrittenQuery)
+
+			s.logger.Info("Embeddings obtained", "original_len", len(originalEmbedding), "rewritten_len", len(rewrittenEmbedding))
 
 			// Parallel vector search with timeout protection
 			vectorResults, vectorErr = s.parallelVectorSearch(ctx, originalEmbedding, rewrittenEmbedding, req)
 
 			if vectorErr == nil {
 				s.retrievalGuard.RecordEmbeddingSuccess()
+				s.logger.Info("Vector search succeeded", "results_count", len(vectorResults))
 			} else {
 				s.retrievalGuard.RecordEmbeddingFailure()
+				s.logger.Error("Vector search failed", "error", vectorErr)
 			}
 		} else {
-			s.logger.Warn("Embedding circuit breaker open, using keyword search only")
+			s.logger.Warn("Embedding circuit breaker open, using keyword search only", "error", err)
 			vectorErr = err
 		}
+	} else {
+		s.logger.Warn("Embedding client not available, skipping vector search")
 	}
 
 	// 3. BM25 fallback (if vector search failed or configured)
@@ -214,7 +229,16 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 	}
 
 	// 6. Apply minimum score filter
+	// Debug: log results before filtering
+	s.logger.Info("Before score filter", "results_count", len(finalResults), "min_score", req.MinScore)
+	for i, result := range finalResults {
+		s.logger.Info("Result before filter", "index", i, "score", result.Score, "content", truncateForLog(result.Content, 50))
+	}
+
 	finalResults = s.filterByScore(finalResults, req.MinScore)
+
+	// Debug: log results after filtering
+	s.logger.Info("After score filter", "results_count", len(finalResults))
 
 	// 7. Generate retrieval trace (if enabled)
 	if req.EnableTrace {
@@ -376,65 +400,31 @@ func (s *RetrievalService) searchKnowledgeVector(ctx context.Context, embedding 
 		return []*SearchResult{}
 	}
 
-	// Convert embedding to PostgreSQL vector format
-	vectorStr := fmt.Sprintf("[%v]", embedding)
-
-	// pgvector cosine similarity search query
-	query := `
-		SELECT 
-			id, 
-			content, 
-			source_type as source,
-			1 - (embedding <=> $1::vector) as similarity,
-			metadata,
-			created_at
-		FROM knowledge_chunks_1024
-		WHERE embedding IS NOT NULL
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		ORDER BY embedding <=> $1::vector
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, query, vectorStr, req.Plan.TopK)
+	// Use Repository layer to search knowledge base
+	chunks, err := s.kbRepo.SearchByVector(ctx, embedding, req.TenantID, req.Plan.TopK)
 	if err != nil {
 		s.logger.Error("Knowledge vector search failed", "error", err)
 		return []*SearchResult{}
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
 
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan knowledge result", "error", err)
-			continue
+	// Convert KnowledgeChunk to SearchResult
+	results := make([]*SearchResult, 0, len(chunks))
+	for _, chunk := range chunks {
+		result := &SearchResult{
+			ID:        chunk.ID,
+			Content:   chunk.Content,
+			Source:    chunk.SourceType,
+			Type:      "knowledge",
+			Metadata:  chunk.Metadata,
+			CreatedAt: chunk.CreatedAt,
 		}
 
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
+		// Extract similarity score from metadata if available
+		if similarity, ok := chunk.Metadata["similarity"].(float64); ok {
+			result.Score = similarity
 		}
 
-		result.Type = "knowledge"
-		results = append(results, &result)
+		results = append(results, result)
 	}
 
 	return results
@@ -443,145 +433,17 @@ func (s *RetrievalService) searchKnowledgeVector(ctx context.Context, embedding 
 // searchExperienceVector performs vector search on experiences using pgvector.
 // This uses cosine similarity to find the most relevant agent experiences.
 func (s *RetrievalService) searchExperienceVector(ctx context.Context, embedding []float64, req *SearchRequest) []*SearchResult {
-	if len(embedding) == 0 {
-		return []*SearchResult{}
-	}
-
-	// Convert embedding to PostgreSQL vector format
-	vectorStr := fmt.Sprintf("[%v]", embedding)
-
-	// pgvector cosine similarity search query for experiences
-	query := `
-		SELECT 
-			id, 
-			COALESCE(input, '') || ' ' || COALESCE(output, '') as content,
-			type as source,
-			(1 - (embedding <=> $1::vector)) * score as combined_score,
-			metadata,
-			created_at
-		FROM experiences_1024
-		WHERE embedding IS NOT NULL
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		  AND decay_at > NOW()
-		ORDER BY (embedding <=> $1::vector) ASC
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, query, vectorStr, req.Plan.TopK)
-	if err != nil {
-		s.logger.Error("Experience vector search failed", "error", err)
-		return []*SearchResult{}
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
-
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan experience result", "error", err)
-			continue
-		}
-
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
-		}
-
-		result.Type = "experience"
-		results = append(results, &result)
-	}
-
-	return results
+	// TODO: Implement using ExperienceRepository when available
+	// For now, return empty results
+	return []*SearchResult{}
 }
 
 // searchToolsVector performs vector search on tools using pgvector.
 // This combines semantic search with usage statistics for tool ranking.
 func (s *RetrievalService) searchToolsVector(ctx context.Context, embedding []float64, req *SearchRequest) []*SearchResult {
-	if len(embedding) == 0 {
-		return []*SearchResult{}
-	}
-
-	// Convert embedding to PostgreSQL vector format
-	vectorStr := fmt.Sprintf("[%v]", embedding)
-
-	// pgvector cosine similarity search query for tools
-	// Combines embedding similarity with usage statistics
-	query := `
-		SELECT 
-			id, 
-			COALESCE(name, '') || ' ' || COALESCE(description, '') as content,
-			'tool' as source,
-			(1 - (embedding <=> $1::vector)) * (1 + COALESCE(success_rate, 0.0) * 0.5) as combined_score,
-			metadata,
-			created_at
-		FROM tools
-		WHERE embedding IS NOT NULL
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		ORDER BY (embedding <=> $1::vector) ASC
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, query, vectorStr, req.Plan.TopK)
-	if err != nil {
-		s.logger.Error("Tool vector search failed", "error", err)
-		return []*SearchResult{}
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
-
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan tool result", "error", err)
-			continue
-		}
-
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
-		}
-
-		result.Type = "tool"
-		results = append(results, &result)
-	}
-
-	return results
+	// TODO: Implement using ToolRepository when available
+	// For now, return empty results
+	return []*SearchResult{}
 }
 
 // bm25Search performs BM25 full-text search using PostgreSQL tsvector.
@@ -594,208 +456,64 @@ func (s *RetrievalService) bm25Search(ctx context.Context, req *SearchRequest) [
 	var results []*SearchResult
 
 	// Search knowledge base using BM25
-	knowledgeResults := s.bm25SearchKnowledge(ctx, req.Query, req.Plan.TopK)
+	knowledgeResults := s.bm25SearchKnowledge(ctx, req.Query, req.TenantID, req.Plan.TopK)
 	results = append(results, knowledgeResults...)
 
 	// Search experiences using BM25
-	experienceResults := s.bm25SearchExperience(ctx, req.Query, req.Plan.TopK)
+	experienceResults := s.bm25SearchExperience(ctx, req.Query, req.TenantID, req.Plan.TopK)
 	results = append(results, experienceResults...)
 
 	// Search tools using BM25
-	toolResults := s.bm25SearchTools(ctx, req.Query, req.Plan.TopK)
+	toolResults := s.bm25SearchTools(ctx, req.Query, req.TenantID, req.Plan.TopK)
 	results = append(results, toolResults...)
 
 	return results
 }
 
 // bm25SearchKnowledge performs BM25 search on knowledge base.
-func (s *RetrievalService) bm25SearchKnowledge(ctx context.Context, query string, limit int) []*SearchResult {
-	// Use simple language configuration for multi-language support
-	sqlQuery := `
-		SELECT 
-			id, 
-			content, 
-			source_type as source,
-			ts_rank(tsv, plainto_tsquery('simple', $1)) as score,
-			metadata,
-			created_at
-		FROM knowledge_chunks_1024
-		WHERE tsv @@ plainto_tsquery('simple', $1)
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		ORDER BY ts_rank(tsv, plainto_tsquery('simple', $1)) DESC
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, sqlQuery, query, limit)
+func (s *RetrievalService) bm25SearchKnowledge(ctx context.Context, query string, tenantID string, limit int) []*SearchResult {
+	// Use Repository layer for keyword search
+	chunks, err := s.kbRepo.SearchByKeyword(ctx, query, tenantID, limit)
 	if err != nil {
 		s.logger.Error("Knowledge BM25 search failed", "error", err)
 		return []*SearchResult{}
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
 
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan knowledge BM25 result", "error", err)
-			continue
+	// Convert KnowledgeChunk to SearchResult
+	results := make([]*SearchResult, 0, len(chunks))
+	for _, chunk := range chunks {
+		result := &SearchResult{
+			ID:        chunk.ID,
+			Content:   chunk.Content,
+			Source:    chunk.SourceType,
+			Type:      "knowledge",
+			Metadata:  chunk.Metadata,
+			CreatedAt: chunk.CreatedAt,
 		}
 
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
+		// Extract keyword score from metadata if available
+		if score, ok := chunk.Metadata["keyword_score"].(float64); ok {
+			result.Score = score
 		}
 
-		result.Type = "knowledge"
-		results = append(results, &result)
+		results = append(results, result)
 	}
 
 	return results
 }
 
 // bm25SearchExperience performs BM25 search on experiences.
-func (s *RetrievalService) bm25SearchExperience(ctx context.Context, query string, limit int) []*SearchResult {
-	// Search in both input and output fields
-	sqlQuery := `
-		SELECT 
-			id, 
-			COALESCE(input, '') || ' ' || COALESCE(output, '') as content,
-			type as source,
-			ts_rank(tsv, plainto_tsquery('simple', $1)) * score as combined_score,
-			metadata,
-			created_at
-		FROM experiences_1024
-		WHERE tsv @@ plainto_tsquery('simple', $1)
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		  AND decay_at > NOW()
-		ORDER BY ts_rank(tsv, plainto_tsquery('simple', $1)) DESC
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, sqlQuery, query, limit)
-	if err != nil {
-		s.logger.Error("Experience BM25 search failed", "error", err)
-		return []*SearchResult{}
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
-
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan experience BM25 result", "error", err)
-			continue
-		}
-
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
-		}
-
-		result.Type = "experience"
-		results = append(results, &result)
-	}
-
-	return results
+func (s *RetrievalService) bm25SearchExperience(ctx context.Context, query string, tenantID string, limit int) []*SearchResult {
+	// TODO: Implement using ExperienceRepository when available
+	// For now, return empty results
+	return []*SearchResult{}
 }
 
 // bm25SearchTools performs BM25 search on tools.
-func (s *RetrievalService) bm25SearchTools(ctx context.Context, query string, limit int) []*SearchResult {
-	// Search in name and description
-	sqlQuery := `
-		SELECT 
-			id, 
-			COALESCE(name, '') || ' ' || COALESCE(description, '') as content,
-			'tool' as source,
-			ts_rank(tsv, plainto_tsquery('simple', $1)) as score,
-			metadata,
-			created_at
-		FROM tools
-		WHERE tsv @@ plainto_tsquery('simple', $1)
-		  AND tenant_id = current_setting('app.tenant_id', true)
-		ORDER BY ts_rank(tsv, plainto_tsquery('simple', $1)) DESC
-		LIMIT $2
-	`
-
-	rows, err := s.db.Query(ctx, sqlQuery, query, limit)
-	if err != nil {
-		s.logger.Error("Tool BM25 search failed", "error", err)
-		return []*SearchResult{}
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			s.logger.Warn("Failed to close rows", "error", err)
-		}
-	}()
-
-	var results []*SearchResult
-	for rows.Next() {
-		var result SearchResult
-		var metadataJSON []byte
-
-		err := rows.Scan(
-			&result.ID,
-			&result.Content,
-			&result.Source,
-			&result.Score,
-			&metadataJSON,
-			&result.CreatedAt,
-		)
-
-		if err != nil {
-			s.logger.Warn("Failed to scan tool BM25 result", "error", err)
-			continue
-		}
-
-		// Parse metadata JSON
-		if len(metadataJSON) > 0 {
-			result.Metadata = make(map[string]interface{})
-			if err := parseJSON(metadataJSON, &result.Metadata); err != nil {
-				s.logger.Warn("Failed to parse metadata", "error", err)
-			}
-		}
-
-		result.Type = "tool"
-		results = append(results, &result)
-	}
-
-	return results
+func (s *RetrievalService) bm25SearchTools(ctx context.Context, query string, tenantID string, limit int) []*SearchResult {
+	// TODO: Implement using ToolRepository when available
+	// For now, return empty results
+	return []*SearchResult{}
 }
 
 // mergeAndRank merges and ranks results from multiple sources using RRF and time decay.
@@ -910,10 +628,7 @@ func (s *RetrievalService) calculateTimeDecay(createdAt time.Time) float64 {
 
 // filterByScore filters results by minimum score threshold.
 func (s *RetrievalService) filterByScore(results []*SearchResult, minScore float64) []*SearchResult {
-	if minScore <= 0 {
-		return results
-	}
-
+	// Filter by minimum score (negative minScore means no filtering)
 	filtered := make([]*SearchResult, 0, len(results))
 	for _, result := range results {
 		if result.Score >= minScore {
@@ -940,6 +655,18 @@ func parseJSON(data []byte, v interface{}) error {
 		return nil
 	}
 	return json.Unmarshal(data, v)
+}
+
+// truncateForLog truncates string for logging
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
 }
 
 func toLower(s string) string {

@@ -139,7 +139,11 @@ db_password,db_secret_456,
 
 func TestSecretRepository_Import_DuplicateKeys(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -223,7 +227,11 @@ func TestSecretRepository_Import_EmptyData(t *testing.T) {
 
 func TestSecretRepository_Import_EmptyTenantID(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -251,7 +259,11 @@ func TestSecretRepository_Import_EmptyTenantID(t *testing.T) {
 
 func TestSecretRepository_Import_EmptySecretKey(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -279,7 +291,11 @@ func TestSecretRepository_Import_EmptySecretKey(t *testing.T) {
 
 func TestSecretRepository_Import_EmptySecretValue(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -307,7 +323,11 @@ func TestSecretRepository_Import_EmptySecretValue(t *testing.T) {
 
 func TestSecretRepository_Import_InvalidExpiresAt(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -336,7 +356,11 @@ func TestSecretRepository_Import_InvalidExpiresAt(t *testing.T) {
 
 func TestSecretRepository_Import_WithExpiration(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)

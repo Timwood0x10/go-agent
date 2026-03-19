@@ -99,6 +99,7 @@ func NewProductionMemoryManager(
 		embeddingClient,
 		tenantGuard,
 		retrievalGuard,
+		knowledgeRepo,
 	)
 
 	// Create embedding queue (asynchronous embedding chain per design standard)

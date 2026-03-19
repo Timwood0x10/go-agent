@@ -379,38 +379,81 @@ func (r *KnowledgeRepository) Delete(ctx context.Context, id string) error {
 // limit - maximum number of results to return.
 // Returns list of similar knowledge chunks ordered by similarity.
 func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*storage_models.KnowledgeChunk, error) {
+	slog.Info("SearchByVector called",
+		"embedding_length", len(embedding),
+		"tenant_id", tenantID,
+		"limit", limit)
+
 	query := `
-		SELECT id, tenant_id, content, embedding, embedding_model, embedding_version,
-			   embedding_status, source_type, source, metadata, document_id,
+		SELECT id, tenant_id, content, embedding::text, embedding_model, embedding_version,
+			   embedding_status, source_type, source, metadata::text, document_id,
 			   chunk_index, content_hash, access_count, created_at, updated_at,
-			   1 - (embedding <=> $1) as similarity
+			   1 - (embedding <=> $1::vector) as similarity
 		FROM knowledge_chunks_1024
 		WHERE tenant_id = $2
 		  AND embedding_status = 'completed'
-		ORDER BY embedding <=> $1
+		ORDER BY embedding <=> $1::vector
 		LIMIT $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)
+	// Convert embedding to PostgreSQL vector format
+	vectorStr := postgres.FormatVector(embedding)
+	previewLen := len(vectorStr)
+	if previewLen > 100 {
+		previewLen = 100
+	}
+	slog.Info("Vector search query", "vector_length", len(vectorStr), "vector_preview", vectorStr[:previewLen])
+
+	rows, err := r.db.QueryContext(ctx, query, vectorStr, tenantID, limit)
 	if err != nil {
+		slog.Error("Vector search query failed", "error", err)
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
+
+	slog.Info("Vector search query succeeded")
 	defer func() { _ = rows.Close() }()
 
 	chunks := make([]*storage_models.KnowledgeChunk, 0)
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		chunk := &storage_models.KnowledgeChunk{}
 		var similarity float64
+		var embeddingStr, metadataStr string
+		var documentID sql.NullString
+
 		err := rows.Scan(
-			&chunk.ID, &chunk.TenantID, &chunk.Content, &chunk.Embedding,
+			&chunk.ID, &chunk.TenantID, &chunk.Content, &embeddingStr,
 			&chunk.EmbeddingModel, &chunk.EmbeddingVersion, &chunk.EmbeddingStatus,
-			&chunk.SourceType, &chunk.Source, &chunk.Metadata, &chunk.DocumentID,
+			&chunk.SourceType, &chunk.Source, &metadataStr, &documentID,
 			&chunk.ChunkIndex, &chunk.ContentHash, &chunk.AccessCount,
 			&chunk.CreatedAt, &chunk.UpdatedAt, &similarity,
 		)
 		if err != nil {
+			slog.Warn("Failed to scan row", "row", rowCount, "error", err)
 			continue
 		}
+
+		// Parse embedding string to []float64
+		chunk.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			slog.Warn("Failed to parse embedding", "row", rowCount, "error", err)
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &chunk.Metadata); err != nil {
+				slog.Warn("Failed to parse metadata", "row", rowCount, "error", err)
+				chunk.Metadata = make(map[string]interface{})
+			}
+		}
+
+		// Handle nullable document_id
+		if documentID.Valid {
+			chunk.DocumentID = documentID.String
+		}
+
 		// Store similarity in metadata for downstream processing
 		if chunk.Metadata == nil {
 			chunk.Metadata = make(map[string]interface{})
@@ -418,6 +461,8 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 		chunk.Metadata["similarity"] = similarity
 		chunks = append(chunks, chunk)
 	}
+
+	slog.Info("Vector search completed", "rows_scanned", rowCount, "chunks_returned", len(chunks))
 
 	return chunks, nil
 }

@@ -1,4 +1,4 @@
-// Package main provides database setup for testing.
+// Package main provides database setup for goagent knowledge base.
 package main
 
 import (
@@ -24,7 +24,7 @@ func main() {
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,
 		ConnMaxIdleTime: 1 * time.Minute,
-		QueryTimeout:    2 * time.Second,
+		QueryTimeout:    30 * time.Second,
 	}
 
 	// Create pool
@@ -38,18 +38,21 @@ func main() {
 		}
 	}()
 
-	fmt.Println("Connected to database successfully")
+	fmt.Println("Connected to goagent database successfully")
 
-	// Enable pgvector extension
-	_, err = pool.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector")
-	if err != nil {
-		log.Fatalf("Failed to create vector extension: %v", err)
-	}
-	fmt.Println("Enabled pgvector extension")
-
-	// Run migrations
+	// Run storage migrations
 	if err := postgres.MigrateStorage(ctx, pool); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Fatalf("Failed to run storage migrations: %v", err)
 	}
-	fmt.Println("Migrations completed successfully")
+	fmt.Println("Storage migrations completed successfully!")
+	fmt.Println("")
+	fmt.Println("Tables created:")
+	fmt.Println("  - knowledge_chunks_1024")
+	fmt.Println("  - experiences_1024")
+	fmt.Println("  - tools")
+	fmt.Println("  - conversations")
+	fmt.Println("  - task_results_1024")
+	fmt.Println("  - secrets")
+	fmt.Println("  - embedding_queue")
+	fmt.Println("  - embedding_dead_letter")
 }

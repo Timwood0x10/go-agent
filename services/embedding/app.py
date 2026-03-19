@@ -5,6 +5,7 @@ This service supports multiple backends: sentence-transformers and Ollama.
 import os
 import json
 import logging
+import hashlib
 import unicodedata
 import re
 import requests

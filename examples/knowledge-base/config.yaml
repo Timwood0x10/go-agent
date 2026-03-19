@@ -1,0 +1,20 @@
+# 知识库配置文件
+
+# 数据库配置
+database:
+  host: localhost
+  port: 5433
+  user: postgres
+  password: postgres
+  database: goagent
+
+# 嵌入服务配置
+embedding_service_url: http://localhost:8000
+embedding_model: e5-large-v2
+
+# 文档处理配置
+knowledge:
+  chunk_size: 500       # 每块字符数
+  chunk_overlap: 50     # 重叠字符数
+  top_k: 5              # 检索结果数量
+  min_score: 0.6        # 最小相似度

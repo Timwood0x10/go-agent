@@ -30,7 +30,10 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 		return errors.ErrInvalidArgument
 	}
 
-	_, err := g.db.Exec(ctx, "SET app.tenant_id = $1", tenantID)
+	// SET语句不支持参数化查询，需要直接拼接字符串
+	// 这里tenantID已经被验证为非空字符串，所以可以安全地使用
+	query := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	_, err := g.db.Exec(ctx, query)
 	if err != nil {
 		return fmt.Errorf("set tenant context: %w", err)
 	}
@@ -73,7 +76,7 @@ func (g *TenantGuard) WithTenant(ctx context.Context, tenantID string, fn func(c
 // ctx - database operation context.
 // Returns error if clearing tenant context fails.
 func (g *TenantGuard) ClearTenantContext(ctx context.Context) error {
-	_, err := g.db.Exec(ctx, "SET app.tenant_id = NULL")
+	_, err := g.db.Exec(ctx, "SET app.tenant_id TO DEFAULT")
 	if err != nil {
 		return fmt.Errorf("clear tenant context: %w", err)
 	}

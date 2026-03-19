@@ -102,7 +102,7 @@ func DefaultConfig() *Config {
 
 // DSN returns the connection string.
 func (c *Config) DSN() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable client_encoding=UTF8",
 		c.Host, c.Port, c.User, c.Password, c.Database)
 }
 
