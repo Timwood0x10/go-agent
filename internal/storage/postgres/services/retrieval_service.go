@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -113,13 +112,13 @@ func NewRetrievalService(
 func DefaultRetrievalPlan() *RetrievalPlan {
 	return &RetrievalPlan{
 		SearchKnowledge:     true,
-		SearchExperience:    false, // TODO: Implement when ExperienceRepository is available
-		SearchTools:         false, // TODO: Implement when ToolRepository is available
+		SearchExperience:    true, // TODO: Implement when ExperienceRepository is available
+		SearchTools:         true, // TODO: Implement when ToolRepository is available
 		SearchTaskResults:   false,
-		KnowledgeWeight:     1.0, // Only knowledge is enabled
-		ExperienceWeight:    0.0,
-		ToolsWeight:         0.0,
-		TaskResultsWeight:   0.0,
+		KnowledgeWeight:     0.4,
+		ExperienceWeight:    0.3,
+		ToolsWeight:         0.2,
+		TaskResultsWeight:   0.1,
 		EnableQueryRewrite:  false,
 		EnableKeywordSearch: true,
 		EnableTimeDecay:     true,
@@ -649,13 +648,6 @@ func (s *RetrievalService) countResultsBySource(results []*SearchResult) map[str
 }
 
 // Helper functions for string manipulation
-
-func parseJSON(data []byte, v interface{}) error {
-	if len(data) == 0 {
-		return nil
-	}
-	return json.Unmarshal(data, v)
-}
 
 // truncateForLog truncates string for logging
 func truncateForLog(s string, maxLen int) string {

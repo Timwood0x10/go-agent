@@ -20,7 +20,7 @@ func FormatVector(embedding []float64) string {
 		if i > 0 {
 			builder.WriteString(",")
 		}
-		builder.WriteString(fmt.Sprintf("%f", v))
+		fmt.Fprintf(&builder, "%f", v)
 	}
 
 	builder.WriteString("]")
