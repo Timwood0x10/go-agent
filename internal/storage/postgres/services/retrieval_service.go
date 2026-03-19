@@ -116,7 +116,7 @@ func DefaultRetrievalPlan() *RetrievalPlan {
 		SearchExperience:    false, // TODO: Implement when ExperienceRepository is available
 		SearchTools:         false, // TODO: Implement when ToolRepository is available
 		SearchTaskResults:   false,
-		KnowledgeWeight:     1.0,  // Only knowledge is enabled
+		KnowledgeWeight:     1.0, // Only knowledge is enabled
 		ExperienceWeight:    0.0,
 		ToolsWeight:         0.0,
 		TaskResultsWeight:   0.0,

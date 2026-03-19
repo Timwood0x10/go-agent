@@ -323,7 +323,7 @@ func (kb *KnowledgeBase) ListDocuments(ctx context.Context, tenantID string) ([]
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Fatal("Failed to close rows: %v", err)
+			log.Fatal("Failed to close rows", err)
 		}
 	}()
 

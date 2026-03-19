@@ -79,7 +79,7 @@ func TestFilterByScore_WithEdgeCases(t *testing.T) {
 		expectCount int
 	}{
 		{
-			name:        "all above threshold",
+			name: "all above threshold",
 			results: []*SearchResult{
 				{ID: "1", Score: 0.9},
 				{ID: "2", Score: 0.8},
@@ -89,7 +89,7 @@ func TestFilterByScore_WithEdgeCases(t *testing.T) {
 			expectCount: 3,
 		},
 		{
-			name:        "some below threshold",
+			name: "some below threshold",
 			results: []*SearchResult{
 				{ID: "1", Score: 0.9},
 				{ID: "2", Score: 0.4},
@@ -99,7 +99,7 @@ func TestFilterByScore_WithEdgeCases(t *testing.T) {
 			expectCount: 1,
 		},
 		{
-			name:        "none above threshold",
+			name: "none above threshold",
 			results: []*SearchResult{
 				{ID: "1", Score: 0.1},
 				{ID: "2", Score: 0.2},
@@ -109,7 +109,7 @@ func TestFilterByScore_WithEdgeCases(t *testing.T) {
 			expectCount: 0,
 		},
 		{
-			name:        "negative scores",
+			name: "negative scores",
 			results: []*SearchResult{
 				{ID: "1", Score: -0.1},
 				{ID: "2", Score: 0.5},
@@ -125,7 +125,7 @@ func TestFilterByScore_WithEdgeCases(t *testing.T) {
 			expectCount: 0,
 		},
 		{
-			name:        "exact threshold match",
+			name: "exact threshold match",
 			results: []*SearchResult{
 				{ID: "1", Score: 0.5},
 				{ID: "2", Score: 0.5},
@@ -246,7 +246,7 @@ func TestCountResultsBySource_WithEmptyResults(t *testing.T) {
 			expected: map[string]int{
 				"knowledge":  2,
 				"experience": 1,
-				"tool":      1,
+				"tool":       1,
 			},
 		},
 	}

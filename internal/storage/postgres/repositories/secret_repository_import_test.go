@@ -395,7 +395,11 @@ func TestSecretRepository_Import_WithExpiration(t *testing.T) {
 
 func TestSecretRepository_Import_MixedValidAndInvalid(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
@@ -444,7 +448,11 @@ func TestSecretRepository_Import_MixedValidAndInvalid(t *testing.T) {
 
 func TestSecretRepository_Import_AutoDetectFormat(t *testing.T) {
 	db := setupTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Warning: Failed to close database: ", err)
+		}
+	}()
 
 	// Create repository with test encryption key
 	encryptionKey := make([]byte, 32)
