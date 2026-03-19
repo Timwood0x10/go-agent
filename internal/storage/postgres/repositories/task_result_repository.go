@@ -31,7 +31,7 @@ func NewTaskResultRepository(db postgres.DBTX) *TaskResultRepository {
 // Create inserts a new task result into the database.
 // Args:
 // ctx - database operation context.
-// result - task result to create.
+// result - task result to create. ID should be empty to let database generate it.
 // Returns error if insert operation fails.
 func (r *TaskResultRepository) Create(ctx context.Context, result *storage_models.TaskResult) error {
 	inputJSON, err := json.Marshal(result.Input)
@@ -47,21 +47,52 @@ func (r *TaskResultRepository) Create(ctx context.Context, result *storage_model
 		}
 	}
 
-	query := `
-		INSERT INTO task_results_1024
-		(id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-		 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-		RETURNING id
-	`
+	metadataJSON, err := json.Marshal(result.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(result.Embedding)
+
+	// Build query based on whether ID is provided
+	var query string
+	var args []interface{}
+
+	if result.ID == "" {
+		// Insert with auto-generated ID
+		query = `
+			INSERT INTO task_results_1024
+			(tenant_id, session_id, task_type, agent_id, input, output, embedding,
+			 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, $14)
+			RETURNING id
+		`
+		args = []interface{}{
+			result.TenantID, result.SessionID, result.TaskType,
+			result.AgentID, inputJSON, outputJSON, embeddingStr,
+			result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+			result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+		}
+	} else {
+		// Insert with specified ID
+		query = `
+			INSERT INTO task_results_1024
+			(id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
+			 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10, $11, $12, $13, $14, $15)
+			RETURNING id
+		`
+		args = []interface{}{
+			result.ID, result.TenantID, result.SessionID, result.TaskType,
+			result.AgentID, inputJSON, outputJSON, embeddingStr,
+			result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+			result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+		}
+	}
 
 	var id string
-	err = r.db.QueryRowContext(ctx, query,
-		result.ID, result.TenantID, result.SessionID, result.TaskType,
-		result.AgentID, inputJSON, outputJSON, result.Embedding,
-		result.EmbeddingModel, result.EmbeddingVersion, result.Status,
-		result.Error, result.LatencyMs, result.Metadata, result.CreatedAt,
-	).Scan(&id)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("create task result: %w", err)
@@ -82,20 +113,21 @@ func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage
 	}
 
 	query := `
-		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			   embedding_model, embedding_version, status, error, latency_ms, metadata, created_at
+		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding::text,
+			   embedding_model, embedding_version, status, error, latency_ms, metadata::text, created_at
 		FROM task_results_1024
 		WHERE id = $1
 	`
 
 	result := &storage_models.TaskResult{}
 	var inputJSON, outputJSON []byte
+	var embeddingStr, metadataStr string
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&result.ID, &result.TenantID, &result.SessionID, &result.TaskType,
-		&result.AgentID, &inputJSON, &outputJSON, &result.Embedding,
+		&result.AgentID, &inputJSON, &outputJSON, &embeddingStr,
 		&result.EmbeddingModel, &result.EmbeddingVersion, &result.Status,
-		&result.Error, &result.LatencyMs, &result.Metadata, &result.CreatedAt,
+		&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -105,13 +137,28 @@ func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage
 		return nil, fmt.Errorf("get task result by id: %w", err)
 	}
 
+	// Parse embedding string to float64 array
+	result.Embedding, err = parseVectorString(embeddingStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse embedding: %w", err)
+	}
+
+	// Parse input JSON
 	if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
 		return nil, fmt.Errorf("unmarshal input: %w", err)
 	}
 
+	// Parse output JSON
 	if outputJSON != nil {
 		if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
 			return nil, fmt.Errorf("unmarshal output: %w", err)
+		}
+	}
+
+	// Parse metadata JSON string to map
+	if metadataStr != "" {
+		if err := json.Unmarshal([]byte(metadataStr), &result.Metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata: %w", err)
 		}
 	}
 
@@ -137,9 +184,18 @@ func (r *TaskResultRepository) Update(ctx context.Context, result *storage_model
 		}
 	}
 
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(result.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(result.Embedding)
+
 	query := `
 		UPDATE task_results_1024
-		SET task_type = $2, agent_id = $3, input = $4, output = $5, embedding = $6,
+		SET task_type = $2, agent_id = $3, input = $4, output = $5, embedding = $6::vector,
 			embedding_model = $7, embedding_version = $8, status = $9, error = $10,
 			latency_ms = $11, metadata = $12
 		WHERE id = $1
@@ -147,8 +203,8 @@ func (r *TaskResultRepository) Update(ctx context.Context, result *storage_model
 
 	resultSQL, err := r.db.ExecContext(ctx, query,
 		result.ID, result.TaskType, result.AgentID, inputJSON, outputJSON,
-		result.Embedding, result.EmbeddingModel, result.EmbeddingVersion,
-		result.Status, result.Error, result.LatencyMs, result.Metadata,
+		embeddingStr, result.EmbeddingModel, result.EmbeddingVersion,
+		result.Status, result.Error, result.LatencyMs, metadataJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("update task result: %w", err)
@@ -199,19 +255,27 @@ func (r *TaskResultRepository) Delete(ctx context.Context, id string) error {
 // limit - maximum number of results to return.
 // Returns list of similar task results ordered by similarity.
 func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*storage_models.TaskResult, error) {
+	// Handle empty embedding - return empty results
+	if len(embedding) == 0 {
+		return []*storage_models.TaskResult{}, nil
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(embedding)
+
 	query := `
-		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			   embedding_model, embedding_version, status, error, latency_ms, metadata, created_at,
-			   1 - (embedding <=> $1) as similarity
+		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding::text,
+			   embedding_model, embedding_version, status, error, latency_ms, metadata::text, created_at,
+			   1 - (embedding <=> $1::vector) as similarity
 		FROM task_results_1024
 		WHERE tenant_id = $2
 		  AND embedding IS NOT NULL
 		  AND status = 'completed'
-		ORDER BY embedding <=> $1
+		ORDER BY embedding <=> $1::vector
 		LIMIT $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)
+	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
@@ -225,31 +289,50 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 	for rows.Next() {
 		result := &storage_models.TaskResult{}
 		var inputJSON, outputJSON []byte
+		var embeddingStr, metadataStr string
 		var similarity float64
 
 		err := rows.Scan(
 			&result.ID, &result.TenantID, &result.SessionID, &result.TaskType,
-			&result.AgentID, &inputJSON, &outputJSON, &result.Embedding,
+			&result.AgentID, &inputJSON, &outputJSON, &embeddingStr,
 			&result.EmbeddingModel, &result.EmbeddingVersion, &result.Status,
-			&result.Error, &result.LatencyMs, &result.Metadata, &result.CreatedAt, &similarity,
+			&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt, &similarity,
 		)
 		if err != nil {
 			continue
 		}
 
+		// Parse embedding string to float64 array
+		result.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse input JSON
 		if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
 			continue
 		}
 
+		// Parse output JSON
 		if outputJSON != nil {
 			if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
 				continue
 			}
 		}
 
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &result.Metadata); err != nil {
+				result.Metadata = make(map[string]interface{})
+			}
+		}
+
+		// Ensure metadata is initialized before storing similarity
 		if result.Metadata == nil {
 			result.Metadata = make(map[string]interface{})
 		}
+
+		// Store similarity in metadata
 		result.Metadata["similarity"] = similarity
 		results = append(results, result)
 	}
@@ -266,8 +349,8 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 // Returns list of task results ordered by created time (descending).
 func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantID string, limit int) ([]*storage_models.TaskResult, error) {
 	query := `
-		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			   embedding_model, embedding_version, status, error, latency_ms, metadata, created_at
+		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding::text,
+			   embedding_model, embedding_version, status, error, latency_ms, metadata::text, created_at
 		FROM task_results_1024
 		WHERE task_type = $1 AND tenant_id = $2
 		ORDER BY created_at DESC
@@ -288,25 +371,43 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 	for rows.Next() {
 		result := &storage_models.TaskResult{}
 		var inputJSON, outputJSON []byte
+		var embeddingStr, metadataStr string
 
 		err := rows.Scan(
 			&result.ID, &result.TenantID, &result.SessionID, &result.TaskType,
-			&result.AgentID, &inputJSON, &outputJSON, &result.Embedding,
+			&result.AgentID, &inputJSON, &outputJSON, &embeddingStr,
 			&result.EmbeddingModel, &result.EmbeddingVersion, &result.Status,
-			&result.Error, &result.LatencyMs, &result.Metadata, &result.CreatedAt,
+			&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
 
+		// Parse embedding string to float64 array
+		result.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse input JSON
 		if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
 			continue
 		}
 
+		// Parse output JSON
 		if outputJSON != nil {
 			if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
 				continue
 			}
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &result.Metadata); err != nil {
+				result.Metadata = make(map[string]interface{})
+			}
+		} else {
+			result.Metadata = make(map[string]interface{})
 		}
 
 		results = append(results, result)
@@ -324,8 +425,8 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 // Returns list of task results ordered by created time (descending).
 func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, tenantID string, limit int) ([]*storage_models.TaskResult, error) {
 	query := `
-		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			   embedding_model, embedding_version, status, error, latency_ms, metadata, created_at
+		SELECT id, tenant_id, session_id, task_type, agent_id, input, output, embedding::text,
+			   embedding_model, embedding_version, status, error, latency_ms, metadata::text, created_at
 		FROM task_results_1024
 		WHERE session_id = $1 AND tenant_id = $2
 		ORDER BY created_at DESC
@@ -346,25 +447,43 @@ func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, ten
 	for rows.Next() {
 		result := &storage_models.TaskResult{}
 		var inputJSON, outputJSON []byte
+		var embeddingStr, metadataStr string
 
 		err := rows.Scan(
 			&result.ID, &result.TenantID, &result.SessionID, &result.TaskType,
-			&result.AgentID, &inputJSON, &outputJSON, &result.Embedding,
+			&result.AgentID, &inputJSON, &outputJSON, &embeddingStr,
 			&result.EmbeddingModel, &result.EmbeddingVersion, &result.Status,
-			&result.Error, &result.LatencyMs, &result.Metadata, &result.CreatedAt,
+			&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
 
+		// Parse embedding string to float64 array
+		result.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse input JSON
 		if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
 			continue
 		}
 
+		// Parse output JSON
 		if outputJSON != nil {
 			if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
 				continue
 			}
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &result.Metadata); err != nil {
+				result.Metadata = make(map[string]interface{})
+			}
+		} else {
+			result.Metadata = make(map[string]interface{})
 		}
 
 		results = append(results, result)
@@ -382,13 +501,16 @@ func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, ten
 // version - embedding model version.
 // Returns error if update operation fails.
 func (r *TaskResultRepository) UpdateEmbedding(ctx context.Context, id string, embedding []float64, model string, version int) error {
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(embedding)
+
 	query := `
 		UPDATE task_results_1024
-		SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()
+		SET embedding = $2::vector, embedding_model = $3, embedding_version = $4
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query, id, embedding, model, version)
+	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
 		return fmt.Errorf("update embedding: %w", err)
 	}
@@ -416,7 +538,7 @@ func (r *TaskResultRepository) UpdateEmbedding(ctx context.Context, id string, e
 func (r *TaskResultRepository) UpdateStatus(ctx context.Context, id, status, errorMsg string, latencyMs int) error {
 	query := `
 		UPDATE task_results_1024
-		SET status = $2, error = $3, latency_ms = $4, updated_at = NOW()
+		SET status = $2, error = $3, latency_ms = $4
 		WHERE id = $1
 	`
 

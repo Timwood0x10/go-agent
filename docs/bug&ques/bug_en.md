@@ -2172,3 +2172,224 @@ Error: "sql: Scan error on column index 8, name \"tags\": unsupported Scan, stor
 - PostgreSQL Arrays: https://www.postgresql.org/docs/current/arrays.html
 - Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
 - PostgreSQL Type Casting: https://www.postgresql.org/docs/current/sql-createcast.html
+
+---
+
+## Bug #6: ConversationRepository GetRecentSessions SQL Syntax Error
+
+### Date
+2026-03-19
+
+### Severity
+High - Causes GetRecentSessions functionality to completely fail
+
+### Affected Files
+- `internal/storage/postgres/repositories/conversation_repository.go`
+- `internal/storage/postgres/repositories/conversation_repository_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestConversationRepository_GetRecentSessions` test failure
+2. `TestConversationRepository_GetRecentSessions_Limit` test failure
+3. `TestConversationRepository_GetRecentSessions_TenantIsolation` test failure
+
+#### Error Messages
+```
+Error: "get recent sessions: pq: for SELECT DISTINCT, ORDER BY expressions must appear in select list at position 5:12 (42P10)"
+```
+
+### Root Cause Analysis
+
+#### Issue: SQL Syntax Error - DISTINCT incompatible with ORDER BY
+
+##### Incorrect Code
+```go
+// GetRecentSessions method
+query := `
+    SELECT DISTINCT session_id
+    FROM conversations
+    WHERE tenant_id = $1
+    ORDER BY MAX(created_at) DESC  // ← created_at not in SELECT list
+    LIMIT $2
+`
+```
+
+##### Issue Analysis
+1. **PostgreSQL SQL Rule**:
+   - When query uses `DISTINCT`, all expressions in `ORDER BY` clause must appear in `SELECT` list
+   - This is PostgreSQL's strict SQL standard requirement
+
+2. **Current Code Violates Rule**:
+   - `SELECT DISTINCT session_id` only selects `session_id` column
+   - `ORDER BY MAX(created_at) DESC` uses `created_at` column
+   - `created_at` is not in SELECT list, causing syntax error
+
+3. **Impact Scope**:
+   - `GetRecentSessions` method cannot execute at all
+   - All functionality depending on this method fails
+   - Tests cannot verify related functionality
+
+4. **Why Not Discovered Before**:
+   - Possibly no tests were written for this method before
+   - Or tests didn't cover this method
+   - SQL syntax errors only exposed at runtime
+
+### Solution
+
+#### Fix SQL Query Syntax
+
+```go
+// GetRecentSessions retrieves recent conversation sessions for a tenant.
+// Args:
+// ctx - database operation context.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of sessions to return.
+// Returns list of session identifiers ordered by last activity (descending).
+func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID string, limit int) ([]string, error) {
+    query := `
+        SELECT session_id
+        FROM conversations
+        WHERE tenant_id = $1
+        GROUP BY session_id
+        ORDER BY MAX(created_at) DESC
+        LIMIT $2
+    `
+
+    rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
+    if err != nil {
+        return nil, fmt.Errorf("get recent sessions: %w", err)
+    }
+    defer func() { _ = rows.Close() }()
+
+    sessions := make([]string, 0)
+    for rows.Next() {
+        var sessionID string
+        if err := rows.Scan(&sessionID); err != nil {
+            continue
+        }
+        sessions = append(sessions, sessionID)
+    }
+
+    return sessions, nil
+}
+```
+
+Key improvements:
+1. Use `GROUP BY session_id` instead of `DISTINCT session_id`
+2. Maintain `ORDER BY MAX(created_at) DESC` semantics
+3. Complies with PostgreSQL SQL syntax standards
+
+#### Why Use GROUP BY Instead of Adding created_at to SELECT?
+
+1. **Maintain Return Type**:
+   - Method returns `[]string` (session ID list)
+   - No need to return timestamps
+
+2. **Correct GROUP BY Semantics**:
+   - `GROUP BY session_id` groups by session
+   - `ORDER BY MAX(created_at) DESC` sorts by latest activity time per session
+   - Semantics consistent with original code
+
+3. **Performance Considerations**:
+   - Both approaches have similar performance
+   - PostgreSQL optimizer can handle GROUP BY queries efficiently
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+--- FAIL: TestConversationRepository_GetRecentSessions (0.01s)
+Error: "get recent sessions: pq: for SELECT DISTINCT, ORDER BY expressions must appear in select list at position 5:12 (42P10)"
+```
+
+**After:**
+```
+--- PASS: TestConversationRepository_GetRecentSessions (0.02s)
+--- PASS: TestConversationRepository_GetRecentSessions_Limit (0.01s)
+--- PASS: TestConversationRepository_GetRecentSessions_TenantIsolation (0.01s)
+```
+
+#### Functional verification
+- ✅ Correctly returns recently active sessions
+- ✅ Sorted by latest activity time
+- ✅ Supports limiting return count
+- ✅ Supports tenant isolation
+
+#### Code quality checks
+- ✅ `go build` - Compilation successful
+- ✅ `go vet` - No warnings
+- ✅ SQL syntax complies with PostgreSQL standards
+
+### Lessons Learned
+
+1. **PostgreSQL DISTINCT Rules**:
+   - `DISTINCT` + `ORDER BY` must satisfy: ORDER BY expressions must appear in SELECT list
+   - Or use `GROUP BY` instead of `DISTINCT`
+
+2. **Importance of SQL Standards**:
+   - Different databases have slightly different SQL standard implementations
+   - PostgreSQL is stricter, requires compliance with SQL standards
+   - MySQL might be more lenient, but shouldn't rely on this leniency
+
+3. **Value of Testing**:
+   - Tests correctly exposed SQL syntax error
+   - Cannot detect SQL syntax errors at compile time
+   - Only发现问题 at runtime
+
+4. **SQL Query Optimization**:
+   - `GROUP BY` + `MAX()` is a common aggregation query pattern
+   - Performance comparable to `DISTINCT`
+   - Semantics clearer
+
+### Best Practices
+
+1. **Avoid DISTINCT + ORDER BY Incompatibility**:
+   ```go
+   // Good practice: Use GROUP BY
+   query := `
+       SELECT column
+       FROM table
+       GROUP BY column
+       ORDER BY MAX(other_column) DESC
+   `
+   
+   // Avoid: DISTINCT + ORDER BY on non-selected column
+   query := `
+       SELECT DISTINCT column
+       FROM table
+       ORDER BY other_column DESC  // Syntax error
+   `
+   ```
+
+2. **Use GROUP BY Instead of DISTINCT**:
+   ```go
+   // When needing group aggregation, prefer GROUP BY
+   SELECT column, COUNT(*)
+   FROM table
+   GROUP BY column
+   ORDER BY COUNT(*) DESC
+   ```
+
+3. **Test SQL Queries**:
+   ```go
+   // Tests should cover all query methods
+   func TestConversationRepository_GetRecentSessions(t *testing.T)
+   func TestConversationRepository_ListAll(t *testing.T)
+   func TestConversationRepository_CountBySession(t *testing.T)
+   ```
+
+4. **Reference Database Documentation**:
+   - PostgreSQL official docs for SELECT DISTINCT
+   - PostgreSQL official docs for GROUP BY
+   - PostgreSQL official docs for ORDER BY
+   - SQL Standard documentation
+
+### References
+- PostgreSQL SELECT DISTINCT: https://www.postgresql.org/docs/current/sql-select.html#SQL-DISTINCT
+- PostgreSQL GROUP BY: https://www.postgresql.org/docs/current/sql-groupby.html
+- PostgreSQL ORDER BY: https://www.postgresql.org/docs/current/sql-orderby.html
+- SQL Standard: https://www.postgresql.org/docs/current/sql-syntax.html

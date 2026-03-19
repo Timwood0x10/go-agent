@@ -31,21 +31,41 @@ func NewConversationRepository(db postgres.DBTX) *ConversationRepository {
 // Create inserts a new conversation message into the database.
 // Args:
 // ctx - database operation context.
-// conv - conversation message to create.
+// conv - conversation message to create. ID should be empty to let database generate it.
 // Returns error if insert operation fails.
 func (r *ConversationRepository) Create(ctx context.Context, conv *storage_models.Conversation) error {
-	query := `
-		INSERT INTO conversations
-		(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id
-	`
+	// Build query based on whether ID is provided
+	var query string
+	var args []interface{}
+
+	if conv.ID == "" {
+		// Insert with auto-generated ID
+		query = `
+			INSERT INTO conversations
+			(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id
+		`
+		args = []interface{}{
+			conv.SessionID, conv.TenantID, conv.UserID,
+			conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+		}
+	} else {
+		// Insert with specified ID
+		query = `
+			INSERT INTO conversations
+			(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id
+		`
+		args = []interface{}{
+			conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
+			conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+		}
+	}
 
 	var id string
-	err := r.db.QueryRowContext(ctx, query,
-		conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
-		conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
-	).Scan(&id)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("create conversation: %w", err)
@@ -343,9 +363,10 @@ func (r *ConversationRepository) CountBySession(ctx context.Context, sessionID, 
 // Returns list of session identifiers ordered by last activity (descending).
 func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID string, limit int) ([]string, error) {
 	query := `
-		SELECT DISTINCT session_id
+		SELECT session_id
 		FROM conversations
 		WHERE tenant_id = $1
+		GROUP BY session_id
 		ORDER BY MAX(created_at) DESC
 		LIMIT $2
 	`

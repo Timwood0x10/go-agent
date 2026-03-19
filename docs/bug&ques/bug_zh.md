@@ -2172,3 +2172,223 @@ Error: "sql: Scan error on column index 8, name \"tags\": unsupported Scan, stor
 - PostgreSQL Arrays: https://www.postgresql.org/docs/current/arrays.html
 - Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
 - PostgreSQL Type Casting: https://www.postgresql.org/docs/current/sql-createcast.html
+
+---
+
+## Bug #6: ConversationRepository GetRecentSessions SQL 语法错误
+
+### Date
+2026-03-19
+
+### Severity
+High - 导致 GetRecentSessions 功能完全失效
+
+### Affected Files
+- `internal/storage/postgres/repositories/conversation_repository.go`
+- `internal/storage/postgres/repositories/conversation_repository_test.go`
+
+### Bug Description
+
+#### 症状
+1. `TestConversationRepository_GetRecentSessions` 测试失败
+2. `TestConversationRepository_GetRecentSessions_Limit` 测试失败
+3. `TestConversationRepository_GetRecentSessions_TenantIsolation` 测试失败
+
+#### 错误信息
+```
+Error: "get recent sessions: pq: for SELECT DISTINCT, ORDER BY expressions must appear in select list at position 5:12 (42P10)"
+```
+
+### Root Cause Analysis
+
+#### 问题：SQL 语法错误 - DISTINCT 与 ORDER BY 不兼容
+
+##### 错误代码
+```go
+// GetRecentSessions 方法
+query := `
+    SELECT DISTINCT session_id
+    FROM conversations
+    WHERE tenant_id = $1
+    ORDER BY MAX(created_at) DESC  // ← created_at 不在 SELECT 列表中
+    LIMIT $2
+`
+```
+
+##### 问题分析
+1. **PostgreSQL SQL 规则**：
+   - 当查询使用 `DISTINCT` 时，`ORDER BY` 子句中的所有表达式必须出现在 `SELECT` 列表中
+   - 这是 PostgreSQL 的严格 SQL 标准要求
+
+2. **当前代码违反规则**：
+   - `SELECT DISTINCT session_id` 只选择了 `session_id` 列
+   - `ORDER BY MAX(created_at) DESC` 使用了 `created_at` 列
+   - `created_at` 不在 SELECT 列表中，导致语法错误
+
+3. **影响范围**：
+   - `GetRecentSessions` 方法完全无法执行
+   - 所有依赖此方法的功能失效
+   - 测试无法验证相关功能
+
+4. **为什么之前没发现**：
+   - 可能之前没有为这个方法编写测试
+   - 或者测试没有覆盖这个方法
+   - SQL 语法错误只在运行时暴露
+
+### Solution
+
+#### 修复 SQL 查询语法
+
+```go
+// GetRecentSessions retrieves recent conversation sessions for a tenant.
+// Args:
+// ctx - database operation context.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of sessions to return.
+// Returns list of session identifiers ordered by last activity (descending).
+func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID string, limit int) ([]string, error) {
+	query := `
+        SELECT session_id
+        FROM conversations
+        WHERE tenant_id = $1
+        GROUP BY session_id
+        ORDER BY MAX(created_at) DESC
+        LIMIT $2
+    `
+
+    rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
+    if err != nil {
+        return nil, fmt.Errorf("get recent sessions: %w", err)
+    }
+    defer func() { _ = rows.Close() }()
+
+    sessions := make([]string, 0)
+    for rows.Next() {
+        var sessionID string
+        if err := rows.Scan(&sessionID); err != nil {
+            continue
+        }
+        sessions = append(sessions, sessionID)
+    }
+
+    return sessions, nil
+}
+```
+
+关键改进：
+1. 使用 `GROUP BY session_id` 替代 `DISTINCT session_id`
+2. 保持 `ORDER BY MAX(created_at) DESC` 的语义
+3. 符合 PostgreSQL SQL 语法规范
+
+#### 为什么使用 GROUP BY 而不是添加 created_at 到 SELECT？
+
+1. **保持返回类型**：
+   - 方法返回 `[]string`（session ID 列表）
+   - 不需要返回时间戳
+
+2. **GROUP BY 的语义正确性**：
+   - `GROUP BY session_id` 按会话分组
+   - `ORDER BY MAX(created_at) DESC` 按每个会话的最新活动时间排序
+   - 语义与原代码一致
+
+3. **性能考虑**：
+   - 两种方式性能相似
+   - PostgreSQL 优化器可以正确处理 GROUP BY 查询
+
+### Verification
+
+#### 测试结果
+修复前后对比：
+
+**修复前：**
+```
+--- FAIL: TestConversationRepository_GetRecentSessions (0.01s)
+Error: "get recent sessions: pq: for SELECT DISTINCT, ORDER BY expressions must appear in select list at position 5:12 (42P10)"
+```
+
+**修复后：**
+```
+--- PASS: TestConversationRepository_GetRecentSessions (0.02s)
+--- PASS: TestConversationRepository_GetRecentSessions_Limit (0.01s)
+--- PASS: TestConversationRepository_GetRecentSessions_TenantIsolation (0.01s)
+```
+
+#### 功能验证
+- ✅ 正确返回最近活跃的会话
+- ✅ 按最新活动时间排序
+- ✅ 支持限制返回数量
+- ✅ 支持租户隔离
+
+#### 代码质量检查
+- ✅ `go build` - 编译成功
+- ✅ `go vet` - 无警告
+- ✅ SQL 语法符合 PostgreSQL 标准
+
+### Lessons Learned
+
+1. **PostgreSQL DISTINCT 规则**：
+   - `DISTINCT` + `ORDER BY` 必须满足：ORDER BY 的表达式必须出现在 SELECT 列表中
+   - 或者使用 `GROUP BY` 替代 `DISTINCT`
+
+2. **SQL 标准的重要性**：
+   - 不同数据库对 SQL 标准的实现略有差异
+   - PostgreSQL 比较严格，要求符合 SQL 标准
+   - MySQL 可能更宽松，但不应该依赖这种宽松
+
+3. **测试的价值**：
+   - 测试正确地暴露了 SQL 语法错误
+   - 编译时无法检测 SQL 语法错误
+   - 只有运行时才能发现问题
+
+4. **SQL 查询优化**：
+   - `GROUP BY` + `MAX()` 是常见的聚合查询模式
+   - 性能与 `DISTINCT` 相当
+   - 语义更清晰
+
+### Best Practices
+
+1. **避免 DISTINCT + ORDER BY 不兼容**：
+   ```go
+   // 好的做法：使用 GROUP BY
+   query := `
+       SELECT column
+       FROM table
+       GROUP BY column
+       ORDER BY MAX(other_column) DESC
+   `
+   
+   // 避免：DISTINCT + ORDER BY 列表外列
+   query := `
+       SELECT DISTINCT column
+       FROM table
+       ORDER BY other_column DESC  // 语法错误
+   `
+   ```
+
+2. **使用 GROUP BY 替代 DISTINCT**：
+   ```go
+   // 当需要分组聚合时，优先使用 GROUP BY
+   SELECT column, COUNT(*)
+   FROM table
+   GROUP BY column
+   ORDER BY COUNT(*) DESC
+   ```
+
+3. **测试 SQL 查询**：
+   ```go
+   // 测试应该覆盖所有查询方法
+   func TestConversationRepository_GetRecentSessions(t *testing.T)
+   func TestConversationRepository_ListAll(t *testing.T)
+   func TestConversationRepository_CountBySession(t *testing.T)
+   ```
+
+4. **参考数据库文档**：
+   - PostgreSQL 官方文档关于 SELECT DISTINCT
+   - PostgreSQL 官方文档关于 GROUP BY
+   - SQL 标准文档
+
+### References
+- PostgreSQL SELECT DISTINCT: https://www.postgresql.org/docs/current/sql-select.html#SQL-DISTINCT
+- PostgreSQL GROUP BY: https://www.postgresql.org/docs/current/sql-groupby.html
+- PostgreSQL ORDER BY: https://www.postgresql.org/docs/current/sql-orderby.html
+- SQL Standard: https://www.postgresql.org/docs/current/sql-syntax.html
