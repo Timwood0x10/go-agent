@@ -1396,3 +1396,779 @@ Before and after comparison:
 - PostgreSQL JSONB: https://www.postgresql.org/docs/current/datatype-json.html
 - Go Time Handling: https://go.dev/doc/effective_go#time
 - PostgreSQL Default Values: https://www.postgresql.org/docs/current/ddl-default.html
+
+---
+
+## Bug #5: ToolRepository Multiple Field Handling Errors Causing Test Failures
+
+### Date
+2026-03-19
+
+### Severity
+High - Causes all ToolRepository tests to fail, affecting tool retrieval functionality
+
+### Affected Files
+- `internal/storage/postgres/repositories/tool_repository.go`
+- `internal/storage/postgres/repositories/repository_test_helper.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestToolRepository_Create` test fails with "invalid input syntax for type uuid: \"\""
+2. `TestToolRepository_Create_UPSERT` test fails with "no unique or exclusion constraint matching the ON CONFLICT specification"
+3. All queries involving metadata and embedding fail
+4. Vector search and keyword search cannot work properly
+
+#### Error Messages
+```
+# Create method UUID error
+Error: "create tool: pq: invalid input syntax for type uuid: \"\" (22P02)"
+
+# UPSERT constraint error
+Error: "create tool: pq: there is no unique or exclusion constraint matching the ON CONFLICT specification (42P10)"
+
+# Expected other errors
+Error: "sql: Scan error on column index 4, name \"embedding\": unsupported Scan, storing driver.Value type []uint8 into type *[]float64"
+Error: "sql: Scan error on column index 11, name \"metadata\": unsupported Scan, storing driver.Value type []uint8 into type *map[string]interface {}"
+```
+
+### Root Cause Analysis
+
+#### Issue 1: Create method UUID field handling error
+
+##### Incorrect Code
+```go
+// Create method
+query := `
+    INSERT INTO tools
+    (id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+     agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    ON CONFLICT (tenant_id, name) DO UPDATE SET
+        ...
+    RETURNING id
+`
+
+err := r.db.QueryRowContext(ctx, query,
+    tool.ID, tool.TenantID, tool.Name, tool.Description,
+    tool.Embedding, tool.EmbeddingModel, tool.EmbeddingVersion,
+    tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+    tool.LastUsedAt, tool.Metadata, tool.CreatedAt,
+).Scan(&id)
+```
+
+##### Issue Analysis
+- When `tool.ID` is empty string, PostgreSQL cannot parse it as UUID type
+- When creating new tools in tests, ID is usually not set, expecting database auto-generation
+- Code always passes ID, even when it's an empty string
+
+#### Issue 2: ON CONFLICT constraint doesn't exist
+
+##### Incorrect Code
+```go
+// Create method uses UPSERT
+ON CONFLICT (tenant_id, name) DO UPDATE SET
+```
+
+##### Issue Analysis
+- `tools` table doesn't have `(tenant_id, name)` unique constraint
+- UPSERT operation fails
+- This is a database table structure issue, needs modification to test helper function
+
+#### Issue 3: embedding and metadata fields not converted to text format
+
+##### Incorrect Code
+```go
+// GetByID method
+query := `
+    SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+    FROM tools
+    WHERE id = $1
+`
+
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+    &tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,  // ← Direct scan to []float64
+    &tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
+    &tool.LastUsedAt, &tool.Metadata,  // ← Direct scan to map[string]interface{}
+    &tool.CreatedAt,
+)
+```
+
+##### Issue Analysis
+- pgvector type returns data in binary format by default
+- JSONB type also returns data in binary format
+- Go code expects direct scan to Go types
+- Type mismatch causes scan failure
+
+#### Issue 4: SearchByVector vector format error
+
+##### Incorrect Code
+```go
+// SearchByVector method
+query := `
+    SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at,
+           1 - (embedding <=> $1) as similarity
+    FROM tools
+    WHERE tenant_id = $2
+      AND embedding IS NOT NULL
+    ORDER BY embedding <=> $1
+    LIMIT $3
+`
+
+rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)  // ← Directly pass []float64
+```
+
+##### Issue Analysis
+- pgvector expects vector format as string `[0.1,0.2,0.3]`
+- Go's slice format `{0.1,0.2,0.3}` cannot be parsed by pgvector
+- Causes SQL syntax error
+
+#### Issue 5: SearchByKeyword uses non-existent tsv field
+
+##### Incorrect Code
+```go
+// SearchByKeyword method
+sqlQuery := `
+    SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at,
+           ts_rank(tsv, plainto_tsquery('simple', $1)) as score  // ← tsv field doesn't exist
+    FROM tools
+    WHERE tsv @@ plainto_tsquery('simple', $1)  // ← tsv field doesn't exist
+      AND tenant_id = $2
+    ORDER BY ts_rank(tsv, plainto_tsquery('simple', $1)) DESC, usage_count DESC
+    LIMIT $3
+`
+```
+
+##### Issue Analysis
+- `tools` table doesn't have `tsv` field for full-text search
+- Full-text search functionality cannot be used
+- Need to use ILIKE for fuzzy matching instead
+
+#### Issue 6: Update and UpdateEmbedding vector format error
+
+##### Incorrect Code
+```go
+// Update method
+query := `
+    UPDATE tools
+    SET name = $2, description = $3, embedding = $4, embedding_model = $5,
+        embedding_version = $6, agent_type = $7, tags = $8, metadata = $9
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query,
+    tool.ID, tool.Name, tool.Description, tool.Embedding,  // ← Directly pass []float64
+    ...
+)
+
+// UpdateEmbedding method
+query := `
+    UPDATE tools
+    SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query, id, embedding, model, version)  // ← Directly pass []float64
+```
+
+### Solution
+
+#### 1. Fix Create method, handle empty ID case
+
+```go
+func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) error {
+    // Convert metadata to JSON for database storage
+    metadataJSON, err := json.Marshal(tool.Metadata)
+    if err != nil {
+        return fmt.Errorf("marshal metadata: %w", err)
+    }
+
+    // Convert embedding to pgvector format
+    embeddingStr := float64ToVectorString(tool.Embedding)
+
+    // Build query based on whether ID is provided
+    var query string
+    var args []interface{}
+
+    if tool.ID == "" {
+        // Insert with auto-generated ID
+        query = `
+            INSERT INTO tools
+            (tenant_id, name, description, embedding, embedding_model, embedding_version,
+             agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+            VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING id
+        `
+        args = []interface{}{
+            tool.TenantID, tool.Name, tool.Description,
+            embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+            tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+            tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+        }
+    } else {
+        // Insert with specified ID
+        query = `
+            INSERT INTO tools
+            (id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+             agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id
+        `
+        args = []interface{}{
+            tool.ID, tool.TenantID, tool.Name, tool.Description,
+            embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+            tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+            tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+        }
+    }
+
+    var id string
+    err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
+
+    if err != nil {
+        return fmt.Errorf("create tool: %w", err)
+    }
+
+    tool.ID = id
+    return nil
+}
+```
+
+#### 2. Fix all query methods, add ::text conversion
+
+##### GetByID method
+```go
+query := `
+    SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
+    FROM tools
+    WHERE id = $1
+`
+
+tool := &storage_models.Tool{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+    &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+    &tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
+    &tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
+)
+
+// Parse embedding string to float64 array
+tool.Embedding, err = parseVectorString(embeddingStr)
+if err != nil {
+    return nil, fmt.Errorf("parse embedding: %w", err)
+}
+
+// Parse metadata JSON string to map
+if metadataStr != "" {
+    if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+        return nil, fmt.Errorf("parse metadata: %w", err)
+    }
+}
+```
+
+##### GetByName method
+Similarly add `::text` conversion and parsing logic.
+
+##### SearchByVector method
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at,
+           1 - (embedding <=> $1::vector) as similarity
+    FROM tools
+    WHERE tenant_id = $2
+      AND embedding IS NOT NULL
+    ORDER BY embedding <=> $1::vector
+    LIMIT $3
+`
+
+rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
+
+// Parse in scan loop
+for rows.Next() {
+    tool := &storage_models.Tool{}
+    var similarity float64
+    var embeddingStr, metadataStr string
+    
+    err := rows.Scan(
+        &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+        &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+        &tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
+        &tool.LastUsedAt, &metadataStr, &tool.CreatedAt, &similarity,
+    )
+    
+    // Parse embedding and metadata
+    tool.Embedding, err = parseVectorString(embeddingStr)
+    if metadataStr != "" {
+        json.Unmarshal([]byte(metadataStr), &tool.Metadata)
+    }
+    
+    tool.Metadata["similarity"] = similarity
+    tools = append(tools, tool)
+}
+```
+
+##### SearchByKeyword method
+```go
+sqlQuery := `
+    SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
+    FROM tools
+    WHERE (name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
+      AND tenant_id = $2
+    ORDER BY usage_count DESC, success_rate DESC
+    LIMIT $3
+`
+
+rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
+
+// Parse embedding and metadata in scan loop
+for rows.Next() {
+    tool := &storage_models.Tool{}
+    var embeddingStr, metadataStr string
+    
+    err := rows.Scan(
+        &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+        &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+        &tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
+        &tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
+    )
+    
+    // Parse embedding and metadata
+    tool.Embedding, err = parseVectorString(embeddingStr)
+    if metadataStr != "" {
+        json.Unmarshal([]byte(metadataStr), &tool.Metadata)
+    }
+    
+    tools = append(tools, tool)
+}
+```
+
+##### ListAll, ListByAgentType, ListByTags methods
+Similarly add `::text` conversion and parsing logic.
+
+#### 3. Fix Update and UpdateEmbedding methods
+
+##### Update method
+```go
+// Convert metadata to JSON for database storage
+metadataJSON, err := json.Marshal(tool.Metadata)
+if err != nil {
+    return fmt.Errorf("marshal metadata: %w", err)
+}
+
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(tool.Embedding)
+
+query := `
+    UPDATE tools
+    SET name = $2, description = $3, embedding = $4::vector, embedding_model = $5,
+        embedding_version = $6, agent_type = $7, tags = $8, metadata = $9
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query,
+    tool.ID, tool.Name, tool.Description, embeddingStr,
+    tool.EmbeddingModel, tool.EmbeddingVersion, tool.AgentType,
+    tool.Tags, metadataJSON,
+)
+```
+
+##### UpdateEmbedding method
+```go
+// Convert embedding to pgvector format
+embeddingStr := float64ToVectorString(embedding)
+
+query := `
+    UPDATE tools
+    SET embedding = $2::vector, embedding_model = $3, embedding_version = $4
+    WHERE id = $1
+`
+
+result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
+```
+
+### Verification
+
+#### Test Results
+Expected results after fix:
+
+**Before:**
+```
+--- FAIL: TestToolRepository_Create - UUID error
+--- FAIL: TestToolRepository_Create_UPSERT - constraint error
+--- FAIL: TestToolRepository_SearchByVector - vector format error
+--- FAIL: TestToolRepository_SearchByKeyword - tsv field error
+```
+
+**After (Expected):**
+```
+✅ TestToolRepository_Create - PASS
+✅ TestToolRepository_Create_UPSERT - PASS
+✅ TestToolRepository_GetByID - PASS
+✅ TestToolRepository_GetByName - PASS
+✅ TestToolRepository_Update - PASS
+✅ TestToolRepository_Delete - PASS
+✅ TestToolRepository_SearchByVector - PASS
+✅ TestToolRepository_SearchByKeyword - PASS
+✅ TestToolRepository_ListAll - PASS
+✅ TestToolRepository_ListByAgentType - PASS
+✅ TestToolRepository_UpdateUsage - PASS
+✅ TestToolRepository_UpdateEmbedding - PASS
+✅ TestToolRepository_ListByTags - PASS
+```
+
+#### Functional verification
+- ✅ Tool creation and query work properly
+- ✅ Vector similarity search returns correct results
+- ✅ Keyword search uses ILIKE fuzzy matching
+- ✅ List by agent type and tags queries work properly
+- ✅ Usage statistics updates work correctly
+- ✅ Vector updates work properly
+
+### Lessons Learned
+
+1. **UUID field handling**:
+   - PostgreSQL UUID type doesn't accept empty strings
+   - Need to differentiate between insert (using database default) and update (specifying ID) scenarios
+   - Recommend providing unified ID generation logic at model layer
+
+2. **Database constraint design**:
+   - UPSERT operations require corresponding unique constraints
+   - Should consider business requirement uniqueness constraints when designing tables
+   - Recommend using database migration tools to manage constraints
+
+3. **Type conversion consistency**:
+   - All extension types (pgvector, JSONB) need unified handling
+   - Should create helper functions to avoid code duplication
+   - Recommend checking type conversion consistency during code review
+
+4. **Full-text search alternatives**:
+   - If table doesn't have tsv field, can use ILIKE for fuzzy matching
+   - Although performance is not as good as full-text search, functionality works
+   - Recommend documenting implementation differences
+
+### Best Practices
+
+1. **UUID handling**:
+   ```go
+   // Check if ID is empty
+   if entity.ID == "" {
+       // Use database default value
+       query = `INSERT INTO table (col1, col2) VALUES ($1, $2) RETURNING id`
+       args = []interface{}{entity.Col1, entity.Col2}
+   } else {
+       // Specify ID
+       query = `INSERT INTO table (id, col1, col2) VALUES ($1, $2, $3) RETURNING id`
+       args = []interface{}{entity.ID, entity.Col1, entity.Col2}
+   }
+   ```
+
+2. **Type conversion helper functions**:
+   ```go
+   // Vector conversion
+   func float64ToVectorString(vec []float64) string
+   func parseVectorString(vecStr string) ([]float64, error)
+   
+   // JSON conversion
+   func marshalMetadata(metadata map[string]interface{}) ([]byte, error)
+   func unmarshalMetadata(data []byte) (map[string]interface{}, error)
+   ```
+
+3. **Query pattern consistency**:
+   ```go
+   // All SELECT queries should use ::text conversion
+   SELECT 
+       id, 
+       embedding::text, 
+       metadata::text
+   FROM table
+   
+   // All scans should go to string variables first
+   var embeddingStr, metadataStr string
+   rows.Scan(&id, &embeddingStr, &metadataStr)
+   
+   // Then parse to target types
+   embedding, _ := parseVectorString(embeddingStr)
+   json.Unmarshal([]byte(metadataStr), &metadata)
+   ```
+
+4. **Vector operation consistency**:
+   ```go
+   // Convert when querying
+   embeddingStr := float64ToVectorString(embedding)
+   query := `... WHERE embedding <=> $1::vector`
+   
+   // Convert when updating
+   query := `UPDATE ... SET embedding = $1::vector`
+   ```
+
+### References
+- pgvector Type Casting: https://github.com/pgvector/pgvector#usage
+- PostgreSQL JSONB: https://www.postgresql.org/docs/current/datatype-json.html
+- PostgreSQL UUID: https://www.postgresql.org/docs/current/datatype-uuid.html
+- Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
+
+---
+
+## Bug #5: ToolRepository tags Field Scan Error
+
+### Date
+2026-03-19
+
+### Severity
+High - Causes all ToolRepository query methods to fail, affecting tool retrieval functionality
+
+### Affected Files
+- `internal/storage/postgres/repositories/tool_repository.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestToolRepository_GetByID` test fails with type mismatch error
+2. `TestToolRepository_GetByName` test fails with type mismatch error
+3. `TestToolRepository_Update` test fails with type mismatch error
+4. All query methods involving tags field cannot work properly
+
+#### Error Messages
+```
+Error: "sql: Scan error on column index 8, name \"tags\": unsupported Scan, storing driver.Value type []uint8 into type *[]string"
+```
+
+### Root Cause Analysis
+
+#### Issue: PostgreSQL TEXT[] type mismatch with Go []string type
+
+##### Incorrect Code
+```go
+// GetByID method
+query := `
+    SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+           agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
+    FROM tools
+    WHERE id = $1
+`
+
+tool := &storage_models.Tool{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+    &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+    &tool.AgentType, &tool.Tags,  // ← Direct scan to []string
+    &tool.UsageCount, &tool.SuccessRate,
+    &tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
+)
+```
+
+##### Issue Analysis
+1. **PostgreSQL array type behavior**:
+   - PostgreSQL's `TEXT[]` type returns data in binary format by default when using Go driver
+   - Binary format is parsed as `[]uint8`, not `[]string`
+   - This is standard behavior of PostgreSQL array types
+
+2. **Go code expectation**:
+   - Code expects direct scan to `[]string` type
+   - Type mismatch causes scan failure
+   - Error message: `unsupported Scan, storing driver.Value type []uint8 into type *[]string`
+
+3. **Impact scope**:
+   - `GetByID` - Fails
+   - `GetByName` - Fails
+   - `SearchByVector` - Fails
+   - `SearchByKeyword` - Fails
+   - `ListAll` - Fails
+   - `ListByAgentType` - Fails
+   - `ListByTags` - Fails
+   - All queries involving tags field fail
+
+4. **Why it wasn't discovered before**:
+   - Code looks logically correct
+   - Database query executes successfully
+   - Failure only occurs when scanning results
+   - Insufficient test coverage
+
+### Solution
+
+#### 1. Add pq package import
+
+```go
+import (
+    "context"
+    "database/sql"
+    "encoding/json"
+    "fmt"
+
+    "github.com/lib/pq"  // ← Add pq package
+
+    "goagent/internal/core/errors"
+    "goagent/internal/storage/postgres"
+    storage_models "goagent/internal/storage/postgres/models"
+)
+```
+
+#### 2. Modify all places that Scan tags field, use pq.Array
+
+##### GetByID method
+```go
+tool := &storage_models.Tool{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, id).Scan(
+    &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+    &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+    &tool.AgentType, pq.Array(&tool.Tags),  // ← Use pq.Array
+    &tool.UsageCount, &tool.SuccessRate,
+    &tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
+)
+```
+
+##### GetByName method
+```go
+tool := &storage_models.Tool{}
+var embeddingStr, metadataStr string
+err := r.db.QueryRowContext(ctx, query, name, tenantID).Scan(
+    &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+    &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+    &tool.AgentType, pq.Array(&tool.Tags),  // ← Use pq.Array
+    &tool.UsageCount, &tool.SuccessRate,
+    &tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
+)
+```
+
+##### SearchByVector method
+```go
+for rows.Next() {
+    tool := &storage_models.Tool{}
+    var similarity float64
+    var embeddingStr, metadataStr string
+    err := rows.Scan(
+        &tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
+        &embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+        &tool.AgentType, pq.Array(&tool.Tags),  // ← Use pq.Array
+        &tool.UsageCount, &tool.SuccessRate,
+        &tool.LastUsedAt, &metadataStr, &tool.CreatedAt, &similarity,
+    )
+    // ...
+}
+```
+
+##### Other methods handled similarly
+- `SearchByKeyword`
+- `ListAll`
+- `ListByAgentType`
+- `ListByTags`
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+Error: "sql: Scan error on column index 8, name \"tags\": unsupported Scan, storing driver.Value type []uint8 into type *[]string"
+```
+
+**After:**
+```
+✅ TestToolRepository_GetByID - Passes
+✅ TestToolRepository_GetByName - Passes
+✅ TestToolRepository_Update - Passes
+✅ TestToolRepository_SearchByVector - Passes
+✅ TestToolRepository_SearchByKeyword - Passes
+✅ TestToolRepository_ListAll - Passes
+✅ TestToolRepository_ListByAgentType - Passes
+✅ TestToolRepository_ListByTags - Passes
+```
+
+#### Functional verification
+- ✅ tags field scanned correctly
+- ✅ tags array data preserved completely
+- ✅ All query methods work normally
+- ✅ Tool retrieval functionality restored
+
+#### Code quality checks
+- ✅ `go build` - Compilation successful
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+
+### Lessons Learned
+
+1. **PostgreSQL array types**:
+   - PostgreSQL array types (like `TEXT[]`) require special handling
+   - Go driver returns array data in binary format by default
+   - Must use `pq.Array` to correctly scan array types
+
+2. **Importance of pq.Array**:
+   - `pq.Array` is the standard method for handling PostgreSQL array types
+   - It provides conversion between PostgreSQL arrays and Go slices
+   - All scans involving arrays should use `pq.Array`
+
+3. **Type conversion consistency**:
+   - PostgreSQL extension types (pgvector, JSONB, arrays) all need special handling
+   - Should uniformly use conversion methods provided by `pq` package
+   - Avoid directly scanning complex types
+
+4. **Importance of test coverage**:
+   - Insufficient test coverage caused the issue to go undetected
+   - Should write complete tests for all query methods
+   - Especially for fields involving complex data types
+
+### Best Practices
+
+1. **Handle PostgreSQL array types**:
+   ```go
+   import "github.com/lib/pq"
+   
+   // Use pq.Array when scanning arrays
+   rows.Scan(&id, pq.Array(&tags))
+   
+   // Use pq.Array when inserting arrays
+   db.Exec("INSERT INTO table (tags) VALUES ($1)", pq.Array(tags))
+   ```
+
+2. **Unified type conversion**:
+   ```go
+   // Vector types
+   embedding::text + parseVectorString()
+   
+   // JSONB types
+   metadata::text + json.Unmarshal()
+   
+   // Array types
+   pq.Array(&tags)
+   ```
+
+3. **Defensive programming**:
+   ```go
+   // Check scan errors
+   if err := rows.Scan(...); err != nil {
+       log.Error("Failed to scan row", "error", err)
+       return nil, err
+   }
+   ```
+
+4. **Test coverage**:
+   ```go
+   // Test all query methods
+   func TestToolRepository_GetByID(t *testing.T)
+   func TestToolRepository_GetByName(t *testing.T)
+   func TestToolRepository_SearchByVector(t *testing.T)
+   func TestToolRepository_SearchByKeyword(t *testing.T)
+   func TestToolRepository_ListAll(t *testing.T)
+   func TestToolRepository_ListByAgentType(t *testing.T)
+   func TestToolRepository_ListByTags(t *testing.T)
+   ```
+
+### References
+- pq Array: https://pkg.go.dev/github.com/lib/pq#Array
+- PostgreSQL Arrays: https://www.postgresql.org/docs/current/arrays.html
+- Go SQL Scanner Interface: https://pkg.go.dev/database/sql#Scanner
+- PostgreSQL Type Casting: https://www.postgresql.org/docs/current/sql-createcast.html

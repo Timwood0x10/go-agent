@@ -256,7 +256,7 @@ func TestKnowledgeRepository_GetByID_NotFound(t *testing.T) {
 	repo := NewKnowledgeRepository(db, db)
 	ctx := context.Background()
 
-	_, err := repo.GetByID(ctx, "non-existent-id")
+	_, err := repo.GetByID(ctx, "00000000-0000-0000-0000-000000000000")
 	assert.Error(t, err)
 }
 
@@ -361,7 +361,7 @@ func TestKnowledgeRepository_Delete_NotFound(t *testing.T) {
 	repo := NewKnowledgeRepository(db, db)
 	ctx := context.Background()
 
-	err := repo.Delete(ctx, "non-existent-id")
+	err := repo.Delete(ctx, "00000000-0000-0000-0000-000000000000")
 	assert.Error(t, err)
 }
 
@@ -577,7 +577,7 @@ func TestKnowledgeRepository_Update_NonExistent(t *testing.T) {
 	ctx := context.Background()
 
 	chunk := &storage_models.KnowledgeChunk{
-		ID:               "non-existent-id",
+		ID:               "00000000-0000-0000-0000-000000000000",
 		TenantID:         "tenant-1",
 		Content:          "update test content",
 		Embedding:        createTestEmbedding(),

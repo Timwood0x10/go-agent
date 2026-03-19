@@ -97,7 +97,7 @@ func TestExperienceRepository_GetByID_NotFound(t *testing.T) {
 	repo := NewExperienceRepository(db)
 	ctx := context.Background()
 
-	_, err := repo.GetByID(ctx, "non-existent-id")
+	_, err := repo.GetByID(ctx, "00000000-0000-0000-0000-000000000000")
 	assert.Error(t, err)
 }
 

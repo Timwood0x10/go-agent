@@ -103,7 +103,8 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 
 	// Create tools table
 	toolsTableSQL := `
-		CREATE TABLE IF NOT EXISTS tools (
+		DROP TABLE IF EXISTS tools;
+		CREATE TABLE tools (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id TEXT NOT NULL,
 			name VARCHAR(255) NOT NULL,
@@ -117,7 +118,8 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 			success_rate FLOAT DEFAULT 0.0,
 			last_used_at TIMESTAMP,
 			metadata JSONB DEFAULT '{}'::jsonb,
-			created_at TIMESTAMP DEFAULT NOW()
+			created_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE (tenant_id, name)
 		)`
 
 	if _, err := db.Exec(toolsTableSQL); err != nil {
@@ -168,7 +170,8 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 
 	// Create secrets table
 	secretsTableSQL := `
-		CREATE TABLE IF NOT EXISTS secrets (
+		DROP TABLE IF EXISTS secrets;
+		CREATE TABLE secrets (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id TEXT NOT NULL,
 			key VARCHAR(255) NOT NULL,
@@ -177,7 +180,8 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 			algorithm VARCHAR(32) NOT NULL DEFAULT 'aes-gcm',
 			expires_at TIMESTAMP,
 			metadata JSONB DEFAULT '{}'::jsonb,
-			created_at TIMESTAMP DEFAULT NOW()
+			created_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE (tenant_id, key)
 		)`
 
 	if _, err := db.Exec(secretsTableSQL); err != nil {

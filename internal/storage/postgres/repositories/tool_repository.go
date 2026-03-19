@@ -4,7 +4,10 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+
+	"github.com/lib/pq"
 
 	"goagent/internal/core/errors"
 	"goagent/internal/storage/postgres"
@@ -32,30 +35,69 @@ func NewToolRepository(db postgres.DBTX) *ToolRepository {
 // tool - tool to create.
 // Returns error if insert operation fails.
 func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) error {
-	query := `
-		INSERT INTO tools
-		(id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-		 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		ON CONFLICT (tenant_id, name) DO UPDATE SET
-			description = EXCLUDED.description,
-			embedding = EXCLUDED.embedding,
-			embedding_model = EXCLUDED.embedding_model,
-			embedding_version = EXCLUDED.embedding_version,
-			agent_type = EXCLUDED.agent_type,
-			tags = EXCLUDED.tags,
-			metadata = EXCLUDED.metadata,
-			updated_at = NOW()
-		RETURNING id
-	`
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(tool.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(tool.Embedding)
+
+	// Build query based on whether ID is provided
+	var query string
+	var args []interface{}
+
+	if tool.ID == "" {
+		// Insert with auto-generated ID
+		query = `
+			INSERT INTO tools
+			(tenant_id, name, description, embedding, embedding_model, embedding_version,
+			 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+			VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			ON CONFLICT (tenant_id, name) DO UPDATE SET
+				description = EXCLUDED.description,
+				embedding = EXCLUDED.embedding,
+				embedding_model = EXCLUDED.embedding_model,
+				embedding_version = EXCLUDED.embedding_version,
+				agent_type = EXCLUDED.agent_type,
+				tags = EXCLUDED.tags,
+				metadata = EXCLUDED.metadata
+			RETURNING id
+		`
+		args = []interface{}{
+			tool.TenantID, tool.Name, tool.Description,
+			embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+			tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+			tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+		}
+	} else {
+		// Insert with specified ID
+		query = `
+			INSERT INTO tools
+			(id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+			 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			ON CONFLICT (tenant_id, name) DO UPDATE SET
+				description = EXCLUDED.description,
+				embedding = EXCLUDED.embedding,
+				embedding_model = EXCLUDED.embedding_model,
+				embedding_version = EXCLUDED.embedding_version,
+				agent_type = EXCLUDED.agent_type,
+				tags = EXCLUDED.tags,
+				metadata = EXCLUDED.metadata
+			RETURNING id
+		`
+		args = []interface{}{
+			tool.ID, tool.TenantID, tool.Name, tool.Description,
+			embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+			tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+			tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+		}
+	}
 
 	var id string
-	err := r.db.QueryRowContext(ctx, query,
-		tool.ID, tool.TenantID, tool.Name, tool.Description,
-		tool.Embedding, tool.EmbeddingModel, tool.EmbeddingVersion,
-		tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
-		tool.LastUsedAt, tool.Metadata, tool.CreatedAt,
-	).Scan(&id)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
 		return fmt.Errorf("create tool: %w", err)
@@ -76,18 +118,19 @@ func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_model
 	}
 
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
 		WHERE id = $1
 	`
 
 	tool := &storage_models.Tool{}
+	var embeddingStr, metadataStr string
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-		&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-		&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-		&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt,
+		&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+		&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+		&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -95,6 +138,19 @@ func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_model
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get tool by id: %w", err)
+	}
+
+	// Parse embedding string to float64 array
+	tool.Embedding, err = parseVectorString(embeddingStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse embedding: %w", err)
+	}
+
+	// Parse metadata JSON string to map
+	if metadataStr != "" {
+		if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata: %w", err)
+		}
 	}
 
 	return tool, nil
@@ -108,18 +164,19 @@ func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_model
 // Returns tool or error if not found.
 func (r *ToolRepository) GetByName(ctx context.Context, name, tenantID string) (*storage_models.Tool, error) {
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
 		WHERE name = $1 AND tenant_id = $2
 	`
 
 	tool := &storage_models.Tool{}
+	var embeddingStr, metadataStr string
 	err := r.db.QueryRowContext(ctx, query, name, tenantID).Scan(
 		&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-		&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-		&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-		&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt,
+		&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+		&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+		&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -127,6 +184,19 @@ func (r *ToolRepository) GetByName(ctx context.Context, name, tenantID string) (
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get tool by name: %w", err)
+	}
+
+	// Parse embedding string to float64 array
+	tool.Embedding, err = parseVectorString(embeddingStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse embedding: %w", err)
+	}
+
+	// Parse metadata JSON string to map
+	if metadataStr != "" {
+		if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata: %w", err)
+		}
 	}
 
 	return tool, nil
@@ -138,17 +208,26 @@ func (r *ToolRepository) GetByName(ctx context.Context, name, tenantID string) (
 // tool - tool with updated values.
 // Returns error if update operation fails.
 func (r *ToolRepository) Update(ctx context.Context, tool *storage_models.Tool) error {
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(tool.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(tool.Embedding)
+
 	query := `
 		UPDATE tools
-		SET name = $2, description = $3, embedding = $4, embedding_model = $5,
+		SET name = $2, description = $3, embedding = $4::vector, embedding_model = $5,
 			embedding_version = $6, agent_type = $7, tags = $8, metadata = $9
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		tool.ID, tool.Name, tool.Description, tool.Embedding,
+		tool.ID, tool.Name, tool.Description, embeddingStr,
 		tool.EmbeddingModel, tool.EmbeddingVersion, tool.AgentType,
-		tool.Tags, tool.Metadata,
+		tool.Tags, metadataJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("update tool: %w", err)
@@ -199,18 +278,19 @@ func (r *ToolRepository) Delete(ctx context.Context, id string) error {
 // limit - maximum number of results to return.
 // Returns list of similar tools ordered by similarity.
 func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*storage_models.Tool, error) {
+	embeddingStr := float64ToVectorString(embedding)
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at,
-			   1 - (embedding <=> $1) as similarity
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at,
+			   1 - (embedding <=> $1::vector) as similarity
 		FROM tools
 		WHERE tenant_id = $2
 		  AND embedding IS NOT NULL
-		ORDER BY embedding <=> $1
+		ORDER BY embedding <=> $1::vector
 		LIMIT $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, embedding, tenantID, limit)
+	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search: %w", err)
 	}
@@ -220,15 +300,30 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 	for rows.Next() {
 		tool := &storage_models.Tool{}
 		var similarity float64
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-			&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-			&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt, &similarity,
+			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt, &similarity,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		tool.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+				tool.Metadata = make(map[string]interface{})
+			}
+		}
+
 		if tool.Metadata == nil {
 			tool.Metadata = make(map[string]interface{})
 		}
@@ -248,13 +343,12 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 // Returns list of matching tools ordered by relevance.
 func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID string, limit int) ([]*storage_models.Tool, error) {
 	sqlQuery := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at,
-			   ts_rank(tsv, plainto_tsquery('simple', $1)) as score
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
-		WHERE tsv @@ plainto_tsquery('simple', $1)
+		WHERE (name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
 		  AND tenant_id = $2
-		ORDER BY ts_rank(tsv, plainto_tsquery('simple', $1)) DESC, usage_count DESC
+		ORDER BY usage_count DESC, success_rate DESC
 		LIMIT $3
 	`
 
@@ -267,20 +361,30 @@ func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID st
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
 		tool := &storage_models.Tool{}
-		var score float64
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-			&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-			&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt, &score,
+			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
-		if tool.Metadata == nil {
-			tool.Metadata = make(map[string]interface{})
+
+		// Parse embedding string to float64 array
+		tool.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
 		}
-		tool.Metadata["keyword_score"] = score
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+				tool.Metadata = make(map[string]interface{})
+			}
+		}
+
 		tools = append(tools, tool)
 	}
 
@@ -295,8 +399,8 @@ func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID st
 // Returns list of tools ordered by usage count (descending).
 func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int) ([]*storage_models.Tool, error) {
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
 		WHERE tenant_id = $1
 		ORDER BY usage_count DESC, success_rate DESC
@@ -312,15 +416,30 @@ func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
 		tool := &storage_models.Tool{}
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-			&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-			&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt,
+			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		tool.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+				tool.Metadata = make(map[string]interface{})
+			}
+		}
+
 		tools = append(tools, tool)
 	}
 
@@ -336,8 +455,8 @@ func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int
 // Returns list of tools ordered by usage count (descending).
 func (r *ToolRepository) ListByAgentType(ctx context.Context, agentType, tenantID string, limit int) ([]*storage_models.Tool, error) {
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
 		WHERE agent_type = $1 AND tenant_id = $2
 		ORDER BY usage_count DESC, success_rate DESC
@@ -353,15 +472,30 @@ func (r *ToolRepository) ListByAgentType(ctx context.Context, agentType, tenantI
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
 		tool := &storage_models.Tool{}
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-			&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-			&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt,
+			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		tool.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+				tool.Metadata = make(map[string]interface{})
+			}
+		}
+
 		tools = append(tools, tool)
 	}
 
@@ -412,13 +546,14 @@ func (r *ToolRepository) UpdateUsage(ctx context.Context, id string, success boo
 // version - embedding model version.
 // Returns error if update operation fails.
 func (r *ToolRepository) UpdateEmbedding(ctx context.Context, id string, embedding []float64, model string, version int) error {
+	embeddingStr := float64ToVectorString(embedding)
 	query := `
 		UPDATE tools
-		SET embedding = $2, embedding_model = $3, embedding_version = $4, updated_at = NOW()
+		SET embedding = $2::vector, embedding_model = $3, embedding_version = $4
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query, id, embedding, model, version)
+	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
 		return fmt.Errorf("update embedding: %w", err)
 	}
@@ -444,8 +579,8 @@ func (r *ToolRepository) UpdateEmbedding(ctx context.Context, id string, embeddi
 // Returns list of tools that match any of the tags.
 func (r *ToolRepository) ListByTags(ctx context.Context, tags []string, tenantID string, limit int) ([]*storage_models.Tool, error) {
 	query := `
-		SELECT id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at
+		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
 		FROM tools
 		WHERE tenant_id = $1
 		  AND tags && $2
@@ -462,15 +597,30 @@ func (r *ToolRepository) ListByTags(ctx context.Context, tags []string, tenantID
 	tools := make([]*storage_models.Tool, 0)
 	for rows.Next() {
 		tool := &storage_models.Tool{}
+		var embeddingStr, metadataStr string
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
-			&tool.Embedding, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
-			&tool.LastUsedAt, &tool.Metadata, &tool.CreatedAt,
+			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
+			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
 			continue
 		}
+
+		// Parse embedding string to float64 array
+		tool.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
+				tool.Metadata = make(map[string]interface{})
+			}
+		}
+
 		tools = append(tools, tool)
 	}
 
