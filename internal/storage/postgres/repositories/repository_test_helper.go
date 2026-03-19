@@ -181,6 +181,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 			expires_at TIMESTAMP,
 			metadata JSONB DEFAULT '{}'::jsonb,
 			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW(),
 			UNIQUE (tenant_id, key)
 		)`
 
