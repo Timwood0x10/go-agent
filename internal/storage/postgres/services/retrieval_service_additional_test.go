@@ -362,3 +362,390 @@ func TestCalculateTimeDecay_ZeroAge(t *testing.T) {
 	assert.GreaterOrEqual(t, decay, 0.99, "Current content should have maximum decay factor")
 	assert.LessOrEqual(t, decay, 1.0, "Decay should not exceed 1.0")
 }
+
+// TestValidateRequest tests request validation.
+func TestValidateRequest(t *testing.T) {
+	service := &RetrievalService{}
+
+	tests := []struct {
+		name    string
+		req     *SearchRequest
+		wantErr bool
+	}{
+		{
+			name: "valid request",
+			req: &SearchRequest{
+				Query:    "test query",
+				TenantID: "tenant-1",
+				TopK:     10,
+				Plan:     DefaultRetrievalPlan(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty query",
+			req: &SearchRequest{
+				Query:    "",
+				TenantID: "tenant-1",
+				TopK:     10,
+				Plan:     DefaultRetrievalPlan(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty tenant ID",
+			req: &SearchRequest{
+				Query:    "test query",
+				TenantID: "",
+				TopK:     10,
+				Plan:     DefaultRetrievalPlan(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero TopK - should be auto-corrected",
+			req: &SearchRequest{
+				Query:    "test query",
+				TenantID: "tenant-1",
+				TopK:     0,
+				Plan:     DefaultRetrievalPlan(),
+			},
+			wantErr: false, // Should auto-correct to 10
+		},
+		{
+			name: "negative TopK - should be auto-corrected",
+			req: &SearchRequest{
+				Query:    "test query",
+				TenantID: "tenant-1",
+				TopK:     -5,
+				Plan:     DefaultRetrievalPlan(),
+			},
+			wantErr: false, // Should auto-correct to 10
+		},
+		{
+			name: "nil plan",
+			req: &SearchRequest{
+				Query:    "test query",
+				TenantID: "tenant-1",
+				TopK:     10,
+				Plan:     nil,
+			},
+			wantErr: false, // Should use default plan
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.validateRequest(tt.req)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestIsQueryInCache tests query cache checking.
+func TestIsQueryInCache(t *testing.T) {
+	service := &RetrievalService{}
+
+	// Current implementation always returns false (TODO)
+	assert.False(t, service.isQueryInCache("any query"))
+	assert.False(t, service.isQueryInCache(""))
+	assert.False(t, service.isQueryInCache("how to use go"))
+}
+
+// TestShouldRewriteQuery_Additional tests query rewrite decision logic with additional cases.
+func TestShouldRewriteQuery_Additional(t *testing.T) {
+	service := &RetrievalService{}
+
+	tests := []struct {
+		name  string
+		query string
+		want  bool
+	}{
+		{
+			name:  "Chinese question - 如何",
+			query: "如何使用 Go 进行并发编程",
+			want:  true,
+		},
+		{
+			name:  "Chinese question - 怎么",
+			query: "怎么配置 PostgreSQL 连接",
+			want:  true,
+		},
+		{
+			name:  "Chinese question - 什么",
+			query: "什么是向量数据库",
+			want:  true,
+		},
+		{
+			name:  "English question - why",
+			query: "why should I use Rust",
+			want:  true,
+		},
+		{
+			name:  "English question - why lowercase",
+			query: "why use microservices",
+			want:  true,
+		},
+		{
+			name:  "English question - what",
+			query: "what is machine learning",
+			want:  true,
+		},
+		{
+			name:  "English question - how",
+			query: "how to implement caching",
+			want:  true,
+		},
+		{
+			name:  "English question - explain",
+			query: "explain the difference between HTTP and HTTPS",
+			want:  true,
+		},
+		{
+			name:  "English question - describe",
+			query: "describe the architecture of Kubernetes",
+			want:  true,
+		},
+		{
+			name:  "Chinese question - 解释",
+			query: "解释一下 Docker 的基本概念",
+			want:  true,
+		},
+		{
+			name:  "Chinese question - 描述",
+			query: "描述一下微服务的优缺点",
+			want:  true,
+		},
+		{
+			name:  "statement without question word",
+			query: "I want to learn Go programming",
+			want:  false,
+		},
+		{
+			name:  "code snippet",
+			query: "func main() { println(\"hello\") }",
+			want:  false,
+		},
+		{
+			name:  "URL",
+			query: "https://example.com/documentation",
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := service.shouldRewriteQuery(tt.query)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestQueryRewrite tests query rewriting functionality.
+func TestQueryRewrite(t *testing.T) {
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		query   string
+		wantErr bool
+	}{
+		{
+			name:    "normal query",
+			query:   "how to use go for web development",
+			wantErr: false,
+		},
+		{
+			name:    "empty query",
+			query:   "",
+			wantErr: false, // Returns original query, no error
+		},
+		{
+			name:    "query with special characters",
+			query:   "test @#$ query",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.queryRewrite(ctx, tt.query)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestSearchKnowledgeVector tests knowledge base vector search.
+func TestSearchKnowledgeVector(t *testing.T) {
+	// Skip if kbRepo is not initialized
+	t.Skip("Requires full database setup - kbRepo dependency")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// Create test embedding
+	embedding := make([]float64, 1024)
+	for i := range embedding {
+		embedding[i] = float64(i) / 1024.0
+	}
+
+	req := &SearchRequest{
+		Query:    "test query",
+		TenantID: "tenant-1",
+		TopK:     10,
+		Plan:     DefaultRetrievalPlan(),
+	}
+
+	// This test requires full database setup
+	results := service.searchKnowledgeVector(ctx, embedding, req)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestSearchExperienceVector tests experience repository vector search.
+func TestSearchExperienceVector(t *testing.T) {
+	// Skip if not implemented
+	t.Skip("ExperienceRepository not yet implemented")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// Create test embedding
+	embedding := make([]float64, 1024)
+	for i := range embedding {
+		embedding[i] = float64(i) / 1024.0
+	}
+
+	req := &SearchRequest{
+		Query:    "test query",
+		TenantID: "tenant-1",
+		TopK:     10,
+		Plan:     DefaultRetrievalPlan(),
+	}
+
+	// This test requires full database setup
+	results := service.searchExperienceVector(ctx, embedding, req)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestSearchToolsVector tests tools vector search.
+func TestSearchToolsVector(t *testing.T) {
+	// Skip if not implemented
+	t.Skip("ToolRepository not yet implemented")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// Create test embedding
+	embedding := make([]float64, 1024)
+	for i := range embedding {
+		embedding[i] = float64(i) / 1024.0
+	}
+
+	req := &SearchRequest{
+		Query:    "test query",
+		TenantID: "tenant-1",
+		TopK:     10,
+		Plan:     DefaultRetrievalPlan(),
+	}
+
+	// This test requires full database setup
+	results := service.searchToolsVector(ctx, embedding, req)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestBm25Search tests BM25 keyword search.
+func TestBm25Search(t *testing.T) {
+	// Skip if kbRepo is not initialized
+	t.Skip("Requires full database setup - kbRepo dependency")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	req := &SearchRequest{
+		Query:    "test query",
+		TenantID: "tenant-1",
+		TopK:     10,
+		Plan:     DefaultRetrievalPlan(),
+	}
+
+	// This test requires full database setup
+	results := service.bm25Search(ctx, req)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestBm25SearchKnowledge tests BM25 search in knowledge base.
+func TestBm25SearchKnowledge(t *testing.T) {
+	// Skip if kbRepo is not initialized
+	t.Skip("Requires full database setup - kbRepo dependency")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// This test requires full database setup
+	results := service.bm25SearchKnowledge(ctx, "test query", "tenant-1", 10)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestBm25SearchExperience tests BM25 search in experience repository.
+func TestBm25SearchExperience(t *testing.T) {
+	// Skip if not implemented
+	t.Skip("ExperienceRepository not yet implemented")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// This test requires full database setup
+	results := service.bm25SearchExperience(ctx, "test query", "tenant-1", 10)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}
+
+// TestBm25SearchTools tests BM25 search in tools.
+func TestBm25SearchTools(t *testing.T) {
+	// Skip if not implemented
+	t.Skip("ToolRepository not yet implemented")
+
+	service := &RetrievalService{}
+
+	ctx := context.Background()
+
+	// This test requires full database setup
+	results := service.bm25SearchTools(ctx, "test query", "tenant-1", 10)
+
+	// Results should be a slice (may be empty if no database)
+	assert.NotNil(t, results)
+	assert.IsType(t, []*SearchResult{}, results)
+}

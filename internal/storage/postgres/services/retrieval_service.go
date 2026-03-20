@@ -280,6 +280,11 @@ func (s *RetrievalService) getEmbedding(ctx context.Context, query string) []flo
 		return nil
 	}
 
+	if s.embeddingClient == nil {
+		s.logger.Warn("Embedding client is nil, cannot get embedding")
+		return nil
+	}
+
 	embedding, err := s.embeddingClient.Embed(ctx, query)
 	if err != nil {
 		s.logger.Warn("Failed to get embedding", "query", query, "error", err)
