@@ -521,7 +521,9 @@ Assistant:`, question)
 		// Step 8: Check for distillation threshold
 		kb.messageCount++
 		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
-			log.Printf("Distillation threshold reached, triggering memory distillation...")
+			log.Printf("🎯 [记忆蒸馏] 对话轮数达到阈值 (%d/%d)，触发记忆蒸馏...", 
+				kb.messageCount, kb.config.Memory.DistillationThreshold)
+			kb.distillMemory(ctx, tenantID)
 			kb.messageCount = 0
 		}
 	}
@@ -538,6 +540,80 @@ func (kb *KnowledgeBase) formatRawResults(results []*SearchResult) string {
 	}
 	output.WriteString("Please configure LLM settings in config.yaml to enable natural language answers.")
 	return output.String()
+}
+
+// distillMemory performs memory distillation when threshold is reached.
+// It extracts key information from conversation history and stores it in the knowledge base.
+func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
+	if kb.memory == nil || kb.sessionID == "" {
+		log.Printf("⚠️  Memory not available for distillation")
+		return
+	}
+
+	log.Printf("🔄 [记忆蒸馏] 开始蒸馏会话: %s", kb.sessionID)
+
+	// Get conversation history
+	messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+	if err != nil || len(messages) == 0 {
+		log.Printf("⚠️  [记忆蒸馏] 没有消息需要蒸馏: %v", err)
+		return
+	}
+
+	log.Printf("📊 [记忆蒸馏] 找到 %d 条消息需要蒸馏", len(messages))
+
+	// Build conversation summary
+	var summary strings.Builder
+	summary.WriteString("Conversation Summary:\n\n")
+	for _, msg := range messages {
+		summary.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
+	}
+
+	summaryText := summary.String()
+
+	log.Printf("📝 [记忆蒸馏] 蒸馏内容预览 (%d 字符): %s", 
+		len(summaryText), truncateString(summaryText, 100))
+
+	// Generate embedding for the distilled memory
+	embedding, err := kb.embedding.EmbedWithPrefix(ctx, summaryText, "memory:")
+	if err != nil {
+		log.Printf("❌ [记忆蒸馏] 生成嵌入失败: %v", err)
+		return
+	}
+
+	// Normalize embedding
+	embedding = postgres.NormalizeVector(embedding)
+	log.Printf("🔢 [记忆蒸馏] 嵌入向量维度: %d", len(embedding))
+
+	// Generate document ID
+	docID := uuid.New().String()
+
+	// Store distilled memory in knowledge base
+	distilledChunk := &storage_models.KnowledgeChunk{
+		TenantID:         tenantID,
+		Content:          summaryText,
+		Embedding:        embedding,
+		EmbeddingModel:   kb.config.EmbeddingModel,
+		EmbeddingVersion: 1,
+		EmbeddingStatus:  "completed",
+		SourceType:       "distilled",
+		Source:           fmt.Sprintf("memory:%s", kb.sessionID),
+		DocumentID:       docID,
+		ChunkIndex:       0,
+		ContentHash:      kb.generateHash(summaryText),
+		AccessCount:      0,
+	}
+
+	if err := kb.repo.Create(ctx, distilledChunk); err != nil {
+		log.Printf("❌ [记忆蒸馏] 存储蒸馏记忆失败: %v", err)
+		return
+	}
+
+	log.Printf("✅ [记忆蒸馏] 蒸馏完成！")
+	log.Printf("   📄 文档ID: %s", docID)
+	log.Printf("   📏 内容长度: %d 字符", len(summaryText))
+	log.Printf("   🧠 嵌入维度: %d", len(embedding))
+	log.Printf("   💾 存储位置: knowledge_chunks_1024")
+	log.Printf("   🔍 可通过向量检索回放记忆")
 }
 
 // truncateString truncate string for log output

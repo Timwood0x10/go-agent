@@ -21,7 +21,7 @@ memory:
   max_history: 10
   max_sessions: 100
   enable_distillation: true
-  distillation_threshold: 5
+  distillation_threshold: 3
 
 knowledge:
   chunk_size: 200

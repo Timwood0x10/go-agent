@@ -1,109 +1,104 @@
-go run main.go --chat
-2026/03/20 19:23:00 Chat mode. Enter your questions (type 'exit' to quit):
-2026/03/20 19:23:00 LLM enabled - Using RAG (Retrieval + Generation) mode
-2026/03/20 19:23:00 Memory enabled - Conversation history and distillation supported
-2026/03/20 19:23:00 INFO Memory manager started
-2026/03/20 19:23:00 Session created: session_default_1774005780866243000
+ go run main.go --chat
+2026/03/20 19:47:26 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/20 19:47:26 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/20 19:47:26 Memory enabled - Conversation history and distillation supported
+2026/03/20 19:47:26 INFO Memory manager started
+2026/03/20 19:47:26 Session created: session_default_1774007246436309000
 
-You: 你好，吃了没
-2026/03/20 19:23:04 RAG check: 你好，吃了没 -> needs RAG: false
+You: 晚上好，  go 编码规范都有啥
+2026/03/20 19:47:48 RAG check: 晚go 编码规范都有啥 -> needs RAG: true
+2026/03/20 19:47:48 Searching for: 晚go 编码规范都有啥 (tenant: default)
+2026/03/20 19:47:48 INFO SimpleRetrievalService.Search tenant_id=default query="晚go 编码规范都有啥" top_k=10 min_score=0.4
+2026/03/20 19:47:49 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/20 19:47:49 INFO Vector search query vector_length=9723 vector_preview=[-0.014528,-0.065021,-0.012501,-0.079961,0.016441,-0.005760,-0.055401,0.018104,-0.095819,-0.034126,-
+2026/03/20 19:47:49 INFO Vector search query succeeded
+2026/03/20 19:47:49 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/20 19:47:49 INFO Search completed results_count=10 min_score=0.4
+2026/03/20 19:47:49 Search returned 10 results
+2026/03/20 19:47:49   Result 0: score=0.642, source=memory:session_default_1774006842692480000, content=Conversation Summary:
 
-Assistant:
-您好！我是你的助手。如果你有任何问题或需要帮助，请随时告诉我。今天有什么事吗？
-
-You: go 编码规范，有什么推荐的吗？
-2026/03/20 19:23:20 RAG check: go 编码规范，有什么推荐的吗？ -> needs RAG: true
-2026/03/20 19:23:20 Searching for: go 编码规范，有什么推荐的吗？ (tenant: default)
-2026/03/20 19:23:20 INFO SimpleRetrievalService.Search tenant_id=default query="go 编码规范，有什么推荐的吗？" top_k=10 min_score=0.4
-2026/03/20 19:23:20 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/20 19:23:20 INFO Vector search query vector_length=9739 vector_preview=[-0.008055,-0.066333,-0.011645,-0.074511,0.008136,-0.005087,-0.049896,0.048650,-0.078134,-0.034095,-
-2026/03/20 19:23:20 INFO Vector search query succeeded
-2026/03/20 19:23:20 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/20 19:23:20 INFO Search completed results_count=10 min_score=0.4
-2026/03/20 19:23:20 Search returned 10 results
-2026/03/20 19:23:20   Result 0: score=0.606, source=/goagent/plan/code_rules.md, content=# Code Rules for Go Project
+system: New session started...
+2026/03/20 19:47:49   Result 1: score=0.541, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=# Code Rules for Go Project
 
 **Strict Coding Stand...
-2026/03/20 19:23:20   Result 1: score=0.584, source=/goagent/plan/code_rules.md, content=ective_go) and [Code Review Comments](https://gith...
-2026/03/20 19:23:20   Result 2: score=0.520, source=/goagent/plan/code_rules.md, content=ure optimization.
+2026/03/20 19:47:49   Result 2: score=0.510, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=ective_go) and [Code Review Comments](https://gith...
+2026/03/20 19:47:49   Result 3: score=0.495, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=ure optimization.
 
 - All code MUST pass `go vet`, ...
-2026/03/20 19:23:20   Result 3: score=0.520, source=/goagent/plan/code_rules.md, content=. Use `gofmt` / `goimports` exclusively.
+2026/03/20 19:47:49   Result 4: score=0.464, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=ion.
+
+- Race Conditions: Must pass go test -race l...
+2026/03/20 19:47:49   Result 5: score=0.459, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=variables or constants.
+
+- Struct literals MUST us...
+2026/03/20 19:47:49   Result 6: score=0.452, source=./example.md, content=果
+- **时间衰减**: 新知识优先
+
+示例：
+```go
+req := &SearchReque...
+2026/03/20 19:47:49   Result 7: score=0.452, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=不了的功能必须加注TODO，方便后续查询实现，而不是很敷衍的标注。
+
+- 禁止为了赶进度而快速开发，...
+2026/03/20 19:47:49   Result 8: score=0.450, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=. Use `gofmt` / `goimports` exclusively.
 
 
 
 ## 2. ...
-2026/03/20 19:23:20   Result 4: score=0.490, source=/goagent/plan/code_rules.md, content= be meaningful, not just perfunctory assertions; t...
-2026/03/20 19:23:20   Result 5: score=0.488, source=/goagent/plan/code_rules.md, content=ion.
+2026/03/20 19:47:49   Result 9: score=0.441, source=/Users/scc/go/src/goagent/plan/code_rules.md, content=nderscores, no camelCase.
 
-- Race Conditions: Must pass go test -race l...
-2026/03/20 19:23:20   Result 6: score=0.483, source=/goagent/plan/code_rules.md, content=in, meaningless names, or single letters (except `...
-2026/03/20 19:23:20   Result 7: score=0.475, source=/goagent/plan/code_rules.md, content=github.com/gin-gonic/gin"
-
-"github.com/redis/go-re...
-2026/03/20 19:23:20   Result 8: score=0.470, source=./example.md, content= LLM生成答案
-```
-
-### 2. 语义搜索
-
-为应用添加智能语义搜索功能：
-
-```go
-/...
-2026/03/20 19:23:20   Result 9: score=0.468, source=/goagent/plan/code_rules.md, content=Key Takeaways
-
-1. Naming, formatting, and comments...
+Example: `user`, `confi...
 
 Assistant:
-根据 Go 编码规范，以下是推荐的：
+Go 代码规范包括 Core Principles、Strict Coding Standard、Naming Conventions 和 Code Format 四个方面。
 
-1. 必须遵循 official Go standards：[Effective Go](https://go.dev/doc/effective_go) 和 [Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)。
-2. 必须使用 `gofmt` / `goimports` 才能使用（不推荐手动编写代码）。
-3. 包名必须遵循以下规则：小写，短， meaningful，不含下划线和 camelCase。
-4. 代码必须遵循以下语义搜索规则：[Document 9 - Score: 0.470] 
-5. 错误处理和并发性是关键关注点，必须严格按照标准来进行。
+首先，遵循官方 Go标准 document：[Effective Go](https://go.dev/doc/effective_go) 和 [Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)。这套规范包括以下几个方面：
 
-这些是 Go 编码规范的基本要求。
+1. **Core Principles**：遵循官方 Go标准 document。
+2. **Strict Coding Standard**：所有代码必须通过 `go vet`、`staticcheck` 和 `golangci-lint`Without warnings或错误。
+3. **Naming Conventions**：命名规则，包括变量、函数、类型等的命名方式。
+4. **Code Format**：代码格式化规则，包括缩进、分号、空白等。
 
-You: 那如何用go实现一个agent啊
-2026/03/20 19:23:41 RAG check: 那如何用go实现一个agent啊 -> needs RAG: true
-2026/03/20 19:23:41 Searching for: 那如何用go实现一个agent啊 (tenant: default)
-2026/03/20 19:23:41 INFO SimpleRetrievalService.Search tenant_id=default query=那如何用go实现一个agent啊 top_k=10 min_score=0.4
-2026/03/20 19:23:41 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/20 19:23:41 INFO Vector search query vector_length=9724 vector_preview=[0.046223,-0.032881,-0.009755,-0.046716,0.003195,-0.030394,-0.040222,0.077588,-0.035560,0.023215,-0.
-2026/03/20 19:23:41 INFO Vector search query succeeded
-2026/03/20 19:23:41 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/20 19:23:41 INFO Search completed results_count=10 min_score=0.4
-2026/03/20 19:23:41 Search returned 10 results
-2026/03/20 19:23:41   Result 0: score=0.703, source=./example.md, content=# 示例文档 - GoAgent Storage模块
+这些规范是为了保证 Go 代码的质量和可维护性，从而可以更好地开发和维护 Go  项目。
+
+You: go-agent 是个啥
+2026/03/20 19:50:17 RAG check: go-agent 是个啥 -> needs RAG: true
+2026/03/20 19:50:17 Searching for: go-agent 是个啥 (tenant: default)
+2026/03/20 19:50:17 INFO SimpleRetrievalService.Search tenant_id=default query="go-agent 是个啥" top_k=10 min_score=0.4
+2026/03/20 19:50:17 INFO Using precision mode query="go-agent 是个啥"
+2026/03/20 19:50:18 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/20 19:50:18 INFO Vector search query vector_length=9736 vector_preview=[0.038432,-0.042700,-0.009853,-0.081583,0.008358,-0.055118,-0.033757,0.076512,-0.046312,0.029842,-0.
+2026/03/20 19:50:18 INFO Vector search query succeeded
+2026/03/20 19:50:18 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/20 19:50:18 Search returned 10 results
+2026/03/20 19:50:18   Result 0: score=0.704, source=./example.md, content=# 示例文档 - GoAgent Storage模块
 
 ## 概述
 
 GoAgent Storage...
-2026/03/20 19:23:41   Result 1: score=0.650, source=./example.md, content=**: 每个用户/项目使用独立租户
+2026/03/20 19:50:18   Result 1: score=0.680, source=./example.md, content=**: 每个用户/项目使用独立租户
 - **验证访问**: 验证所有跨租户操作
 - **定期清理**...
-2026/03/20 19:23:41   Result 2: score=0.583, source=/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
+2026/03/20 19:50:18   Result 2: score=0.584, source=/Users/scc/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
 * 4. 覆盖全面...
-2026/03/20 19:23:41   Result 3: score=0.560, source=/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
-2026/03/20 19:23:41   Result 4: score=0.554, source=/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
+2026/03/20 19:50:18   Result 3: score=0.532, source=/Users/scc/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
 
 # 一、笔记核心设计思路
 
 本笔记聚焦Agent系统开发...
-2026/03/20 19:23:41   Result 5: score=0.552, source=/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
-
-## 场景4...
-2026/03/20 19:23:41   Result 6: score=0.543, source=/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
+2026/03/20 19:50:18   Result 4: score=0.530, source=/Users/scc/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
+2026/03/20 19:50:18   Result 5: score=0.517, source=/Users/scc/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
 
 #...
-2026/03/20 19:23:41   Result 7: score=0.530, source=./example.md, content=用层Tenant Guard
-- **安全验证**: 验证所有跨租户访问
+2026/03/20 19:50:18   Result 6: score=0.517, source=memory:session_default_1774006842692480000, content=Conversation Summary:
 
-示例：
-```go
-//...
-2026/03/20 19:23:41   Result 8: score=0.523, source=./example.md, content= LLM生成答案
+system: New session started...
+2026/03/20 19:50:18   Result 7: score=0.507, source=/Users/scc/Documents/agent/agent_design.md, content=id绑定需精准：确保引用的知识库内容与事实陈述强关联，避免“虚假引用”；
+* 监督Agent轻量化：...
+2026/03/20 19:50:18   Result 8: score=0.505, source=/Users/scc/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
+
+## 场景4...
+2026/03/20 19:50:18   Result 9: score=0.502, source=./example.md, content= LLM生成答案
 ```
 
 ### 2. 语义搜索
@@ -112,78 +107,77 @@ GoAgent Storage...
 
 ```go
 /...
-2026/03/20 19:23:41   Result 9: score=0.517, source=/goagent/plan/code_rules.md, content=ion.
-
-- Race Conditions: Must pass go test -race l...
 
 Assistant:
-根据提供的知识基础，GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统。要使用 Go 实现一个 agent，需要了解 Agent 系统的设计原则和高频问题+工程化解决方案。
+go-agent 是一个高性能的向量存储和检索系统，用于支持 AI 应用。它使用 PostgreSQL + pgvector 扩展实现高效的向量相似度搜索，并提供多租户隔离、智能混合检索、完善的缓存机制和强大的安全加密。
 
-首先，需要遵循 Effective Go 和 Code Review Comments 的编码规范，并且必须使用 `gofmt` / `goimports` 来生成代码。同时，需要确保代码遵循语义搜索规则并且在处理错误和并发性时严格按照标准来进行。
+You: 不对，纠正你一下，记得同步到知识库里，go-agent是一个通用的ai agent 框架
+2026/03/20 19:53:03 RAG check: 不对，纠正你一下，记得同步到知识库里，go-agent是一个通用的ai agent 框架 -> needs RAG: false
+2026/03/20 19:53:04 🎯 [记忆蒸馏] 对话轮数达到阈值 (3/3)，触发记忆蒸馏...
+2026/03/20 19:53:04 🔄 [记忆蒸馏] 开始蒸馏会话: session_default_1774007246436309000
+2026/03/20 19:53:04 📊 [记忆蒸馏] 找到 7 条消息需要蒸馏
+2026/03/20 19:53:04 📝 [记忆蒸馏] 蒸馏内容预览 (1607 字符): Conversation Summary:
 
-其次，需要了解 Agent 系统的核心场景解决方案，包括：
+system: New session started
+user: 晚go 编码规范都有啥
+assistant: Go 代码规范包括 Core Princ...
+2026/03/20 19:53:04 🔢 [记忆蒸馏] 嵌入向量维度: 1024
+2026/03/20 19:53:04 ✅ [记忆蒸馏] 蒸馏完成！
+2026/03/20 19:53:04    📄 文档ID: 983ac1ca-f932-4713-a261-f05c6c505233
+2026/03/20 19:53:04    📏 内容长度: 1607 字符
+2026/03/20 19:53:04    🧠 嵌入维度: 1024
+2026/03/20 19:53:04    💾 存储位置: knowledge_chunks_1024
+2026/03/20 19:53:04    🔍 可通过向量检索回放记忆
 
-1. 向量存储与检索
-2. 语义搜索
-3. 推荐系统
+Assistant:
+I appreciate it when users help me improve my knowledge. So, you're saying that go-agent is a general-purpose AI agent framework that should be synced with the knowledge base as well? I'll make sure to update my information accordingly. Thank you for helping me refine my understanding!
 
-这些场景解决方案可以帮助您实现高性能的向量存储和检索、智能语义搜索和推荐系统。
+You: go-agent 是个啥呢？
+2026/03/20 19:55:10 RAG check: go-agent 是个啥呢？ -> needs RAG: true
+2026/03/20 19:55:10 Searching for: go-agent 是个啥呢？ (tenant: default)
+2026/03/20 19:55:10 INFO SimpleRetrievalService.Search tenant_id=default query="go-agent 是个啥呢？" top_k=10 min_score=0.4
+2026/03/20 19:55:10 INFO Using precision mode query="go-agent 是个啥呢？"
+2026/03/20 19:55:10 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/20 19:55:10 INFO Vector search query vector_length=9735 vector_preview=[0.038841,-0.045543,-0.011016,-0.075932,0.010223,-0.055723,-0.025167,0.078185,-0.047474,0.031438,-0.
+2026/03/20 19:55:10 INFO Vector search query succeeded
+2026/03/20 19:55:10 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/20 19:55:10 Search returned 10 results
+2026/03/20 19:55:10   Result 0: score=0.705, source=./example.md, content=# 示例文档 - GoAgent Storage模块
 
-最后，需要了解 Agent 系统设计的核心笔记，包括逻辑闭环、统一调度、优先级队列、降级策略等。这些知识可以帮助您快速掌握 Agent 系统设计的核心逻辑。
+## 概述
 
-综上所述，使用 Go 实
-
-You: 那agent 如何编排呢？
-2026/03/20 19:24:49 RAG check: 那agent 如何编排呢？ -> needs RAG: true
-2026/03/20 19:24:49 Searching for: 那agent 如何编排呢？ (tenant: default)
-2026/03/20 19:24:49 INFO SimpleRetrievalService.Search tenant_id=default query="那agent 如何编排呢？" top_k=10 min_score=0.4
-2026/03/20 19:24:50 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/20 19:24:50 INFO Vector search query vector_length=9737 vector_preview=[0.082122,-0.057224,-0.013397,-0.091196,-0.018454,-0.027128,0.017461,0.007869,0.006780,0.023059,-0.0
-2026/03/20 19:24:50 INFO Vector search query succeeded
-2026/03/20 19:24:50 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/20 19:24:50 INFO Search completed results_count=10 min_score=0.4
-2026/03/20 19:24:50 Search returned 10 results
-2026/03/20 19:24:50   Result 0: score=0.612, source=/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
-
-#...
-2026/03/20 19:24:50   Result 1: score=0.602, source=/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
+GoAgent Storage...
+2026/03/20 19:55:10   Result 1: score=0.682, source=./example.md, content=**: 每个用户/项目使用独立租户
+- **验证访问**: 验证所有跨租户操作
+- **定期清理**...
+2026/03/20 19:55:10   Result 2: score=0.596, source=/Users/scc/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
 * 4. 覆盖全面...
-2026/03/20 19:24:50   Result 2: score=0.598, source=/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
-2026/03/20 19:24:50   Result 3: score=0.584, source=/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
-
-## 场景4...
-2026/03/20 19:24:50   Result 4: score=0.573, source=/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
+2026/03/20 19:55:10   Result 3: score=0.540, source=/Users/scc/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
 
 # 一、笔记核心设计思路
 
 本笔记聚焦Agent系统开发...
-2026/03/20 19:24:50   Result 5: score=0.567, source=/Documents/agent/agent_design.md, content=明不同类型不满意的优化策略，最后提到“循环控制”和“长期闭环”，突出“以用户为中心”的工程设计，同时...
-2026/03/20 19:24:50   Result 6: score=0.545, source=/Documents/agent/agent_design.md, content=id绑定需精准：确保引用的知识库内容与事实陈述强关联，避免“虚假引用”；
+2026/03/20 19:55:10   Result 4: score=0.538, source=/Users/scc/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
+2026/03/20 19:55:10   Result 5: score=0.534, source=memory:session_default_1774006842692480000, content=Conversation Summary:
+
+system: New session started...
+2026/03/20 19:55:10   Result 6: score=0.528, source=/Users/scc/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
+
+#...
+2026/03/20 19:55:10   Result 7: score=0.517, source=/Users/scc/Documents/agent/agent_design.md, content=id绑定需精准：确保引用的知识库内容与事实陈述强关联，避免“虚假引用”；
 * 监督Agent轻量化：...
-2026/03/20 19:24:50   Result 7: score=0.528, source=/Documents/agent/agent_design.md, content=性。
+2026/03/20 19:55:10   Result 8: score=0.513, source=/Users/scc/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
 
-### 【面试答题技巧】
+## 场景4...
+2026/03/20 19:55:10   Result 9: score=0.509, source=./example.md, content= LLM生成答案
+```
 
-先拆解幻觉的三大本质（推理/事实/理解偏差），再按“基础校验→核...
-2026/03/20 19:24:50   Result 8: score=0.520, source=/Documents/agent/agent_design.md, content=做摘要、意图结构化提取，减少Leader的上下文Token量，避免Token爆炸和决策混乱；
-* 4...
-2026/03/20 19:24:50   Result 9: score=0.516, source=/Documents/agent/agent_design.md, content=问题】
+### 2. 语义搜索
 
-用户需求存在隐性约束未被挖掘，或当前Agent能力无法匹配用户预期，持续优化已无法提升满意...
+为应用添加智能语义搜索功能：
 
-Assistant:
-根据提供的知识基础，Agent系统编排主要关注以下几个方面：
-
-1.统一调度：使用合适的调度算法来确保所有任务按照优先顺序执行。
-2.优先级队列：按任务重要性和用户等级来设置优先级，高优先级任务优先执行。
-3.循环保险丝：监控资源使用率，并触发过载保护以限制新任务接入。
-4.过载降级策略：在过载时关闭非核心功能并触发终止策略以保护资源。
-
-这些机制可以帮助确保Agent系统的稳定性和性能，减少延迟和错误率。
-
-You: 那你还记得我的名字吗？ 我，小 明啊
-2026/03/20 19:26:14 RAG check: 那你还记得我的名字吗？ ，小明啊 -> needs RAG: false
-2026/03/20 19:26:15 Distillation threshold reached, triggering memory distillation...
+```go
+/...
 
 Assistant:
-对不起，我是一位新助手，目前我并没有存储任何信息或记忆，所以我完全是第一次与你相遇。希望我们可以从scratch开始，认识您！
+go-agent 是一个通用的 AI agent 框架。

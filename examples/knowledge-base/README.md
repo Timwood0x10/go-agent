@@ -4,12 +4,22 @@ This is a local knowledge base example based on the goagent storage module. It d
 
 ## Features
 
+### Core Features
 - 📄 **Document Import**: Import text documents with automatic chunking, vectorization, and storage
 - 🔍 **Intelligent Retrieval**: Hybrid search combining vector retrieval and BM25 full-text search
 - 💬 **Interactive Q&A**: Command-line interactive knowledge Q&A
 - 📊 **Document Management**: List and delete imported documents
 - 🏢 **Multi-Tenant Isolation**: Support for multiple independent tenant spaces
 - ⚡ **High Performance**: Efficient vector retrieval based on pgvector
+
+### Advanced Features
+- 🎯 **Precision Mode**: Automatic detection and handling of precise queries (short queries, special symbols like `=+-*/:`)
+- 🤖 **Complete RAG Pipeline**: Retrieval → Generation → Verification with local LLM (Ollama)
+- 🧠 **Memory System**: Conversation history tracking with session management
+- 💾 **Memory Distillation**: Automatic extraction and storage of conversation knowledge after reaching threshold
+- 🔬 **Fact Checking**: Correct user misconceptions with factual information from knowledge base
+- 🎨 **Smart RAG Detection**: Automatically determine if RAG is needed for each query
+- 🏠 **Local LLM Integration**: Full local setup with Ollama (llama3.2:latest) for privacy and speed
 
 ## System Requirements
 
@@ -26,16 +36,26 @@ This is a local knowledge base example based on the goagent storage module. It d
      pgvector/pgvector:pg16
    ```
 
-2. **Ollama embedding service**
+2. **Ollama service** (for both embedding and LLM)
    ```bash
    # Install Ollama
    curl -fsSL https://ollama.com/install.sh | sh
 
    # Pull embedding model
-   ollama pull nomic-embed-text
+   ollama pull qwen3-embedding:0.6b
+
+   # Pull LLM model for answer generation
+   ollama pull llama3.2:latest
 
    # Start Ollama service
    ollama serve
+   ```
+
+3. **Embedding service** (optional, can use Ollama directly)
+   ```bash
+   cd services/embedding
+   
+   ./start.sh
    ```
 
 ### Verify Installation
@@ -50,13 +70,46 @@ curl http://localhost:11434/api/tags
 
 ## Quick Start
 
+### Prerequisites
+
+1. **PostgreSQL + pgvector running**
+   ```bash
+   docker run -d \
+     --name postgres-pgvector \
+     -p 5433:5432 \
+     -e POSTGRES_PASSWORD=postgres \
+     -e POSTGRES_DB=goagent \
+     pgvector/pgvector:pg16
+   ```
+
+2. **Ollama running with required models**
+   ```bash
+   # Start Ollama
+   ollama serve
+   
+   # Pull models (in another terminal)
+   ollama pull qwen3-embedding:0.6b  # For embedding
+   ollama pull llama3.2:latest        # For answer generation
+   ```
+
+3. **Embedding service running** (optional, can use Ollama directly)
+   ```bash
+   cd services/embedding
+   PORT=8000 python3.14 app.py
+   ```
+
 ### One-Click Startup
 
-```shell
-./services/embedding/start.sh  # Start embedding service
+```bash
+# 1. Start embedding service
+cd services/embedding
+./start.sh
 
-go run main.go --save ./example.md
+# 2. Import document
+cd ../../examples/knowledge-base
+go run main.go --save ../../plan/code_rules.md
 
+# 3. Start interactive Q&A
 go run main.go --chat
 ```
 
@@ -73,7 +126,7 @@ docker exec -it postgres-pgvector psql -U postgres -d goagent -c "SELECT version
 
 ### 2. Configure Application
 
-Edit `config.yaml` file to confirm database and embedding service configuration:
+Edit `config.yaml` file to confirm database, embedding service, and LLM configuration:
 
 ```yaml
 database:
@@ -83,8 +136,31 @@ database:
   password: postgres
   database: goagent
 
-embedding_service_url: http://localhost:11434
-embedding_model: nomic-embed-text
+embedding_service_url: http://localhost:8000
+embedding_model: qwen3-embedding:0.6b
+
+# LLM Configuration for answer generation
+llm:
+  provider: ollama
+  base_url: http://localhost:11434
+  model: llama3.2:latest
+  timeout: 120
+  max_tokens: 2048
+
+# Memory System Configuration
+memory:
+  enabled: true
+  max_history: 10
+  max_sessions: 100
+  enable_distillation: true
+  distillation_threshold: 3
+
+# Knowledge Base Configuration
+knowledge:
+  chunk_size: 200
+  chunk_overlap: 50
+  top_k: 10
+  min_score: 0.4
 ```
 
 ### 3. Import Documents
@@ -107,6 +183,16 @@ go run main.go --chat
 
 Then enter your questions:
 
+#### Example 1: General Conversation (No RAG)
+```
+You: 你好
+Assistant: Hello! How can I help you today?
+
+You: 我叫小明
+Assistant: Hello Xiao Ming! Nice to meet you.
+```
+
+#### Example 2: Knowledge Retrieval with RAG
 ```
 You: What is RAG?
 
@@ -116,28 +202,48 @@ Found 3 relevant results:
 Content: RAG (Retrieval-Augmented Generation) is an AI system architecture combining retrieval and generation...
 Source: README.md
 
-[2] Score: 0.856
-Content: Storage module supports hybrid search combining vector retrieval and BM25 full-text search...
-Source: api.md
+Assistant: RAG (Retrieval-Augmented Generation) is an AI system architecture that combines 
+information retrieval with text generation. It works by first retrieving relevant documents from a 
+knowledge base, then using those documents as context to generate more accurate and factual 
+responses. [Document 1]
+```
 
-[3] Score: 0.743
-Content: Vector retrieval uses pgvector for efficient similarity search...
-Source: api.md
+#### Example 3: Precision Mode (Exact Match)
+```
+You: chunk_size = 200
 
-You: What are the features of the storage module?
+Precision mode triggered
+Retrieving exact match...
 
-Found 2 relevant results:
+Assistant: For your question about chunk_size, according to the knowledge base, the 
+recommended chunk_size for optimal performance and semantic integrity is between 50-100 characters. 
+This helps maintain context while ensuring precise matching. [Document 1]
+```
 
-[1] Score: 0.934
-Content: Storage module provides vector storage, retrieval, multi-tenant isolation, hybrid retrieval...
-Source: api.md
+#### Example 4: Fact Checking
+```
+You: Go 语言应该经常使用 panic 来处理错误，对吧？
 
-[2] Score: 0.887
-Content: Core capabilities include: vector storage and retrieval, multi-tenant isolation, hybrid retrieval, intelligent caching...
-Source: README.md
+Assistant: According to the provided knowledge base context, using panic to handle errors in 
+Go is prohibited. panic() is only allowed for fatal startup failures, not for business logic. 
+Therefore, Go requires using error interfaces to handle business logic errors instead of using 
+panic. [Document 1]
+```
 
-You: exit
-Goodbye!
+#### Example 5: Memory Distillation
+```
+You: 你好
+Assistant: Hello! How can I help you?
+
+You: 我叫小明
+Assistant: Hello Xiao Ming! Nice to meet you.
+
+You: 还记得我的名字吗？
+🎯 [记忆蒸馏] 对话轮数达到阈值 (3/3)，触发记忆蒸馏...
+🔄 [记忆蒸馏] 开始蒸馏会话...
+✅ [记忆蒸馏] 蒸馏完成！
+
+Assistant: Yes, I remember! Your name is Xiao Ming. [Based on distilled memory]
 ```
 
 ### 5. Manage Documents
@@ -171,6 +277,59 @@ Options:
   --config <path>   Config file path (default: config.yaml)
 ```
 
+### Configuration Options
+
+#### Database Configuration
+```yaml
+database:
+  host: localhost
+  port: 5433
+  user: postgres
+  password: postgres
+  database: goagent
+```
+
+#### Embedding Configuration
+```yaml
+embedding_service_url: http://localhost:8000
+embedding_model: qwen3-embedding:0.6b
+```
+
+#### LLM Configuration
+```yaml
+llm:
+  provider: ollama              # LLM provider (ollama, openrouter)
+  base_url: http://localhost:11434
+  model: llama3.2:latest       # LLM model for answer generation
+  timeout: 120                  # LLM generation timeout (seconds)
+  max_tokens: 2048              # Maximum tokens in LLM response
+```
+
+#### Memory System Configuration
+```yaml
+memory:
+  enabled: true                  # Enable memory system
+  max_history: 10               # Maximum conversation turns to keep
+  max_sessions: 100              # Maximum sessions to store
+  enable_distillation: true     # Enable automatic distillation
+  distillation_threshold: 3     # Messages before triggering distillation
+```
+
+**Memory System Features:**
+- Track conversation history for context
+- Auto-distill after reaching threshold
+- Store distilled memories in knowledge base
+- Enable conversation continuity across sessions
+
+#### Knowledge Base Configuration
+```yaml
+knowledge:
+  chunk_size: 200              # Document chunk size (characters)
+  chunk_overlap: 50            # Chunk overlap size (characters)
+  top_k: 10                     # Number of retrieval results
+  min_score: 0.4                # Minimum similarity threshold
+```
+
 ### Multi-Tenant Usage
 
 ```bash
@@ -183,9 +342,152 @@ go run main.go --list --tenant user1
 go run main.go --chat --tenant user2
 ```
 
+### Fact Checking
+
+The system can automatically detect and correct user misconceptions:
+
+```bash
+# Start chat mode
+go run main.go --chat
+
+# Example:
+You: Go 语言应该经常使用 panic 来处理错误，对吧？
+
+# System will:
+# 1. Detect the incorrect assumption
+# 2. Retrieve factual information from knowledge base
+# 3. Generate corrected answer with facts
+
+Assistant: According to the provided knowledge base context, using panic to handle 
+errors in Go is prohibited. panic() is only allowed for fatal startup failures, not for 
+business logic. Therefore, Go requires using error interfaces to handle business logic errors 
+instead of using panic.
+```
+
+### Batch Import
+
+```bash
+# Batch import multiple documents
+for file in docs/*.md; do
+  go run main.go --save "$file" --tenant default
+done
+```
+
+### Check Distilled Memories
+
+```bash
+# Run Go-based distillation checker
+go run cmd/check_distillation/main.go
+
+# Or build and run
+go build -o check_distillation cmd/check_distillation/main.go
+./check_distillation
+```
+
+## How It Works
+
+### Import Flow
+
+```
+Document Read → Intelligent Chunking → Generate Embedding Vectors → Store in PostgreSQL + pgvector
+```
+
+1. **Document Read**: Read document content
+2. **Intelligent Chunking**: Split into chunks based on configured size and overlap
+3. **Generate Embedding**: Generate 1024-dimensional vectors for each chunk using embedding service
+4. **Vector Storage**: Store in PostgreSQL pgvector table
+
+### Retrieval Flow (Complete RAG Pipeline)
+
+```
+User Question → RAG Detection → Retrieval (Precision/Recall Mode) → LLM Generation → Fact Checking → Answer
+```
+
+1. **RAG Detection**: Use LLM to determine if the question needs knowledge base search
+   - Needs RAG: Technical questions, documentation queries, fact-based questions
+   - No RAG: General conversation, greetings, personal information
+
+2. **Precision Mode** (for short queries or special symbols):
+   - Exact Match → Keyword Search → Vector Search (early return)
+   - No multi-query, no score dilution
+
+3. **Recall Mode** (for complex queries):
+   - Multi-query generation (original + rewrites)
+   - Hybrid retrieval (vector + keyword)
+   - Result ranking and reranking
+
+4. **LLM Generation**: Use local LLM to generate natural language answers based on retrieved context
+   - Include conversation history for context
+   - Fact checking to correct user misconceptions
+
+5. **Memory Management**:
+   - Track conversation history
+   - Auto-distill after reaching threshold (default: 3 rounds)
+   - Store distilled memories in knowledge base for future retrieval
+
+### Memory Distillation Flow
+
+```
+Conversation History → Threshold Check → Extract Key Information → Generate Embedding → Store in Knowledge Base
+```
+
+1. **Conversation Tracking**: Store each message in session memory
+2. **Threshold Check**: Monitor message count (configurable, default: 3)
+3. **Distillation Trigger**: When threshold reached, extract conversation summary
+4. **Vector Generation**: Generate embedding for distilled memory
+5. **Knowledge Storage**: Store in knowledge base for future retrieval
+
+## Advanced Usage
+
+### Precision Mode Examples
+
+Precision mode automatically triggers for short queries or queries containing special symbols:
+
+```bash
+# Start chat mode
+go run main.go --chat
+
+# Precision mode examples:
+You: chunk_size = 200
+# → Uses Exact Match → Keyword → Vector pipeline
+
+You: a = x
+# → Uses Exact Match → Keyword → Vector pipeline
+
+You: timeout > 0
+# → Uses Exact Match → Keyword → Vector pipeline
+
+You: Go 代码规范是什么？
+# → Uses Recall mode with RAG
+```
+
+### Memory Distillation
+
+The system automatically distills conversation history after reaching the threshold:
+
+```bash
+# Start chat mode
+go run main.go --chat
+
+# Example conversation:
+You: 你好
+Assistant: Hello! How can I help you?
+
+You: 我叫小明
+Assistant: Hello Xiao Ming! Nice to meet you.
+
+You: 还记得我的名字吗？
+# → Triggers memory distillation (3rd message)
+# → Stores conversation summary in knowledge base
+# → Can be retrieved in future conversations
+
+# Check distilled memories:
+go run cmd/check_distillation/main.go
+```
+
 ### Configuration Tuning
 
-Edit `config.yaml` to optimize retrieval performance:
+#### Knowledge Base Parameters
 
 ```yaml
 knowledge:
@@ -193,6 +495,16 @@ knowledge:
   chunk_overlap: 50        # Maintain context continuity
   top_k: 5                 # Return more candidate results
   min_score: 0.6           # Raise similarity threshold
+```
+
+#### Memory System Parameters
+
+```yaml
+memory:
+  enabled: true              # Enable memory system
+  max_history: 10           # Maximum conversation turns to keep
+  enable_distillation: true  # Enable automatic distillation
+  distillation_threshold: 3  # Messages before triggering distillation
 ```
 
 **Parameter Description:**
@@ -216,67 +528,10 @@ knowledge:
   - 0.6-0.7: Balance relevance and result count (recommended)
   - 0.5-0.6: More results, may include irrelevant content
 
-## How It Works
-
-### Import Flow
-
-```
-Document Read → Intelligent Chunking → Generate Embedding Vectors → Store in PostgreSQL + pgvector
-```
-
-1. **Document Read**: Read document content
-2. **Intelligent Chunking**: Split into chunks based on configured size and overlap
-3. **Generate Embedding**: Generate 1024-dimensional vectors for each chunk using Ollama service
-4. **Vector Storage**: Store in PostgreSQL pgvector table
-
-### Retrieval Flow
-
-```
-User Question → Vectorization → Hybrid Retrieval → Result Ranking → Return Relevant Content
-```
-
-1. **Question Vectorization**: Convert user question to vector
-2. **Hybrid Retrieval**: Simultaneously perform vector retrieval and BM25 retrieval
-3. **Result Ranking**: Merge and rank results using RRF algorithm
-4. **Return Results**: Return Top-K most relevant knowledge chunks
-
-## Advanced Usage
-
-### Batch Import
-
-```bash
-# Batch import multiple documents
-for file in docs/*.md; do
-  go run main.go --save "$file" --tenant default
-done
-```
-
-### Custom Chunking
-
-Modify the `chunkDocument` method in `main.go` to implement custom chunking logic:
-
-```go
-func (kb *KnowledgeBase) chunkDocument(content string, chunkSize, chunkOverlap int) []*Chunk {
-    // Implement custom chunking logic
-    // - Chunk by paragraph
-    // - Chunk by semantics
-    // - Chunk by chapter
-}
-```
-
-### LLM Integration
-
-Extend the `StartChat` method to integrate LLM service for answer generation:
-
-```go
-func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
-    // ... retrieval logic ...
-
-    // Call LLM to generate answer
-    answer := callLLM(question, results)
-    fmt.Printf("\nAI: %s\n", answer)
-}
-```
+- `distillation_threshold`: Messages before distillation
+  - Lower values (2-3): More frequent distillation, less context per batch
+  - Higher values (5-10): Less frequent distillation, more context per batch
+  - Recommended: 3 for active conversations
 
 ## Architecture
 
@@ -286,8 +541,12 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 KnowledgeBase (High-level API)
     ├── Pool (Database connection pool)
     ├── KnowledgeRepository (Knowledge base data access)
-    ├── RetrievalService (Intelligent retrieval)
+    ├── RetrievalService (Intelligent retrieval - SimpleRetrievalService)
+    │   ├── Precision Mode (Exact Match → Keyword → Vector)
+    │   └── Recall Mode (Multi-query + Hybrid retrieval)
     ├── EmbeddingClient (Embedding service)
+    ├── LLMClient (Local LLM for answer generation)
+    ├── MemoryManager (Conversation history and distillation)
     ├── TenantGuard (Tenant isolation)
     └── RetrievalGuard (Rate limiting circuit breaker)
 ```
@@ -299,9 +558,14 @@ KnowledgeBase (High-level API)
 Document → Chunking → Embedding Vector → PostgreSQL + pgvector
 ```
 
-**Knowledge Q&A:**
+**Knowledge Q&A (Complete RAG):**
 ```
-Question → Retrieval Request → Hybrid Retrieval → Result Ranking → Return Relevant Content
+Question → RAG Detection → Precision/Recall Mode → Retrieval → LLM Generation → Fact Checking → Answer
+```
+
+**Memory Management:**
+```
+Messages → Session Memory → Threshold Check → Distillation → Knowledge Base Storage
 ```
 
 ## Performance Optimization
@@ -403,7 +667,7 @@ Search timeout. Please try again.
 - Increase `top_k` value
 - Try different embedding models
 
-### Issue 7: pgvector Not Installed
+### Issue 8: pgvector Not Installed
 
 ```
 Error: type "vector" does not exist
@@ -414,6 +678,46 @@ Error: type "vector" does not exist
 # Install pgvector extension in PostgreSQL
 docker exec -it postgres-pgvector psql -U postgres -d goagent -c "CREATE EXTENSION vector;"
 ```
+
+### Issue 9: Memory Distillation Not Triggering
+
+**Symptoms**: Conversation continues without distillation despite reaching threshold
+
+**Solution:**
+- Check memory configuration: `memory.enable_distillation: true`
+- Check threshold value: `memory.distillation_threshold: 3`
+- Check logs for distillation trigger: look for `🎯 [记忆蒸馏]`
+- Verify conversation message count matches threshold
+
+### Issue 10: LLM Generation Failed
+
+**Symptoms**: Error message "LLM generation failed, falling back to raw results"
+
+**Solution:**
+- Check Ollama LLM model is available: `ollama list`
+- Verify LLM model name in config: `llm.model: llama3.2:latest`
+- Check Ollama service is running: `curl http://localhost:11434/api/tags`
+- Increase LLM timeout: `llm.timeout: 120`
+
+### Issue 11: Fact Checking Not Working
+
+**Symptoms**: System agrees with user's incorrect statements
+
+**Solution:**
+- Ensure LLM prompt includes fact-checking instructions
+- Check retrieved documents contain correct information
+- Verify RAG is triggered for the question (check logs)
+- Try rephrasing the question to trigger RAG
+
+### Issue 12: Precision Mode Not Triggering
+
+**Symptoms**: Complex queries using vector search instead of exact match
+
+**Solution:**
+- Precision mode triggers for: `len(query) <= 10` OR contains `=+-*/:`
+- Check logs for: `Using precision mode`
+- For longer queries, system correctly uses Recall mode
+- Try shorter queries or include special symbols
 
 ## Extension Features
 
@@ -460,16 +764,26 @@ func (kb *KnowledgeBase) UpdateDocument(ctx context.Context, tenantID, docID str
 
 - **Language**: Go 1.21+
 - **Database**: PostgreSQL 16 + pgvector
-- **Embedding Service**: Ollama (nomic-embed-text)
+- **Embedding Service**: Ollama (qwen3-embedding:0.6b) or Custom Python Service
+- **LLM**: Ollama (llama3.2:latest) for answer generation
 - **Configuration**: YAML
-- **Retrieval**: Vector similarity + BM25 + RRF
+- **Retrieval**: 
+  - Vector similarity (pgvector)
+  - BM25 full-text search
+  - Precision Mode (Exact Match → Keyword → Vector)
+  - Smart RAG Detection
+- **Memory System**: Session-based conversation history with automatic distillation
+- **Fact Checking**: Automatic detection and correction of user misconceptions
 
 ## References
 
 - [Storage API Documentation](../../docs/storage/api.md)
+- [Retrieval Strategy Guide](../../docs/retrieval-strategy.md)
+- [Memory System Documentation](../../docs/memory/)
 - [pgvector Documentation](https://github.com/pgvector/pgvector)
 - [Ollama Documentation](https://github.com/ollama/ollama)
 - [RAG Best Practices](https://docs.anthropic.com/claude/docs/retrieval-augmented-generation)
+- [LLM Query Rewriting](../../docs/llm/llm_query_rewrite.md)
 
 ## License
 
