@@ -30,8 +30,8 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 		return errors.ErrInvalidArgument
 	}
 
-	// SET语句不支持参数化查询，需要直接拼接字符串
-	// 这里tenantID已经被验证为非空字符串，所以可以安全地使用
+	// SET statement does not support parameterized queries, need to concatenate string directly
+	// tenantID has been validated as non-empty string, so it's safe to use
 	query := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	_, err := g.db.Exec(ctx, query)
 	if err != nil {

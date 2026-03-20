@@ -80,7 +80,11 @@ func TestSearchKnowledgeVector_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(db, db)
@@ -95,6 +99,8 @@ func TestSearchKnowledgeVector_Integration(t *testing.T) {
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
+		nil, /* expRepo */
+		nil, /* toolRepo */
 	)
 	ctx := context.Background()
 
@@ -164,7 +170,7 @@ func TestSearchKnowledgeVector_Integration(t *testing.T) {
 		assert.NotEmpty(t, result.Content)
 		assert.Greater(t, result.Score, 0.0)
 		assert.Equal(t, "document", result.Source) // SourceType from test data
-		assert.Equal(t, "knowledge", result.Type)   // Type is always "knowledge"
+		assert.Equal(t, "knowledge", result.Type)  // Type is always "knowledge"
 	}
 }
 
@@ -175,7 +181,11 @@ func TestBm25SearchKnowledge_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(db, db)
@@ -188,6 +198,9 @@ func TestBm25SearchKnowledge_Integration(t *testing.T) {
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
+		nil, /* expRepo */
+		nil, /* toolRepo */
+
 	)
 
 	ctx := context.Background()
@@ -248,7 +261,11 @@ func TestMergeAndRank_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(db, db)
@@ -261,51 +278,61 @@ func TestMergeAndRank_Integration(t *testing.T) {
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
+		nil, /* expRepo */
+		nil, /* toolRepo */
 	)
 
-	ctx := context.Background()
 	now := time.Now()
 
 	// Create mock vector results
 	vectorResults := []*SearchResult{
 		{
-			ID:        "1",
-			Content:   "Go programming",
-			Score:     0.9,
-			Source:    "knowledge",
-			CreatedAt: now.Add(-1 * time.Hour),
+			ID:          "1",
+			Content:     "Go programming",
+			Score:       0.9,
+			Source:      "knowledge",
+			SubSource:   "vector",
+			QueryWeight: 1.0,
+			CreatedAt:   now.Add(-1 * time.Hour),
 		},
 		{
-			ID:        "2",
-			Content:   "Python programming",
-			Score:     0.8,
-			Source:    "knowledge",
-			CreatedAt: now.Add(-2 * time.Hour),
+			ID:          "2",
+			Content:     "Python programming",
+			Score:       0.8,
+			Source:      "knowledge",
+			SubSource:   "vector",
+			QueryWeight: 1.0,
+			CreatedAt:   now.Add(-2 * time.Hour),
 		},
 	}
 
 	// Create mock keyword results
 	keywordResults := []*SearchResult{
 		{
-			ID:        "2",
-			Content:   "Python programming",
-			Score:     0.6,
-			Source:    "knowledge",
-			CreatedAt: now.Add(-2 * time.Hour),
+			ID:          "2",
+			Content:     "Python programming",
+			Score:       0.6,
+			Source:      "knowledge",
+			SubSource:   "keyword",
+			QueryWeight: 1.0,
+			CreatedAt:   now.Add(-2 * time.Hour),
 		},
 		{
-			ID:        "3",
-			Content:   "JavaScript programming",
-			Score:     0.5,
-			Source:    "knowledge",
-			CreatedAt: now.Add(-3 * time.Hour),
+			ID:          "3",
+			Content:     "JavaScript programming",
+			Score:       0.5,
+			Source:      "knowledge",
+			SubSource:   "keyword",
+			QueryWeight: 1.0,
+			CreatedAt:   now.Add(-3 * time.Hour),
 		},
 	}
 
 	plan := DefaultRetrievalPlan()
 
 	// Test merge and rank
-	merged := service.mergeAndRank(ctx, vectorResults, keywordResults, plan)
+	allResults := append(vectorResults, keywordResults...)
+	merged := service.mergeAndRerank(allResults, plan)
 
 	// Verify merged results
 	assert.NotNil(t, merged)
@@ -342,6 +369,8 @@ func TestGetEmbedding_Integration(t *testing.T) {
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo not needed for this test
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	ctx := context.Background()
@@ -369,7 +398,9 @@ func TestFilterByScore_Integration(t *testing.T) {
 		nil, // embeddingClient - not needed for score filtering test
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
-		nil,
+		nil, // kbRepo
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	now := time.Now()
@@ -411,7 +442,9 @@ func TestCalculateTimeDecay_Integration(t *testing.T) {
 		nil, // embeddingClient - not needed for time decay test
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
-		nil,
+		nil, // kbRepo
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	now := time.Now()
@@ -446,7 +479,9 @@ func TestCountResultsBySource_Integration(t *testing.T) {
 		nil, // embeddingClient - not needed for count results test
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
-		nil,
+		nil, // kbRepo
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	now := time.Now()
@@ -485,7 +520,9 @@ func TestValidateRequest_Integration(t *testing.T) {
 		nil, // embeddingClient - not needed for validation test
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
-		nil,
+		nil, // kbRepo
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	tests := []struct {

@@ -14,7 +14,7 @@ import (
 func TestCalculateTimeDecay_WithCustomTime(t *testing.T) {
 	service := &RetrievalService{}
 
-	// 使用当前时间作为基准
+	// Use current time as baseline
 	now := time.Now()
 
 	tests := []struct {
@@ -56,7 +56,7 @@ func TestCalculateTimeDecay_WithCustomTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 计算相对于当前时间的时间点
+			// Calculate time point relative to current time
 			testTime := now.Add(-tt.age)
 			decay := service.calculateTimeDecay(testTime)
 
@@ -152,17 +152,14 @@ func TestMergeAndRank_WithEqualScores(t *testing.T) {
 	now := time.Now()
 
 	// Create results with equal scores and same CreatedAt to avoid time decay
-	vectorResults := []*SearchResult{
-		{ID: "1", Score: 0.8, Source: "knowledge", CreatedAt: now},
-		{ID: "2", Score: 0.8, Source: "knowledge", CreatedAt: now},
+	allResults := []*SearchResult{
+		{ID: "1", Score: 0.8, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "2", Score: 0.8, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "2", Score: 0.8, Source: "knowledge", SubSource: "keyword", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "3", Score: 0.8, Source: "knowledge", SubSource: "keyword", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	keywordResults := []*SearchResult{
-		{ID: "2", Score: 0.8, Source: "knowledge", CreatedAt: now},
-		{ID: "3", Score: 0.8, Source: "knowledge", CreatedAt: now},
-	}
-
-	merged := service.mergeAndRank(context.Background(), vectorResults, keywordResults, plan)
+	merged := service.mergeAndRerank(allResults, plan)
 
 	// Should have 3 unique results (ID 2 appears in both vector and keyword results)
 	assert.Equal(t, 3, len(merged))
@@ -187,17 +184,14 @@ func TestMergeAndRank_WithDifferentSources(t *testing.T) {
 	now := time.Now()
 
 	// Create results from different sources
-	vectorResults := []*SearchResult{
-		{ID: "1", Score: 0.9, Source: "knowledge", CreatedAt: now},
-		{ID: "2", Score: 0.7, Source: "experience", CreatedAt: now},
+	allResults := []*SearchResult{
+		{ID: "1", Score: 0.9, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "2", Score: 0.7, Source: "experience", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "3", Score: 0.8, Source: "tool", SubSource: "keyword", QueryWeight: 1.0, CreatedAt: now},
+		{ID: "4", Score: 0.6, Source: "knowledge", SubSource: "keyword", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	keywordResults := []*SearchResult{
-		{ID: "3", Score: 0.8, Source: "tool", CreatedAt: now},
-		{ID: "4", Score: 0.6, Source: "knowledge", CreatedAt: now},
-	}
-
-	merged := service.mergeAndRank(context.Background(), vectorResults, keywordResults, plan)
+	merged := service.mergeAndRerank(allResults, plan)
 
 	// Should have 4 unique results
 	assert.Equal(t, 4, len(merged))

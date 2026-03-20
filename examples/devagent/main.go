@@ -431,7 +431,7 @@ func generateFiles(items []*models.RecommendItem) []string {
 
 		slog.Debug("Processing item", "item_id", item.ItemID, "name", item.Name, "category", item.Category)
 
-		// 优先使用 Content 字段，然后尝试从 Metadata 中提取
+		// Prefer Content field, then try to extract from Metadata
 		if item.Content != "" {
 			content = item.Content
 			slog.Debug("Found content in Content field", "item_id", item.ItemID, "content_length", len(content))
@@ -455,11 +455,11 @@ func generateFiles(items []*models.RecommendItem) []string {
 		// Determine filename based on category and name
 		switch item.Category {
 		case "code":
-			// 根据内容判断文件扩展名
+			// Determine file extension based on content
 			ext := detectFileExtension(content)
 			filename = generateFilename(item.Name, ext)
 		case "test":
-			// 根据内容判断文件扩展名
+			// Determine file extension based on content
 			ext := detectFileExtension(content)
 			filename = fmt.Sprintf("test_%s.%s", sanitizeFilename(item.Name), ext)
 		case "docs":

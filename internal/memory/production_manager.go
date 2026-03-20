@@ -25,8 +25,8 @@ type ProductionMemoryManager struct {
 	tenantGuard      *postgres.TenantGuard
 	retrievalService *services.RetrievalService
 	embeddingClient  *embedding.EmbeddingClient
-	writeBuffer      *postgres.WriteBuffer    // 写入削峰层
-	embeddingQueue   *postgres.EmbeddingQueue // 异步embedding队列
+	writeBuffer      *postgres.WriteBuffer    // Write buffer for rate limiting
+	embeddingQueue   *postgres.EmbeddingQueue // Async embedding queue
 
 	// Repositories
 	knowledgeRepository    *repositories.KnowledgeRepository
@@ -100,6 +100,8 @@ func NewProductionMemoryManager(
 		tenantGuard,
 		retrievalGuard,
 		knowledgeRepo,
+		nil, // expRepo
+		nil, // toolRepo
 	)
 
 	// Create embedding queue (asynchronous embedding chain per design standard)
