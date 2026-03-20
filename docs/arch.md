@@ -202,7 +202,7 @@
 
 ## Actor 模型对应关系
 
-| Actor 模型概念 | iFlow 实现 |
+| Actor 模型概念 |  实现 |
 |----------------|-----------|
 | Actor | `LeaderAgent`, `OutfitSubAgent` |
 | Mailbox | `MessageQueue` (In-Memory) |

@@ -262,8 +262,3 @@ func parseVectorString(vecStr string) ([]float64, error) { ... }
 - [PostgreSQL JSONB](https://www.postgresql.org/docs/current/datatype-json.html)
 
 ---
-
-**Document Version**: 1.0  
-**Last Updated**: 2026-03-18  
-**Author**: iFlow CLI Team  
-**Status**: Production-Ready
