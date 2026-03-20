@@ -893,7 +893,7 @@ func (s *RetrievalService) searchKnowledgeVector(ctx context.Context, embedding 
 		result := &SearchResult{
 			ID:        chunk.ID,
 			Content:   chunk.Content,
-			Source:    "knowledge",
+			Source:    chunk.SourceType,
 			SubSource: "vector",
 			Type:      "knowledge",
 			Metadata:  chunk.Metadata,
