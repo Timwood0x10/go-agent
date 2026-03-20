@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package errors
 
 import (
@@ -893,3 +894,5 @@ func TestRunAllRealScenarios(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

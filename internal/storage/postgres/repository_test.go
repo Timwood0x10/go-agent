@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -25,9 +26,11 @@ func TestRepository_NewRepository(t *testing.T) {
 		repo := NewRepository(pool)
 		if repo == nil {
 			t.Error("repository should not be nil")
+			return
 		}
 		if repo.Session == nil {
 			t.Error("Session repository should not be nil")
+			return
 		}
 		if repo.Recommend == nil {
 			t.Error("Recommend repository should not be nil")
@@ -501,3 +504,5 @@ func TestRepository_SaveProfile(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

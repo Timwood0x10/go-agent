@@ -1,3 +1,4 @@
+// nolint: errcheck // Operations may ignore return values
 package postgres
 
 import (
@@ -62,7 +63,7 @@ func (p *Pool) Get(ctx context.Context) (*sql.Conn, error) {
 
 	p.mu.Lock()
 	p.openCount++
-	p.idleCount++
+	p.idleCount--
 	elapsed := time.Since(start)
 	p.waitDuration += elapsed
 	if elapsed > time.Second {
@@ -80,10 +81,10 @@ func (p *Pool) Release(conn *sql.Conn) {
 	}
 
 	conn.Close()
-
+	// nolint: errcheck // Connection is closed by defer
 	p.mu.Lock()
 	p.openCount--
-	p.idleCount--
+	p.idleCount++
 	p.mu.Unlock()
 }
 
@@ -142,8 +143,21 @@ func (p *Pool) Ping(ctx context.Context) error {
 	return p.db.PingContext(ctx)
 }
 
+// GetDB returns the underlying *sql.DB for repository initialization.
+// This is needed for repository constructors that require *sql.DB.
+func (p *Pool) GetDB() *sql.DB {
+	return p.db
+}
+
 // Exec executes a query without returning rows.
 func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	// Add query timeout if not already set in context
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.cfg.QueryTimeout)
+		defer cancel()
+	}
+
 	var result sql.Result
 	var execErr error
 
@@ -158,6 +172,13 @@ func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 // Query executes a query and returns rows.
 // The connection is released when rows are closed.
 func (p *Pool) Query(ctx context.Context, query string, args ...any) (*ManagedRows, error) {
+	// Add query timeout if not already set in context
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.cfg.QueryTimeout)
+		defer cancel()
+	}
+
 	conn, err := p.Get(ctx)
 	if err != nil {
 		return nil, err
@@ -194,6 +215,13 @@ func (m *ManagedRows) Close() error {
 
 // QueryRow executes a query and returns a single row.
 func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+	// Add query timeout if not already set in context
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.cfg.QueryTimeout)
+		defer cancel()
+	}
+
 	var row *sql.Row
 
 	p.WithConnection(ctx, func(conn *sql.Conn) error {

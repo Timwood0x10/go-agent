@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package leader
 
 import (
@@ -52,7 +53,9 @@ func TestTaskPlanner_Plan(t *testing.T) {
 	planner := NewTaskPlanner(3)
 
 	profile := &models.UserProfile{
-		Style:     []models.StyleTag{models.StyleCasual},
+		Preferences: map[string]any{
+			"style": []models.StyleTag{models.StyleCasual},
+		},
 		Occasions: []models.Occasion{models.OccasionDaily},
 		Budget:    models.NewPriceRange(100, 500),
 	}
@@ -229,7 +232,7 @@ func TestLeaderAgent_New(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	if agent.ID() != "leader1" {
 		t.Errorf("expected leader1, got %s", agent.ID())
@@ -263,7 +266,7 @@ func TestLeaderAgent_StartStop(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Start
 	err := agent.Start(context.Background())
@@ -311,7 +314,7 @@ func TestLeaderAgent_Process(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Process without starting should auto-start
 	result, err := agent.Process(context.Background(), "I want casual style")
@@ -334,14 +337,18 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 	aggregator := NewResultAggregator(true, 10)
 
-	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil)
+	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
 
 	// Start then set to busy
-	agent.Start(context.Background())
+	if err := agent.Start(context.Background()); err != nil {
+		t.Errorf("Start() error = %v", err)
+	}
 	// Note: can't easily set to busy without proper implementation
 
 	// Process after stop should auto-start
-	agent.Stop(context.Background())
+	if err := agent.Stop(context.Background()); err != nil {
+		t.Errorf("Stop() error = %v", err)
+	}
 	result, err := agent.Process(context.Background(), "test")
 	if err != nil {
 		t.Errorf("Process() error = %v", err)
@@ -425,3 +432,5 @@ func TestLeaderAgent_Heartbeat(t *testing.T) {
 		t.Error("IsAlive() should return true after heartbeat")
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

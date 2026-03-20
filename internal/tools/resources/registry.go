@@ -134,7 +134,6 @@ type ToolGroup struct {
 	name        string
 	description string
 	registry    *Registry
-	mu          sync.RWMutex
 }
 
 // NewToolGroup creates a new ToolGroup.

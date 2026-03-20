@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package engine
 
 import (
@@ -564,3 +565,5 @@ func TestConvertFunctionsCoverage(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

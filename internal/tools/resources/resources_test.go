@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package resources
 
 import (
@@ -115,3 +116,6 @@ func TestBaseTool(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

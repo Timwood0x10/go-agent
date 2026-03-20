@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package sub
 
 import (
@@ -380,3 +381,5 @@ func TestMessageHandler_HandleAckMessage(t *testing.T) {
 		t.Errorf("Handle() error = %v", err)
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values

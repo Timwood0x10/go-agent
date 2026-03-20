@@ -17,6 +17,70 @@ type Config struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+	QueryTimeout    time.Duration
+	Embedding       *EmbeddingConfig
+}
+
+// EmbeddingConfig represents embedding-related configuration.
+type EmbeddingConfig struct {
+	DefaultModel         string
+	DefaultVersion       int
+	MaxRetries           int
+	MaxBatchSize         int
+	MaxVectorSearchLimit int
+	ReconcileBatchSize   int
+	EmbeddingTimeout     time.Duration
+}
+
+// DefaultEmbeddingConfig returns the default embedding configuration.
+func DefaultEmbeddingConfig() *EmbeddingConfig {
+	return &EmbeddingConfig{
+		DefaultModel:         "intfloat/e5-large",
+		DefaultVersion:       1,
+		MaxRetries:           3,
+		MaxBatchSize:         32,
+		MaxVectorSearchLimit: 1000,
+		ReconcileBatchSize:   1000,
+		EmbeddingTimeout:     30 * time.Second,
+	}
+}
+
+// Validate validates the embedding configuration.
+func (e *EmbeddingConfig) Validate() error {
+	if e.DefaultModel == "" {
+		e.DefaultModel = "intfloat/e5-large"
+	}
+	if e.DefaultVersion <= 0 {
+		e.DefaultVersion = 1
+	}
+	if e.MaxRetries <= 0 {
+		e.MaxRetries = 3
+	}
+	if e.MaxRetries > 10 {
+		return fmt.Errorf("max retries too large: %d (max 10)", e.MaxRetries)
+	}
+	if e.MaxBatchSize <= 0 {
+		e.MaxBatchSize = 32
+	}
+	if e.MaxBatchSize > 1000 {
+		return fmt.Errorf("max batch size too large: %d (max 1000)", e.MaxBatchSize)
+	}
+	if e.MaxVectorSearchLimit <= 0 {
+		e.MaxVectorSearchLimit = 1000
+	}
+	if e.MaxVectorSearchLimit > 10000 {
+		return fmt.Errorf("max vector search limit too large: %d (max 10000)", e.MaxVectorSearchLimit)
+	}
+	if e.ReconcileBatchSize <= 0 {
+		e.ReconcileBatchSize = 1000
+	}
+	if e.ReconcileBatchSize > 10000 {
+		return fmt.Errorf("reconcile batch size too large: %d (max 10000)", e.ReconcileBatchSize)
+	}
+	if e.EmbeddingTimeout <= 0 {
+		e.EmbeddingTimeout = 30 * time.Second
+	}
+	return nil
 }
 
 // DefaultConfig returns the default database configuration.
@@ -31,12 +95,14 @@ func DefaultConfig() *Config {
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,
 		ConnMaxIdleTime: 1 * time.Minute,
+		QueryTimeout:    30 * time.Second,
+		Embedding:       DefaultEmbeddingConfig(),
 	}
 }
 
 // DSN returns the connection string.
 func (c *Config) DSN() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable client_encoding=UTF8",
 		c.Host, c.Port, c.User, c.Password, c.Database)
 }
 
@@ -59,6 +125,15 @@ func (c *Config) Validate() error {
 	}
 	if c.ConnMaxIdleTime <= 0 {
 		c.ConnMaxIdleTime = 1 * time.Minute
+	}
+	if c.QueryTimeout <= 0 {
+		c.QueryTimeout = 30 * time.Second
+	}
+	if c.Embedding == nil {
+		c.Embedding = DefaultEmbeddingConfig()
+	}
+	if err := c.Embedding.Validate(); err != nil {
+		return fmt.Errorf("invalid embedding config: %w", err)
 	}
 	return nil
 }

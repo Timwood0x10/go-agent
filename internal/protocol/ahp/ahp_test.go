@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package ahp
 
 import (
@@ -133,6 +134,7 @@ func TestMessageQueue(t *testing.T) {
 		}
 		if dequeued == nil {
 			t.Errorf("expected message")
+			return
 		}
 		if dequeued.TaskID != "task1" {
 			t.Errorf("expected task1")
@@ -897,3 +899,5 @@ func TestDLQProcess(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

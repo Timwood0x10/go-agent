@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -47,28 +48,27 @@ func TestRecommendRepository_Create(t *testing.T) {
 			UserID:    "user-1",
 			Items: []*models.RecommendItem{
 				{
-					ItemID:      "item-1",
-					Name:        "T-Shirt",
-					Price:       50.0,
-					Description: "A nice t-shirt",
-					Category:    "clothing",
-					Brand:       "Nike",
-					ImageURL:    "https://example.com/image.jpg",
-					Style:       []models.StyleTag{models.StyleCasual},
-					Colors:      []string{"white"},
-					MatchReason: "Matches your casual style",
-				},
-				{
-					ItemID:      "item-2",
-					Name:        "Jeans",
-					Price:       80.0,
-					Description: "Blue jeans",
-					Category:    "clothing",
-					Brand:       "Levi's",
-					ImageURL:    "https://example.com/jeans.jpg",
-					Style:       []models.StyleTag{models.StyleCasual},
-					Colors:      []string{"blue"},
-					MatchReason: "Great for casual wear",
+					ItemID:           "item-1",
+					Name:             "T-Shirt",
+					Price:            50.0,
+					Description:      "A nice t-shirt",
+					Category:         "clothing",
+					Brand:            "Nike",
+					ImageURL:         "https://example.com/image.jpg",
+					AgentPreferences: []models.StyleTag{models.StyleCasual},
+					Colors:           []string{"white"},
+					MatchReason:      "Matches your casual style",
+				}, {
+					ItemID:           "item-2",
+					Name:             "Jeans",
+					Price:            80.0,
+					Description:      "Blue jeans",
+					Category:         "clothing",
+					Brand:            "Levi's",
+					ImageURL:         "https://example.com/jeans.jpg",
+					AgentPreferences: []models.StyleTag{models.StyleCasual},
+					Colors:           []string{"blue"},
+					MatchReason:      "Great for casual wear",
 				},
 			},
 			Reason:     "Matches your casual style",
@@ -363,3 +363,5 @@ func TestRecommendRepository_NewRecommendRepositoryWithDB(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

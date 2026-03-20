@@ -1,4 +1,4 @@
-# Makefile for Style Agent Framework
+# Makefile for GO Agent Framework
 
 .PHONY: all lint test test-race check check-core check-tools help clean install
 
@@ -16,14 +16,33 @@ fmt:
 	gofmt -s -w .
 
 # Lint targets
-lint:
+lint: lint-vet lint-staticcheck lint-golangci
+	@echo ""
+	@echo "All lint checks: PASSED"
+
+lint-vet:
 	@echo "Running go vet..."
 	@go vet ./...
 	@echo "go vet: PASSED"
-	@echo ""
-	@echo "Note: staticcheck and golangci-lint are optional"
-	@echo "To run full linting, install: go install honnef.co/go/tools/cmd/staticcheck@latest"
-	@echo "and: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh"
+
+lint-staticcheck:
+	@echo "Running staticcheck..."
+	@if command -v staticcheck >/dev/null 2>&1; then \
+		staticcheck ./...; \
+		echo "staticcheck: PASSED"; \
+	else \
+		echo "WARNING: staticcheck not installed. Install with: go install honnef.co/go/tools/cmd/staticcheck@latest"; \
+	fi
+
+lint-golangci:
+	@echo "Running golangci-lint..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=5m; \
+		echo "golangci-lint: PASSED"; \
+	else \
+		echo "ERROR: golangci-lint not installed. Install with: brew install golangci-lint"; \
+		exit 1; \
+	fi
 
 # Test targets
 test:
@@ -83,7 +102,7 @@ help:
 	@echo "  lint          - Run all linters (vet, staticcheck, golangci-lint)"
 	@echo "  lint-vet      - Run go vet"
 	@echo "  lint-staticcheck  - Run staticcheck"
-	@echo "  lint-golangci    - Run golangci-lint"
+	@echo "  lint-golangci    - Run golangci-lint (REQUIRED)"
 	@echo "  test          - Run tests with coverage"
 	@echo "  test-race     - Run tests with race detection"
 	@echo "  test-core     - Run tests for core modules (requires 90%+ coverage)"
@@ -94,7 +113,16 @@ help:
 	@echo "  build         - Build server binary"
 	@echo "  build-all     - Build all binaries"
 	@echo "  clean         - Clean build artifacts"
+	@echo "  ci            - Run CI checks (install, fmt, lint, test-race)"
 	@echo "  help          - Show this help message"
+	@echo ""
+	@echo "Required tools:"
+	@echo "  - go: https://go.dev/dl/"
+	@echo "  - goimports: go install golang.org/x/tools/cmd/goimports@latest"
+	@echo "  - staticcheck: go install honnef.co/go/tools/cmd/staticcheck@latest"
+	@echo "  - golangci-lint: brew install golangci-lint (macOS)"
 
 # CI target (used in CI pipelines)
 ci: install fmt lint test-race
+	@echo ""
+	@echo "CI checks: PASSED"

@@ -1,0 +1,68 @@
+# Example Configuration for LLM Query Rewrite
+# This example demonstrates how to configure LLM client for query rewriting
+
+server:
+  host: "localhost"
+  port: 8080
+
+# LLM Configuration for Query Rewriting
+llm:
+  # Provider: "openrouter" or "ollama"
+  provider: "ollama"
+
+  # For OpenRouter
+  # api_key: "sk-or-v1-xxx"
+  # base_url: "https://openrouter.ai/api/v1"
+  # model: "minimax/minimax-m2-her"
+
+  # For Ollama (local)
+  base_url: "http://localhost:11434"
+  model: "llama3"
+
+  timeout: 30  # Request timeout in seconds
+
+# Storage Configuration
+storage:
+  enabled: true
+  type: "postgres"
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: "postgres"
+  database: "goagent"
+  ssl_mode: "disable"
+
+  pgvector:
+    enabled: true
+    dimension: 1024
+    table_name: "embeddings"
+
+# Retrieval Configuration
+# The retrieval service will automatically use LLM for query rewriting when available
+# Configure query priority weights to control rewrite influence
+query_priority:
+  original_weight: 1.0    # Original query weight (strongest)
+  rule_rewrite_weight: 0.7  # Rule-based rewrite weight
+  llm_rewrite_weight: 0.5   # LLM rewrite weight (weakest)
+  max_queries: 3            # Maximum number of queries to use
+
+agents:
+  leader:
+    id: "leader-1"
+    max_steps: 10
+    max_parallel_tasks: 5
+    max_validation_retry: 3
+    enable_cache: true
+
+  sub:
+    - id: "sub-1"
+      type: "agent"
+      category: "general"
+      max_retries: 3
+      timeout: 30
+
+# Note: To enable LLM query rewriting:
+# 1. Set up OpenRouter (requires API key) or Ollama (local)
+# 2. Configure the LLM section above
+# 3. The retrieval service will automatically use LLM when available
+# 4. If LLM is not available, it will fall back to rule-based rewriting only

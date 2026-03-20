@@ -29,13 +29,47 @@ GoAgent is a **generic multi-agent framework** that allows users to build AI app
 - **Rate Limiting**: Token bucket, sliding window, and semaphore-based limiting
 - **Tool System**: Extensible tool registry for agent capabilities
 - **Result Validation**: JSON Schema validation with automatic retry
+- **Vector Storage**: PostgreSQL + pgvector for semantic search and RAG
+
+## System Requirements
+
+### Minimum Requirements
+- Go 1.26.1 or higher
+- LLM API access (OpenAI, Ollama, or OpenRouter)
+
+### Optional Requirements (for advanced features)
+- PostgreSQL 16+ with pgvector extension (for vector storage)
+- Redis (for caching)
+- golangci-lint (for development)
+
+### Dependencies
+
+The framework uses minimal external dependencies:
+- `github.com/fsnotify/fsnotify` - File system watcher
+- `github.com/google/uuid` - UUID generation
+- `github.com/lib/pq` - PostgreSQL driver
+- `github.com/stretchr/testify` - Testing framework
+- `golang.org/x/*` - Standard Go extension libraries
+- `gopkg.in/yaml.v3` - YAML parsing
+
+No heavy third-party framework dependencies.
+
+- **Multi-Agent Architecture**: Leader agent orchestrates multiple sub-agents for parallel task execution
+- **AHP Protocol**: Custom Agent Heartbeat Protocol for inter-agent communication
+- **Workflow Engine**: Dynamic DAG-based workflow orchestration with hot-reload support
+- **LLM Integration**: Unified adapters for OpenAI, Ollama, OpenRouter, and other LLM providers
+- **Memory System**: Three-tier memory management (session, user, task) with RAG support
+- **Graceful Shutdown**: Five-phase shutdown with callback registration
+- **Rate Limiting**: Token bucket, sliding window, and semaphore-based limiting
+- **Tool System**: Extensible tool registry for agent capabilities
+- **Result Validation**: JSON Schema validation with automatic retry
 
 ## Quick Start
 
-### Run the Travel Example
+### Run the Travel Planning Example
 
 ```bash
-cd /Users/scc/go/src/styleagent
+cd /Users/scc/go/src/goagent
 
 # Set API key
 export OPENROUTER_API_KEY="your-api-key"
@@ -44,10 +78,32 @@ export OPENROUTER_API_KEY="your-api-key"
 go run ./examples/travel/main.go
 ```
 
-### Try It
+### Try Knowledge Base Example
 
+```bash
+cd /Users/scc/go/src/goagent
+
+# Start PostgreSQL + pgvector
+docker run -d \
+  --name postgres-pgvector \
+  -p 5433:5432 \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=goagent \
+  pgvector/pgvector:pg16
+
+# Import a document
+cd examples/knowledge-base
+go run main.go --save example.md
+
+# Ask questions
+go run main.go --chat
 ```
-=== Request 1: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
+
+### Sample Output
+
+Travel Example:
+```
+=== Request: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
 ```
 
 ## Configuration Reference
@@ -175,31 +231,41 @@ validation:
 - `retry_on_fail: true` - Automatically retry LLM call when validation fails
 - `strict_mode: true` - Return error on validation failure; otherwise log and continue with unvalidated result
 
-### Storage Settings (Future)
+### Storage Settings (Optional)
 
 ```yaml
 storage:
-  enabled: false
+  enabled: false            # Enable PostgreSQL storage
   type: "postgres"
   host: "localhost"
   port: 5432
+  username: "postgres"
+  password: "postgres"
+  database: "goagent"
+  ssl_mode: "disable"
   pgvector:
-    enabled: false
-    dimension: 1536
+    enabled: false          # Enable pgvector for vector search
+    dimension: 1536         # Embedding dimension
+    table_name: "embeddings"
 ```
 
-### Memory Settings (Future)
+### Memory Settings (Optional)
 
 ```yaml
 memory:
-  enabled: false
+  enabled: false            # Enable memory system
   session:
     enabled: true
-    max_history: 50
+    max_history: 50         # Max conversation turns
   user_profile:
-    enabled: false
+    enabled: false          # Enable persistent user profile
+    storage: "memory"       # "memory" or "postgres"
+    vector_db: false         # Store profile as vectors
   task_distillation:
-    enabled: false
+    enabled: false          # Enable task distillation
+    storage: "memory"       # "memory" or "postgres"
+    vector_store: false     # Store distilled results in pgvector
+    prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
 ```
 
 ## Architecture
@@ -233,61 +299,218 @@ User Input
 
 ## Project Structure
 
+
+
 ```
+
 goagent/
+
 ├── cmd/                  # Application entry points
-├── configs/             # Configuration files
-├── docs/                # Architecture documentation
+
+│   ├── server/          # Main server application
+
+│   ├── migrate_goagent/ # Database migration tool
+
+│   └── setup_test_db/   # Test database setup
+
+├── configs/              # Configuration files
+
+├── docs/                 # Architecture documentation
+
 ├── examples/
+
 │   ├── travel/          # Travel planning example
-│   └── simple/           # Simple example
+
+│   ├── simple/           # Simple example
+
+│   ├── knowledge-base/   # Knowledge base example
+
+│   ├── openrouter/       # OpenRouter example
+
+│   └── devagent/         # Development agent
+
 ├── internal/
+
 │   ├── agents/
+
 │   │   ├── base/        # Base interfaces
+
 │   │   ├── leader/      # Leader agent
+
 │   │   └── sub/          # Sub agents
+
+│   ├── config/          # Configuration management
+
 │   ├── core/
-│   │   ├── errors/      # Error handling
-│   │   └── models/       # Data models
+
+│   │   ├── errors/       # Error handling
+
+│   │   ├── models/       # Data models
+
+│   │   └── registry/     # Component registry
+
 │   ├── llm/
+
 │   │   └── output/       # LLM adapters
+
 │   ├── memory/           # Memory system
-│   ├── protocol/         # AHP protocol
+
+│   ├── observability/    # Logging and tracing
+
+│   ├── protocol/          # AHP protocol
+
 │   ├── ratelimit/        # Rate limiting
-│   ├── shutdown/         # Graceful shutdown
-│   ├── storage/          # PostgreSQL storage
+
+│   ├── security/         # Security utilities
+
+│   ├── shutdown/          # Graceful shutdown
+
+│   ├── storage/
+
+│   │   └── postgres/     # PostgreSQL + pgvector
+
 │   ├── tools/            # Tool system
+
 │   └── workflow/         # Workflow engine
+
+├── knowledge/            # Knowledge base data (Python scripts)
+
+├── services/             # Service configurations
+
+│   └── embedding/        # Embedding service
+
 └── pkg/                  # Utilities
+
 ```
 
 ## Examples
 
-See `examples/travel/README.md` for a complete example with detailed configuration.
+### 1. Travel Planning Agent (`examples/travel/`)
+Multi-agent travel assistant demonstrating:
+- Profile parsing from natural language
+- Dynamic task planning based on triggers
+- Parallel sub-agent execution
+- Result aggregation
+
+**Run:**
+```bash
+export OPENROUTER_API_KEY="your-api-key"
+go run ./examples/travel/main.go
+```
+
+### 2. Knowledge Base (`examples/knowledge-base/`)
+Local document retrieval and Q&A system demonstrating:
+- Document import with chunking
+- Vector similarity search (pgvector)
+- Multi-tenant isolation
+- Interactive chat interface
+
+**Run:**
+```bash
+cd examples/knowledge-base
+go run main.go --save example.md
+go run main.go --chat
+```
+
+### 3. Simple Agent (`examples/simple/`)
+Basic multi-agent example with fashion recommendations.
+
+**Run:**
+```bash
+go run ./examples/simple/main.go
+```
+
+See individual example READMEs for detailed configuration.
 
 ## Development
 
+### Prerequisites
+- Go 1.26.1+
+- golangci-lint: `brew install golangci-lint`
+- staticcheck: `go install honnef.co/go/tools/cmd/staticcheck@latest`
+- goimports: `go install golang.org/x/tools/cmd/goimports@latest`
+
+### Commands
+
 ```bash
-# Run tests
+# Install dependencies
+make install
+
+# Format code
+make fmt
+
+# Run all checks (lint + test)
+make check
+
+# Run tests with coverage
 make test
 
-# Run with race detection
+# Run tests with race detection
 make test-race
 
-# Linting
+# Run linting
 make lint
 
-# Build
+# Run CI checks (install, fmt, lint, test-race)
+make ci
+
+# Build binaries
 make build
+
+# Build all binaries
+make build-all
+
+# Clean build artifacts
+make clean
+
+# Show help
+make help
 ```
+
+Run `make check-all` to verify all coverage requirements.
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Code Style**
+   - Run `make fmt` before committing
+   - Pass `make lint` checks
+   - Add tests for new features
+
+2. **Testing**
+   - All tests must pass: `make test`
+   - Maintain coverage requirements
+   - Add integration tests for new features
+
+3. **Documentation**
+   - Update READMEs for new examples
+   - Add inline comments for complex logic
+   - Update architecture docs for structural changes
+
+4. **Pull Requests**
+   - Describe changes in PR description
+   - Reference related issues
+   - Ensure CI checks pass
+
+## License
+
+MIT License
 
 ## Documentation
 
-- [Architecture](docs/arch.md)
-- [Agent Definitions](docs/agents/)
-- [LLM Integration](docs/llm/)
-- [Storage](docs/storage/)
-- [Memory](docs/memory/)
+- [Architecture](docs/arch.md) - System architecture overview
+- [Agents](docs/agents/) - Agent design and definitions
+- [Core](docs/core/) - Core components (errors, models, registry)
+- [Engine](docs/engine/) - Workflow engine design
+- [LLM](docs/llm/) - LLM integration and query rewriting
+- [Memory](docs/memory/) - Memory system design
+- [Protocol](docs/protocol/) - AHP protocol specification
+- [Rate Limiting](docs/ratelimit/) - Rate limiting strategies
+- [Shutdown](docs/shutdown/) - Graceful shutdown mechanism
+- [Storage](docs/storage/) - PostgreSQL storage with pgvector
+- [Tools](docs/tools/) - Tool system design
+- [Retrieval Strategy](docs/retrieval-strategy.md) - Knowledge retrieval strategies
 
 ## License
 

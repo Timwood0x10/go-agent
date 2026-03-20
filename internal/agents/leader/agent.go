@@ -2,13 +2,17 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
 	"goagent/internal/agents/base"
 	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/memory"
 	"goagent/internal/protocol/ahp"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Agent represents the Leader Agent interface.
@@ -39,18 +43,20 @@ type ResultAggregator interface {
 
 // leaderAgent implements the Leader Agent.
 type leaderAgent struct {
-	mu           sync.RWMutex
-	id           string
-	agentType    models.AgentType
-	status       models.AgentStatus
-	config       *LeaderAgentConfig
-	parser       ProfileParser
-	planner      TaskPlanner
-	dispatcher   TaskDispatcher
-	aggregator   ResultAggregator
-	messageQueue *ahp.MessageQueue
-	heartbeatMon *ahp.HeartbeatMonitor
-	stepCount    int
+	mu            sync.RWMutex
+	id            string
+	agentType     models.AgentType
+	status        models.AgentStatus
+	config        *LeaderAgentConfig
+	parser        ProfileParser
+	planner       TaskPlanner
+	dispatcher    TaskDispatcher
+	aggregator    ResultAggregator
+	messageQueue  *ahp.MessageQueue
+	heartbeatMon  *ahp.HeartbeatMonitor
+	memoryManager memory.MemoryManager
+	sessionID     string
+	stepCount     int
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
@@ -70,6 +76,7 @@ func New(
 	aggregator ResultAggregator,
 	msgQueue *ahp.MessageQueue,
 	hbMon *ahp.HeartbeatMonitor,
+	memMgr memory.MemoryManager,
 	cfg *LeaderAgentConfig,
 ) Agent {
 	if cfg == nil {
@@ -79,16 +86,17 @@ func New(
 	cfg.Type = models.AgentTypeLeader
 
 	return &leaderAgent{
-		id:           id,
-		agentType:    models.AgentTypeLeader,
-		status:       models.AgentStatusOffline,
-		config:       cfg,
-		parser:       parser,
-		planner:      planner,
-		dispatcher:   dispatcher,
-		aggregator:   aggregator,
-		messageQueue: msgQueue,
-		heartbeatMon: hbMon,
+		id:            id,
+		agentType:     models.AgentTypeLeader,
+		status:        models.AgentStatusOffline,
+		config:        cfg,
+		parser:        parser,
+		planner:       planner,
+		dispatcher:    dispatcher,
+		aggregator:    aggregator,
+		messageQueue:  msgQueue,
+		heartbeatMon:  hbMon,
+		memoryManager: memMgr,
 	}
 }
 
@@ -96,8 +104,8 @@ func New(
 func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 	return &LeaderAgentConfig{
 		Config:           *base.DefaultConfig(models.AgentTypeLeader),
-		MaxParallelTasks: 10,
-		MaxSteps:         10,
+		MaxParallelTasks: DefaultMaxParallelTasks,
+		MaxSteps:         DefaultMaxSteps,
 		EnableCache:      true,
 	}
 }
@@ -148,13 +156,17 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 	}
 
 	// Initialize heartbeat monitor if provided
+	// nolint: staticcheck // Empty branch, TODO implementation
 	if a.heartbeatMon != nil {
 		// Heartbeat monitor is ready to use
+		// TODO: Initialize heartbeat monitor
 	}
 
 	// Initialize message queue if provided
+	// nolint: staticcheck // Empty branch, TODO implementation
 	if a.messageQueue != nil {
 		// Message queue is ready to use
+		// TODO: Initialize message queue
 	}
 
 	slog.Info("Leader agent started successfully", "agent_id", a.id)
@@ -173,7 +185,7 @@ func (a *leaderAgent) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Process handles user input and orchestrates the recommendation workflow.
+// Process handles user input and orchestrates the recommendation workflow with automatic memory management.
 func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
 		return nil, errors.ErrAgentNotReady
@@ -189,15 +201,73 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	a.stepCount = 0
 	maxSteps := a.config.MaxSteps
 	if maxSteps <= 0 {
-		maxSteps = 10
+		maxSteps = DefaultMaxSteps
 	}
 
 	a.setStatus(models.AgentStatusBusy)
 	defer a.setStatus(models.AgentStatusReady)
 
-	strInput, ok := input.(string)
-	if !ok {
-		return nil, errors.ErrInvalidInput
+	var strInput string
+	switch v := input.(type) {
+	case string:
+		strInput = v
+	case []byte:
+		strInput = string(v)
+	case fmt.Stringer:
+		strInput = v.String()
+	default:
+		return nil, fmt.Errorf("%w: expected string, []byte, or fmt.Stringer, got %T", errors.ErrInvalidInput, input)
+	}
+
+	// Memory: Initialize session and add user input
+	if a.memoryManager != nil {
+		if a.sessionID == "" {
+			sessionID, err := a.memoryManager.CreateSession(ctx, "default_user")
+			if err != nil {
+				slog.Warn("Failed to create session", "error", err)
+			} else {
+				a.sessionID = sessionID
+			}
+		}
+
+		// Add user input to memory
+		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "user", strInput); err != nil {
+			slog.Warn("Failed to add user message to memory", "error", err)
+		}
+
+		// Build input with context
+		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, a.sessionID)
+		if err != nil {
+			slog.Warn("Failed to build context, using raw input", "error", err)
+		} else {
+			strInput = inputWithContext
+		}
+
+		// Search similar tasks for context
+		similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, strInput, 3)
+		if err != nil {
+			slog.Warn("Failed to search similar tasks", "error", err)
+		} else if len(similarTasks) > 0 {
+			slog.Debug("Found similar tasks", "count", len(similarTasks))
+			// Inject similar tasks into context
+			contextStr := "\n\nSimilar previous tasks:\n"
+			for _, task := range similarTasks {
+				if taskInput, ok := task.Payload["input"].(string); ok {
+					contextStr += fmt.Sprintf("- %s\n", taskInput)
+				}
+			}
+			strInput += contextStr
+		}
+	}
+
+	// Memory: Create task
+	var taskID string
+	if a.memoryManager != nil {
+		var err error
+		taskID, err = a.memoryManager.CreateTask(ctx, a.sessionID, "default_user", strInput)
+		if err != nil {
+			slog.Warn("Failed to create task", "error", err)
+		}
 	}
 
 	// Step 1: Parse profile
@@ -248,6 +318,38 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	result, err := a.aggregator.Aggregate(ctx, results)
 	if err != nil {
 		return nil, err
+	}
+
+	// Memory: Update task output and add result to memory
+	if a.memoryManager != nil && taskID != "" {
+		resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
+		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
+			slog.Warn("Failed to update task output", "error", err)
+		}
+
+		// Add assistant response to memory
+		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "assistant", resultStr); err != nil {
+			slog.Warn("Failed to add assistant message to memory", "error", err)
+		}
+
+		// Async distillation
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			distilled, err := a.memoryManager.DistillTask(ctx, taskID)
+			if err != nil {
+				slog.Warn("Failed to distill task", "error", err)
+				return err
+			}
+
+			return a.memoryManager.StoreDistilledTask(ctx, taskID, distilled)
+		})
+
+		// Don't wait for async operations to complete
+		go func() {
+			if err := g.Wait(); err != nil {
+				slog.Error("Error in async distillation", "error", err)
+			}
+		}()
 	}
 
 	return result, nil

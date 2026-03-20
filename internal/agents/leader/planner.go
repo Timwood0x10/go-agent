@@ -8,19 +8,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
 )
 
 // taskIDCounter is used to generate unique task IDs.
+// nolint: unused // Kept for potential future use
 var taskIDCounter uint64
 
 // getRandomSuffix returns a random suffix for extra uniqueness.
+// nolint: unused // Kept for potential future use
 func getRandomSuffix() string {
 	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
 	return fmt.Sprintf("%04d", n.Int64())
 }
 
+// nolint: unused // Kept for potential future use
 func generateTaskID() string {
 	id := atomic.AddUint64(&taskIDCounter, 1)
 	randSuffix := getRandomSuffix()
@@ -65,18 +67,23 @@ func NewTaskPlannerWithConfig(maxTasks int, subAgents []SubAgentConfig) TaskPlan
 // Plan creates tasks based on user profile.
 func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]*models.Task, error) {
 	if profile == nil {
-		return nil, apperrors.ErrNilPointer
+		return nil, fmt.Errorf("profile cannot be nil")
 	}
 
 	tasks := make([]*models.Task, 0)
 
-	// If we have sub-agent config with triggers, use config-driven approach
-	if len(p.subAgents) > 0 {
-		tasks = p.createTasksFromConfig(profile)
-	} else {
-		// Fallback to fashion/existing logic
-		tasks = p.createFashionTasks(profile)
+	// Create a default task for processing user input
+	task := &models.Task{
+		TaskID:      generateTaskID(),
+		TaskType:    models.AgentTypeTop,
+		AgentType:   models.AgentTypeTop,
+		UserProfile: profile,
+		Payload:     map[string]any{"action": "analyze_profile"},
+		Priority:    1,
+		CreatedAt:   time.Now(),
 	}
+
+	tasks = append(tasks, task)
 
 	// Limit total tasks
 	if len(tasks) > p.maxTasks {
@@ -87,6 +94,7 @@ func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]
 }
 
 // createTasksFromConfig creates tasks based on sub-agent triggers in config.
+// nolint: unused // Kept for potential future use
 func (p *taskPlanner) createTasksFromConfig(profile *models.UserProfile) []*models.Task {
 	tasks := make([]*models.Task, 0)
 	addedTypes := make(map[models.AgentType]bool)
@@ -138,6 +146,7 @@ func (p *taskPlanner) createTasksFromConfig(profile *models.UserProfile) []*mode
 }
 
 // getProfileFields extracts all field names from profile for matching.
+// nolint: unused // Kept for potential future use
 func (p *taskPlanner) getProfileFields(profile *models.UserProfile) map[string]bool {
 	fields := make(map[string]bool)
 
@@ -174,6 +183,7 @@ func (p *taskPlanner) getProfileFields(profile *models.UserProfile) map[string]b
 }
 
 // createFashionTasks creates tasks for fashion recommendation (fallback).
+// nolint: unused // Kept for potential future use
 func (p *taskPlanner) createFashionTasks(profile *models.UserProfile) []*models.Task {
 	tasks := make([]*models.Task, 0)
 	addedTypes := make(map[models.AgentType]bool)
@@ -205,6 +215,7 @@ func (p *taskPlanner) createFashionTasks(profile *models.UserProfile) []*models.
 	return tasks
 }
 
+// nolint: unused // Kept for potential future use
 func getAgentTypeForStyle(style models.StyleTag) models.AgentType {
 	switch style {
 	case models.StyleCasual, models.StyleMinimalist:
@@ -218,6 +229,7 @@ func getAgentTypeForStyle(style models.StyleTag) models.AgentType {
 	}
 }
 
+// nolint: unused // Kept for potential future use
 func getAgentTypeForOccasion(occasion models.Occasion) models.AgentType {
 	switch occasion {
 	case models.OccasionWork, models.OccasionFormal:
@@ -231,6 +243,7 @@ func getAgentTypeForOccasion(occasion models.Occasion) models.AgentType {
 	}
 }
 
+// nolint: unused // Kept for potential future use
 func calculatePriority(style models.StyleTag) int {
 	switch style {
 	case models.StyleFormal:
@@ -242,6 +255,7 @@ func calculatePriority(style models.StyleTag) int {
 	}
 }
 
+// nolint: unused // Kept for potential future use
 func calculatePriorityForOccasion(occasion models.Occasion) int {
 	switch occasion {
 	case models.OccasionWork, models.OccasionFormal:

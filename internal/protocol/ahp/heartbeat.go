@@ -26,10 +26,9 @@ func DefaultHeartbeatConfig() *HeartbeatConfig {
 
 // HeartbeatMonitor monitors heartbeat signals from agents.
 type HeartbeatMonitor struct {
-	mu           sync.RWMutex
-	agentStatus  map[string]*AgentHeartbeat
-	config       *HeartbeatConfig
-	timeoutTimer *time.Timer
+	mu          sync.RWMutex
+	agentStatus map[string]*AgentHeartbeat
+	config      *HeartbeatConfig
 }
 
 // AgentHeartbeat holds the heartbeat state for an agent.

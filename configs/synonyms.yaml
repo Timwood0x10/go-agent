@@ -1,0 +1,247 @@
+# Synonym Rules for Query Rewriting
+# This file contains synonym rules for rule-based query rewriting
+# Format: original_term: [synonym1, synonym2, ...]
+
+# English Synonyms
+how_to:
+  - "how do i"
+  - "what is the best way to"
+  - "how can i"
+  - "how to"
+  - "tutorial"
+  - "guide"
+
+what_is:
+  - "define"
+  - "explain"
+  - "describe"
+  - "what does"
+  - "meaning of"
+
+database:
+  - "db"
+  - "data storage"
+  - "datastore"
+  - "sql"
+  - "nosql"
+
+api:
+  - "interface"
+  - "web service"
+  - "rest api"
+  - "graphql"
+  - "endpoint"
+
+programming:
+  - "coding"
+  - "development"
+  - "software development"
+  - "writing code"
+
+concurrency:
+  - "parallel"
+  - "multithreading"
+  - "async"
+  - "asynchronous"
+  - "parallelism"
+
+async:
+  - "asynchronous"
+  - "async/await"
+  - "non-blocking"
+
+error:
+  - "exception"
+  - "bug"
+  - "issue"
+  - "problem"
+  - "failure"
+
+debug:
+  - "debugging"
+  - "troubleshoot"
+  - "fix"
+  - "resolve"
+
+test:
+  - "testing"
+  - "unit test"
+  - "integration test"
+  - "qa"
+
+# Chinese Synonyms
+编程:
+  - "开发"
+  - "写代码"
+  - "编码"
+  - "程序设计"
+  - "软件开发"
+
+并发:
+  - "并行"
+  - "多线程"
+  - "异步"
+  - "并发处理"
+
+异步:
+  - "async"
+  - "non-blocking"
+  - "非阻塞"
+
+错误:
+  - "bug"
+  - "异常"
+  - "问题"
+  - "故障"
+
+调试:
+  - "debug"
+  - "排错"
+  - "故障排除"
+
+测试:
+  - "test"
+  - "单元测试"
+  - "集成测试"
+  - "qa"
+
+数据库:
+  - "db"
+  - "数据存储"
+  - "datastore"
+  - "sql"
+
+接口:
+  - "api"
+  - "web service"
+  - "endpoint"
+  - "rest api"
+
+如何:
+  - "怎么"
+  - "怎样"
+  - "如何做"
+  - "方法"
+
+是什么:
+  - "什么是"
+  - "定义"
+  - "解释"
+  - "描述"
+
+# Technical Terms
+http:
+  - "https"
+  - "web"
+  - "network"
+  - "internet"
+
+json:
+  - "javascript object notation"
+  - "data format"
+
+xml:
+  - "extensible markup language"
+  - "markup"
+
+docker:
+  - "container"
+  - "containerization"
+  - "containerize"
+
+kubernetes:
+  - "k8s"
+  - "k8"
+  - "orchestration"
+  - "container orchestration"
+
+git:
+  - "version control"
+  - "vcs"
+  - "source control"
+
+# Programming Languages
+golang:
+  - "go"
+  - "google go"
+
+javascript:
+  - "js"
+  - "ecmascript"
+  - "nodejs"
+  - "node.js"
+
+python:
+  - "py"
+  - "python3"
+
+java:
+  - "jdk"
+  - "jre"
+
+# Common Development Patterns
+rest:
+  - "restful"
+  - "rest api"
+  - "representational state transfer"
+
+graphql:
+  - "gql"
+  - "graph query language"
+
+microservices:
+  - "microservice"
+  - "micro-service"
+  - "distributed systems"
+
+serverless:
+  - "function as a service"
+  - "faas"
+  - "lambda"
+  - "cloud functions"
+
+# Development Tools
+ide:
+  - "integrated development environment"
+  - "editor"
+  - "code editor"
+
+cli:
+  - "command line interface"
+  - "command line"
+  - "terminal"
+  - "console"
+
+# Performance
+performance:
+  - "optimization"
+  - "optimize"
+  - "speed"
+  - "fast"
+  - "efficient"
+
+scalability:
+  - "scale"
+  - "scaling"
+  - "scalable"
+  - "high availability"
+  - "ha"
+
+# Security
+security:
+  - "secure"
+  - "safety"
+  - "protection"
+  - "cybersecurity"
+
+authentication:
+  - "auth"
+  - "login"
+  - "signin"
+  - "oauth"
+
+authorization:
+  - "authz"
+  - "permissions"
+  - "access control"
+  - "rbac"

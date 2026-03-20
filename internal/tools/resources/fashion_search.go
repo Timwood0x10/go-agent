@@ -20,30 +20,30 @@ type FashionSearcher interface {
 
 // FashionFilters holds search filters.
 type FashionFilters struct {
-	Category string
-	Style    []string
-	PriceMin float64
-	PriceMax float64
-	Colors   []string
-	Brands   []string
-	Occasion string
-	Season   string
+	Category         string
+	AgentPreferences []string
+	PriceMin         float64
+	PriceMax         float64
+	Colors           []string
+	Brands           []string
+	Occasion         string
+	Season           string
 }
 
 // FashionItem represents a fashion item.
 type FashionItem struct {
-	ItemID   string                 `json:"item_id"`
-	Name     string                 `json:"name"`
-	Brand    string                 `json:"brand"`
-	Category string                 `json:"category"`
-	Price    float64                `json:"price"`
-	URL      string                 `json:"url"`
-	ImageURL string                 `json:"image_url"`
-	Style    []string               `json:"style"`
-	Colors   []string               `json:"colors"`
-	Occasion string                 `json:"occasion"`
-	Season   string                 `json:"season"`
-	Metadata map[string]interface{} `json:"metadata"`
+	ItemID           string                 `json:"item_id"`
+	Name             string                 `json:"name"`
+	Brand            string                 `json:"brand"`
+	Category         string                 `json:"category"`
+	Price            float64                `json:"price"`
+	URL              string                 `json:"url"`
+	ImageURL         string                 `json:"image_url"`
+	AgentPreferences []string               `json:"agent_preferences"`
+	Colors           []string               `json:"colors"`
+	Occasion         string                 `json:"occasion"`
+	Season           string                 `json:"season"`
+	Metadata         map[string]interface{} `json:"metadata"`
 }
 
 // NewFashionSearch creates a new FashionSearch tool.
@@ -59,9 +59,9 @@ func NewFashionSearch(searcher FashionSearcher) *FashionSearch {
 				Type:        "string",
 				Description: "Category filter (top, bottom, dress, outerwear, shoes, accessory)",
 			},
-			"style": {
+			"agent_preferences": {
 				Type:        "array",
-				Description: "Style tags",
+				Description: "Agent preferences",
 			},
 			"price_min": {
 				Type:        "number",
@@ -100,11 +100,11 @@ func (t *FashionSearch) Execute(ctx context.Context, params map[string]interface
 	}
 
 	filters := &FashionFilters{
-		Category: getString(params, "category"),
-		Style:    getStringSlice(params, "style"),
-		PriceMin: getFloat(params, "price_min"),
-		PriceMax: getFloat(params, "price_max"),
-		Colors:   getStringSlice(params, "colors"),
+		Category:         getString(params, "category"),
+		AgentPreferences: getStringSlice(params, "agent_preferences"),
+		PriceMin:         getFloat(params, "price_min"),
+		PriceMax:         getFloat(params, "price_max"),
+		Colors:           getStringSlice(params, "colors"),
 	}
 
 	limit := getInt(params, "limit", 10)
@@ -122,17 +122,17 @@ func (t *FashionSearch) Execute(ctx context.Context, params map[string]interface
 	recommendations := make([]*models.RecommendItem, len(items))
 	for i, item := range items {
 		recommendations[i] = &models.RecommendItem{
-			ItemID:      item.ItemID,
-			Category:    item.Category,
-			Name:        item.Name,
-			Brand:       item.Brand,
-			Price:       item.Price,
-			URL:         item.URL,
-			ImageURL:    item.ImageURL,
-			Style:       parseStyleTags(item.Style),
-			Colors:      item.Colors,
-			Description: item.Name + " - " + item.Brand,
-			MatchReason: "Matches: " + query,
+			ItemID:           item.ItemID,
+			Category:         item.Category,
+			Name:             item.Name,
+			Brand:            item.Brand,
+			Price:            item.Price,
+			URL:              item.URL,
+			ImageURL:         item.ImageURL,
+			AgentPreferences: parseAgentPreferences(item.AgentPreferences),
+			Colors:           item.Colors,
+			Description:      item.Name + " - " + item.Brand,
+			MatchReason:      "Matches: " + query,
 		}
 	}
 
@@ -190,7 +190,7 @@ func getInt(params map[string]interface{}, key string, defaultVal int) int {
 	return defaultVal
 }
 
-func parseStyleTags(tags []string) []models.StyleTag {
+func parseAgentPreferences(tags []string) []models.StyleTag {
 	result := make([]models.StyleTag, len(tags))
 	for i, tag := range tags {
 		result[i] = models.StyleTag(tag)

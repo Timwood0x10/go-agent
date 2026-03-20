@@ -35,6 +35,13 @@ var (
 	ErrRecordNotFound     = errors.New("record not found")
 	ErrTransactionFailed  = errors.New("transaction failed")
 	ErrNoTransaction      = errors.New("no active transaction")
+	ErrInvalidArgument    = errors.New("invalid argument provided")
+	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
+	ErrServiceUnavailable = errors.New("service is temporarily unavailable")
+	ErrInvalidState       = errors.New("invalid state")
+	ErrSecretExpired      = errors.New("secret has expired")
+	ErrNotImplemented     = errors.New("feature not implemented yet")
+	ErrBufferFull         = errors.New("write buffer is full")
 )
 
 // Sentinel errors for LLM module.
@@ -45,6 +52,12 @@ var (
 	ErrLLMInvalidResponse  = errors.New("LLM invalid response")
 	ErrLLMParserFailed     = errors.New("LLM output parsing failed")
 	ErrLLMValidationFailed = errors.New("LLM output validation failed")
+)
+
+// Sentinel errors for Rate Limiting module.
+var (
+	ErrRateLimitExceeded = errors.New("rate limit exceeded")
+	ErrDBTimeout         = errors.New("database operation timeout")
 )
 
 // Sentinel errors for Parameter validation.
@@ -89,7 +102,6 @@ var (
 
 // Sentinel errors for Rate Limiter.
 var (
-	ErrRateLimitExceeded     = errors.New("rate limit exceeded")
 	ErrBackpressureTriggered = errors.New("backpressure triggered")
 	ErrTokenBucketExhausted  = errors.New("token bucket exhausted")
 )

@@ -4,20 +4,20 @@ import (
 	"context"
 )
 
-// StyleRecommender provides style recommendations.
-type StyleRecommender struct {
+// AgentRecommender provides style recommendations.
+type AgentRecommender struct {
 	*BaseTool
-	recommender StyleRecommenderEngine
+	recommender AgentRecommenderEngine
 }
 
-// StyleRecommenderEngine defines the interface for style recommendations.
-type StyleRecommenderEngine interface {
-	GetRecommendations(ctx context.Context, profile *StyleProfile) (*StyleRecommendation, error)
-	GetTrends(ctx context.Context, season string) ([]*StyleTrend, error)
+// AgentRecommenderEngine defines the interface for style recommendations.
+type AgentRecommenderEngine interface {
+	GetRecommendations(ctx context.Context, profile *AgentProfile) (*AgentRecommendation, error)
+	GetTrends(ctx context.Context, season string) ([]*AgentTrend, error)
 }
 
-// StyleProfile holds user style preferences.
-type StyleProfile struct {
+// AgentProfile holds user style preferences.
+type AgentProfile struct {
 	Gender           string       `json:"gender"`
 	AgeRange         string       `json:"age_range"`
 	BodyType         string       `json:"body_type"`
@@ -35,8 +35,8 @@ type BudgetRange struct {
 	Max float64 `json:"max"`
 }
 
-// StyleRecommendation holds style recommendations.
-type StyleRecommendation struct {
+// AgentRecommendation holds style recommendations.
+type AgentRecommendation struct {
 	PrimaryStyle    string                 `json:"primary_style"`
 	SecondaryStyles []string               `json:"secondary_styles"`
 	ColorPalette    []string               `json:"color_palette"`
@@ -54,8 +54,8 @@ type OutfitSuggestion struct {
 	Description string   `json:"description"`
 }
 
-// StyleTrend represents a style trend.
-type StyleTrend struct {
+// AgentTrend represents a style trend.
+type AgentTrend struct {
 	TrendID     string   `json:"trend_id"`
 	Name        string   `json:"name"`
 	Category    string   `json:"category"`
@@ -65,8 +65,8 @@ type StyleTrend struct {
 	Description string   `json:"description"`
 }
 
-// NewStyleRecommender creates a new StyleRecommender tool.
-func NewStyleRecommender(recommender StyleRecommenderEngine) *StyleRecommender {
+// NewAgentRecommender creates a new AgentRecommender tool.
+func NewAgentRecommender(recommender AgentRecommenderEngine) *AgentRecommender {
 	params := &ParameterSchema{
 		Type: "object",
 		Properties: map[string]*Parameter{
@@ -111,7 +111,7 @@ func NewStyleRecommender(recommender StyleRecommenderEngine) *StyleRecommender {
 		Required: []string{"gender", "occasion"},
 	}
 
-	sr := &StyleRecommender{
+	sr := &AgentRecommender{
 		recommender: recommender,
 	}
 	sr.BaseTool = NewBaseTool("style_recommend", "Get personalized style recommendations", params)
@@ -120,8 +120,8 @@ func NewStyleRecommender(recommender StyleRecommenderEngine) *StyleRecommender {
 }
 
 // Execute provides style recommendations.
-func (t *StyleRecommender) Execute(ctx context.Context, params map[string]interface{}) (Result, error) {
-	profile := &StyleProfile{
+func (t *AgentRecommender) Execute(ctx context.Context, params map[string]interface{}) (Result, error) {
+	profile := &AgentProfile{
 		Gender:           getString(params, "gender"),
 		AgeRange:         getString(params, "age_range"),
 		BodyType:         getString(params, "body_type"),
@@ -149,9 +149,9 @@ func (t *StyleRecommender) Execute(ctx context.Context, params map[string]interf
 	return NewResult(true, rec), nil
 }
 
-// NewStyleRecommenderWithTrends creates a tool that also supports trend queries.
-func NewStyleRecommenderWithTrends(recommender StyleRecommenderEngine) *StyleRecommender {
-	tool := NewStyleRecommender(recommender)
+// NewAgentRecommenderWithTrends creates a tool that also supports trend queries.
+func NewAgentRecommenderWithTrends(recommender AgentRecommenderEngine) *AgentRecommender {
+	tool := NewAgentRecommender(recommender)
 
 	// Add trend parameter
 	tool.parameters.Properties["get_trends"] = &Parameter{
@@ -166,17 +166,17 @@ func NewStyleRecommenderWithTrends(recommender StyleRecommenderEngine) *StyleRec
 	return tool
 }
 
-// MockStyleRecommender provides mock recommendations.
-type MockStyleRecommender struct{}
+// MockAgentRecommender provides mock recommendations.
+type MockAgentRecommender struct{}
 
-// NewMockStyleRecommender creates a MockStyleRecommender.
-func NewMockStyleRecommender() *MockStyleRecommender {
-	return &MockStyleRecommender{}
+// NewMockAgentRecommender creates a MockAgentRecommender.
+func NewMockAgentRecommender() *MockAgentRecommender {
+	return &MockAgentRecommender{}
 }
 
 // GetRecommendations returns mock recommendations.
-func (m *MockStyleRecommender) GetRecommendations(ctx context.Context, profile *StyleProfile) (*StyleRecommendation, error) {
-	return &StyleRecommendation{
+func (m *MockAgentRecommender) GetRecommendations(ctx context.Context, profile *AgentProfile) (*AgentRecommendation, error) {
+	return &AgentRecommendation{
 		PrimaryStyle:    "casual",
 		SecondaryStyles: []string{"minimalist", "streetwear"},
 		ColorPalette:    []string{"navy", "white", "gray"},
@@ -197,8 +197,8 @@ func (m *MockStyleRecommender) GetRecommendations(ctx context.Context, profile *
 }
 
 // GetTrends returns mock trends.
-func (m *MockStyleRecommender) GetTrends(ctx context.Context, season string) ([]*StyleTrend, error) {
-	return []*StyleTrend{
+func (m *MockAgentRecommender) GetTrends(ctx context.Context, season string) ([]*AgentTrend, error) {
+	return []*AgentTrend{
 		{
 			TrendID:     "sustainable_fashion",
 			Name:        "Sustainable Fashion",

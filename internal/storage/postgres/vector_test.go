@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -17,7 +18,7 @@ func TestVectorSearcher_NewVectorSearcher(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 		if searcher == nil {
 			t.Error("searcher should not be nil")
 		}
@@ -27,7 +28,7 @@ func TestVectorSearcher_NewVectorSearcher(t *testing.T) {
 // TestVectorSearcher_NewVectorSearcherWithDB tests creating a VectorSearcher with a custom DBTX.
 func TestVectorSearcher_NewVectorSearcherWithDB(t *testing.T) {
 	t.Run("create with nil DBTX", func(t *testing.T) {
-		searcher := NewVectorSearcherWithDB(nil)
+		searcher := NewVectorSearcherWithDB(nil, embeddingConfig)
 		if searcher == nil {
 			t.Error("searcher should not be nil")
 		}
@@ -35,7 +36,7 @@ func TestVectorSearcher_NewVectorSearcherWithDB(t *testing.T) {
 
 	t.Run("create with mock DBTX", func(t *testing.T) {
 		mockDB := &mockDBTX{}
-		searcher := NewVectorSearcherWithDB(mockDB)
+		searcher := NewVectorSearcherWithDB(mockDB, embeddingConfig)
 		if searcher == nil {
 			t.Error("searcher should not be nil")
 		}
@@ -54,7 +55,7 @@ func TestVectorSearcher_Search(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		// Create a test embedding (1536 dimensions for OpenAI embeddings)
 		embedding := make([]float64, 1536)
@@ -81,7 +82,7 @@ func TestVectorSearcher_Search(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := []float64{}
 
@@ -101,7 +102,7 @@ func TestVectorSearcher_Search(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -124,7 +125,7 @@ func TestVectorSearcher_Search(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -150,7 +151,7 @@ func TestVectorSearcher_AddEmbedding(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		// Create a test embedding (1536 dimensions for OpenAI embeddings)
 		embedding := make([]float64, 1536)
@@ -180,7 +181,7 @@ func TestVectorSearcher_AddEmbedding(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -203,7 +204,7 @@ func TestVectorSearcher_AddEmbedding(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		embedding := make([]float64, 1536)
 		for i := range embedding {
@@ -229,7 +230,7 @@ func TestVectorSearcher_DeleteEmbedding(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		err = searcher.DeleteEmbedding(context.Background(), "embeddings", "test-embedding-1")
 		if err != nil {
@@ -247,7 +248,7 @@ func TestVectorSearcher_DeleteEmbedding(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		err = searcher.DeleteEmbedding(context.Background(), "embeddings", "non-existent-embedding")
 		if err != nil {
@@ -268,7 +269,7 @@ func TestVectorSearcher_CreateVectorTable(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		err = searcher.CreateVectorTable(context.Background(), "test_vectors", "")
 		if err != nil {
@@ -286,7 +287,7 @@ func TestVectorSearcher_CreateVectorTable(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		metadataSchema := `metadata JSONB CHECK (jsonb_typeof(metadata) = 'object')`
 		err = searcher.CreateVectorTable(context.Background(), "test_vectors_with_schema", metadataSchema)
@@ -344,7 +345,7 @@ func TestVectorSearcher_Integration(t *testing.T) {
 		}
 		defer pool.Close()
 
-		searcher := NewVectorSearcher(pool)
+		searcher := NewVectorSearcher(pool, embeddingConfig)
 
 		// Step 1: Create table
 		err = searcher.CreateVectorTable(context.Background(), "integration_test", "")
@@ -388,3 +389,5 @@ func TestVectorSearcher_Integration(t *testing.T) {
 		_ = searcher.DeleteEmbedding(context.Background(), "integration_test", "embedding-2")
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

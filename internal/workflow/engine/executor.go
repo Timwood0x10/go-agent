@@ -22,8 +22,8 @@ func NewExecutor(registry *AgentRegistry, outputStore *OutputStore) *Executor {
 	return &Executor{
 		registry:    registry,
 		outputStore: outputStore,
-		maxParallel: 10,
-		stepTimeout: 300 * time.Second,
+		maxParallel: DefaultMaxParallel,
+		stepTimeout: 5 * time.Minute,
 	}
 }
 
@@ -291,7 +291,7 @@ func (e *Executor) executeStep(
 		Name:     step.Name,
 		Status:   StepStatusCompleted,
 		Output:   output,
-		Duration: time.Now().Sub(startTime),
+		Duration: time.Since(startTime),
 	}
 
 	if err != nil {

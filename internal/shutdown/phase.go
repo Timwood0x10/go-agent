@@ -95,8 +95,13 @@ func (e *PhaseExecutor) Execute(ctx context.Context, fn func(ctx context.Context
 			e.mu.RUnlock()
 
 			if attempt < e.maxRetries {
-				// Exponential backoff
-				backoff := time.Duration(1<<uint(attempt)) * time.Second
+				// Exponential backoff with overflow protection
+				var backoff time.Duration
+				if attempt > 30 { // Prevent overflow
+					backoff = time.Duration(1<<30) * time.Second
+				} else {
+					backoff = time.Duration(1<<uint(attempt)) * time.Second
+				}
 				select {
 				case <-ctx.Done():
 					e.setState(PhaseStateFailed)

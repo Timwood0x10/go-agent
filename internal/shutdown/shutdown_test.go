@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package shutdown
 
 import (
@@ -13,6 +14,7 @@ func TestShutdownManager(t *testing.T) {
 
 		if manager == nil {
 			t.Errorf("manager should not be nil")
+			return
 		}
 		if manager.timeout != 10*time.Second {
 			t.Errorf("expected 10s timeout")
@@ -136,3 +138,5 @@ func TestSignalHandler(t *testing.T) {
 		// Just verify no panic
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

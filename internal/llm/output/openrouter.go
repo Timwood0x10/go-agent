@@ -59,14 +59,14 @@ func (a *OpenRouterAdapter) Generate(ctx context.Context, prompt string) (string
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.config.APIKey)
-	req.Header.Set("HTTP-Referer", "https://github.com/styleagent")
-	req.Header.Set("X-Title", "StyleAgent")
+	req.Header.Set("HTTP-Referer", "https://github.com/goagent")
+	req.Header.Set("X-Title", "Agent Framework")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -117,14 +117,14 @@ func (a *OpenRouterAdapter) GenerateStructured(ctx context.Context, prompt strin
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.config.APIKey)
-	req.Header.Set("HTTP-Referer", "https://github.com/styleagent")
-	req.Header.Set("X-Title", "StyleAgent")
+	req.Header.Set("HTTP-Referer", "https://github.com/goagent")
+	req.Header.Set("X-Title", "Agent Framework")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // TemplateEngine handles prompt templates.
@@ -14,11 +17,12 @@ type TemplateEngine struct {
 
 // NewTemplateEngine creates a new TemplateEngine.
 func NewTemplateEngine() *TemplateEngine {
+	titleCase := cases.Title(language.English)
 	return &TemplateEngine{
 		funcs: template.FuncMap{
 			"upper":   strings.ToUpper,
 			"lower":   strings.ToLower,
-			"title":   strings.Title,
+			"title":   func(s string) string { return titleCase.String(s) },
 			"trim":    strings.TrimSpace,
 			"join":    strings.Join,
 			"json":    toJSON,

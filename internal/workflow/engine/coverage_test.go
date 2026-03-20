@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package engine
 
 import (
@@ -894,3 +895,5 @@ func TestWorkflowTypesCoverage(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package models
 
 import (
@@ -711,3 +712,6 @@ func TestDefaultSessionTTL(t *testing.T) {
 		t.Errorf("expected positive default session TTL")
 	}
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

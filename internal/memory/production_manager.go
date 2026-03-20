@@ -1,0 +1,606 @@
+// Package memory provides unified memory management for the StyleAgent framework.
+// This is the production-grade MemoryManager that integrates with PostgreSQL + pgvector storage.
+package memory
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"goagent/internal/core/models"
+	"goagent/internal/storage/postgres"
+	"goagent/internal/storage/postgres/embedding"
+	storage_models "goagent/internal/storage/postgres/models"
+	"goagent/internal/storage/postgres/repositories"
+	"goagent/internal/storage/postgres/services"
+)
+
+// ProductionMemoryManager implements MemoryManager interface with production-grade storage.
+// It integrates with PostgreSQL + pgvector for persistent storage and intelligent retrieval.
+type ProductionMemoryManager struct {
+	// Storage components
+	dbPool           *postgres.Pool
+	tenantGuard      *postgres.TenantGuard
+	retrievalService *services.RetrievalService
+	embeddingClient  *embedding.EmbeddingClient
+	writeBuffer      *postgres.WriteBuffer    // Write buffer for rate limiting
+	embeddingQueue   *postgres.EmbeddingQueue // Async embedding queue
+
+	// Repositories
+	knowledgeRepository    *repositories.KnowledgeRepository
+	experienceRepository   *repositories.ExperienceRepository
+	conversationRepository *repositories.ConversationRepository
+	taskResultRepository   *repositories.TaskResultRepository
+
+	// Configuration
+	config          *MemoryConfig
+	currentTenantID string
+
+	// Lifecycle
+	mu      sync.RWMutex
+	started bool
+	stopped bool
+
+	// Optional: keep in-memory cache for hot data
+	sessionCache map[string]*SessionData
+	maxCacheSize int
+}
+
+// SessionData holds session information with optional caching.
+type SessionData struct {
+	SessionID    string
+	UserID       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	MessageCount int
+}
+
+// NewProductionMemoryManager creates a new production-grade MemoryManager.
+// Args:
+// dbPool - PostgreSQL connection pool
+// embeddingClient - Embedding service client
+// config - Memory manager configuration
+// Returns new ProductionMemoryManager instance.
+func NewProductionMemoryManager(
+	dbPool *postgres.Pool,
+	embeddingClient *embedding.EmbeddingClient,
+	config *MemoryConfig,
+) (*ProductionMemoryManager, error) {
+	if config == nil {
+		config = DefaultMemoryConfig()
+	}
+
+	if dbPool == nil {
+		return nil, fmt.Errorf("database pool is required")
+	}
+
+	// Create tenant guard
+	tenantGuard := postgres.NewTenantGuard(dbPool)
+
+	// Create repositories
+	dbConn := dbPool.GetDB()
+	knowledgeRepo := repositories.NewKnowledgeRepository(dbPool.GetDB(), dbConn)
+	experienceRepo := repositories.NewExperienceRepository(dbConn)
+	conversationRepo := repositories.NewConversationRepository(dbConn)
+	taskResultRepo := repositories.NewTaskResultRepository(dbConn)
+
+	// Create retrieval service
+	retrievalGuard := postgres.NewRetrievalGuard(
+		100,            // maxRequestsPerSec
+		5,              // failureThreshold
+		30*time.Second, // openTimeout
+		30*time.Second, // dbTimeout
+	)
+
+	retrievalService := services.NewRetrievalService(
+		dbPool,
+		embeddingClient,
+		nil, // llmClient (will be created from env if needed)
+		tenantGuard,
+		retrievalGuard,
+		knowledgeRepo,
+		nil, // expRepo
+		nil, // toolRepo
+	)
+
+	// Create embedding queue (asynchronous embedding chain per design standard)
+	embeddingQueue := postgres.NewEmbeddingQueue(
+		dbPool,
+		postgres.DefaultEmbeddingConfig(),
+	)
+
+	// Create write buffer (write backpressure layer per design standard)
+	writeBuffer := postgres.NewWriteBuffer(
+		dbPool,
+		embeddingQueue,
+		32,            // batchSize
+		5*time.Second, // flushInterval
+		postgres.DefaultEmbeddingConfig(),
+	)
+
+	return &ProductionMemoryManager{
+
+		dbPool: dbPool,
+
+		tenantGuard: tenantGuard,
+
+		retrievalService: retrievalService,
+
+		embeddingClient: embeddingClient,
+
+		writeBuffer: writeBuffer,
+
+		embeddingQueue: embeddingQueue,
+
+		knowledgeRepository: knowledgeRepo,
+
+		experienceRepository: experienceRepo,
+
+		conversationRepository: conversationRepo,
+
+		taskResultRepository: taskResultRepo,
+
+		config: config,
+
+		sessionCache: make(map[string]*SessionData),
+
+		maxCacheSize: config.MaxSessions,
+	}, nil
+}
+
+// SetTenantID sets the current tenant ID for multi-tenant operations.
+// Args:
+// tenantID - tenant identifier.
+// Returns error if tenant ID is invalid.
+func (m *ProductionMemoryManager) SetTenantID(tenantID string) error {
+	if tenantID == "" {
+		return fmt.Errorf("tenant ID cannot be empty")
+	}
+
+	m.mu.Lock()
+	m.currentTenantID = tenantID
+	m.mu.Unlock()
+
+	slog.Debug("Tenant ID set", "tenant_id", tenantID)
+	return nil
+}
+
+// Start starts the memory manager and background workers.
+func (m *ProductionMemoryManager) Start(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.started {
+		return nil
+	}
+
+	// Start write buffer (write backpressure layer per design standard)
+	if err := m.writeBuffer.Start(ctx); err != nil {
+		return fmt.Errorf("start write buffer: %w", err)
+	}
+
+	// Start background cleanup if needed
+	// This could include periodic cache cleanup, statistics collection, etc.
+
+	m.started = true
+	slog.Info("Production memory manager started")
+	return nil
+}
+
+// Stop stops the memory manager and cleans up resources.
+func (m *ProductionMemoryManager) Stop(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.stopped {
+		return nil
+	}
+
+	// Stop write buffer
+	if err := m.writeBuffer.Stop(ctx); err != nil {
+		slog.Warn("Failed to stop write buffer", "error", err)
+	}
+
+	// Clear cache
+	m.sessionCache = make(map[string]*SessionData)
+
+	m.stopped = true
+	slog.Info("Production memory manager stopped")
+	return nil
+}
+
+// CreateSession creates a new session and returns the session ID.
+// Args:
+// ctx - database operation context.
+// userID - user identifier.
+// Returns session ID or error if creation fails.
+func (m *ProductionMemoryManager) CreateSession(ctx context.Context, userID string) (string, error) {
+	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Add to cache
+	m.sessionCache[sessionID] = &SessionData{
+		SessionID:    sessionID,
+		UserID:       userID,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+		MessageCount: 0,
+	}
+
+	// Manage cache size
+	if len(m.sessionCache) > m.maxCacheSize {
+		// Remove oldest entry (simple LRU)
+		var oldestKey string
+		var oldestTime time.Time
+		for k, v := range m.sessionCache {
+			if oldestKey == "" || v.CreatedAt.Before(oldestTime) {
+				oldestKey = k
+				oldestTime = v.CreatedAt
+			}
+		}
+		if oldestKey != "" {
+			delete(m.sessionCache, oldestKey)
+		}
+	}
+
+	slog.Debug("Session created", "session_id", sessionID, "user_id", userID)
+	return sessionID, nil
+}
+
+// AddMessage adds a message to the session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// role - message role (user/assistant/system).
+// content - message content.
+// Returns error if operation fails.
+// Note: This stores conversations WITHOUT vector embedding (per design standard).
+// conversations table is for history tracking only, retrieval uses knowledge/experience tables.
+func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, role, content string) error {
+	if sessionID == "" {
+		return fmt.Errorf("session ID cannot be empty")
+	}
+	if role == "" {
+		return fmt.Errorf("role cannot be empty")
+	}
+	if content == "" {
+		return fmt.Errorf("content cannot be empty")
+	}
+
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Create conversation record (NO vector embedding per design standard)
+	// conversations table: NO vector + expires_at + tenant_id
+	conv := &storage_models.Conversation{
+		SessionID: sessionID,
+		TenantID:  tenantID,
+		UserID:    "", // TODO: get from session cache
+		AgentID:   "style-agent",
+		Role:      role,
+		Content:   content,
+		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour TTL as per design
+	}
+
+	if err := m.conversationRepository.Create(ctx, conv); err != nil {
+		return fmt.Errorf("create conversation: %w", err)
+	}
+
+	// Update session cache
+	m.mu.Lock()
+	if sessionData, exists := m.sessionCache[sessionID]; exists {
+		sessionData.UpdatedAt = time.Now()
+		sessionData.MessageCount++
+	}
+	m.mu.Unlock()
+
+	slog.Debug("Message added", "session_id", sessionID, "role", role)
+	return nil
+}
+
+// GetMessages retrieves all messages from the session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// Returns list of messages or error if retrieval fails.
+func (m *ProductionMemoryManager) GetMessages(ctx context.Context, sessionID string) ([]Message, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID cannot be empty")
+	}
+
+	// Set tenant context
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Retrieve conversations from database
+	conversations, err := m.conversationRepository.GetBySession(ctx, tenantID, sessionID, m.config.MaxHistory)
+	if err != nil {
+		return nil, fmt.Errorf("get conversations: %w", err)
+	}
+
+	// Convert to Message format
+	messages := make([]Message, len(conversations))
+	for i, conv := range conversations {
+		messages[i] = Message{
+			Role:    conv.Role,
+			Content: conv.Content,
+			Time:    conv.CreatedAt,
+		}
+	}
+
+	return messages, nil
+}
+
+// BuildContext builds input with conversation history context.
+// Args:
+// ctx - database operation context.
+// input - current user input.
+// sessionID - session identifier.
+// Returns context string or error if building fails.
+func (m *ProductionMemoryManager) BuildContext(ctx context.Context, input string, sessionID string) (string, error) {
+	messages, err := m.GetMessages(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to get messages, using raw input", "error", err)
+		return input, nil
+	}
+
+	// Keep only last N messages to avoid long context
+	maxHistory := m.config.MaxHistory
+	if len(messages) > maxHistory {
+		messages = messages[len(messages)-maxHistory:]
+	}
+
+	// Build context string
+	var contextBuilder string
+	if len(messages) > 0 {
+		contextBuilder = "Previous conversation history:\n\n"
+		for _, msg := range messages {
+			switch msg.Role {
+			case "user":
+				contextBuilder += fmt.Sprintf("User: %s\n", truncate(msg.Content, 100))
+			case "assistant":
+				contextBuilder += fmt.Sprintf("Assistant: %s\n", truncate(msg.Content, 100))
+			}
+		}
+		contextBuilder += "\nCurrent request:\n"
+	}
+	contextBuilder += input
+
+	slog.Debug("Context built", "session_id", sessionID, "history_length", len(messages))
+	return contextBuilder, nil
+}
+
+// CreateTask creates a new task and returns the task ID.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// userID - user identifier.
+// input - task input.
+// Returns task ID or error if creation fails.
+// Note: This creates task_result WITHOUT embedding (embedding only for experiences).
+// task_results table stores execution history, experiences store reusable knowledge.
+func (m *ProductionMemoryManager) CreateTask(ctx context.Context, sessionID, userID, input string) (string, error) {
+	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
+
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return "", fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Create task result record (NO embedding, only for execution history)
+	taskResult := &storage_models.TaskResult{
+		ID:               taskID,
+		TenantID:         tenantID,
+		SessionID:        sessionID,
+		TaskType:         "user_request",
+		AgentID:          "style-agent",
+		Input:            map[string]interface{}{"content": input},
+		Output:           nil,
+		Embedding:        nil, // No embedding for task results
+		EmbeddingModel:   "intfloat/e5-large",
+		EmbeddingVersion: 1,
+		Status:           "pending",
+		Metadata:         make(map[string]interface{}),
+	}
+
+	if err := m.taskResultRepository.Create(ctx, taskResult); err != nil {
+		return "", fmt.Errorf("create task result: %w", err)
+	}
+
+	slog.Debug("Task created", "task_id", taskID, "session_id", sessionID)
+	return taskID, nil
+}
+
+// UpdateTaskOutput updates the task output.
+// Args:
+// ctx - database operation context.
+// taskID - task identifier.
+// output - task output.
+// Returns error if update fails.
+func (m *ProductionMemoryManager) UpdateTaskOutput(ctx context.Context, taskID, output string) error {
+	if taskID == "" {
+		return fmt.Errorf("task ID cannot be empty")
+	}
+
+	// Set tenant context
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Get existing task
+	task, err := m.taskResultRepository.GetByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("get task result: %w", err)
+	}
+
+	// Update task
+	task.Output = map[string]interface{}{"content": output}
+	task.Status = "completed"
+	task.LatencyMs = int(time.Since(task.CreatedAt).Milliseconds())
+
+	if err := m.taskResultRepository.Update(ctx, task); err != nil {
+		return fmt.Errorf("update task result: %w", err)
+	}
+
+	slog.Debug("Task output updated", "task_id", taskID)
+	return nil
+}
+
+// DistillTask extracts key information from task for future reference.
+// Args:
+// ctx - database operation context.
+// taskID - task identifier.
+// Returns distilled task or error if distillation fails.
+// Note: This retrieves stored task result and converts to Task format.
+func (m *ProductionMemoryManager) DistillTask(ctx context.Context, taskID string) (*models.Task, error) {
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Get task result
+	taskResult, err := m.taskResultRepository.GetByID(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("get task result: %w", err)
+	}
+
+	// Convert to models.Task format
+	task := &models.Task{
+		TaskID:    taskResult.ID,
+		TaskType:  models.AgentType(taskResult.TaskType),
+		Payload:   taskResult.Input,
+		Priority:  50, // Default priority
+		CreatedAt: taskResult.CreatedAt,
+	}
+
+	slog.Debug("Task distilled", "task_id", taskID)
+	return task, nil
+}
+
+// StoreDistilledTask stores a distilled task with async embedding chain.
+// Args:
+// ctx - database operation context.
+// taskID - task identifier.
+// distilled - distilled task data.
+// Returns error if storage fails.
+// Note: Per design standard, this uses asynchronous embedding chain:
+// 1. Write to DB with embedding_status = 'pending'
+// 2. Write to embedding_queue with dedupe_key (for deduplication)
+// 3. Background Worker processes embedding tasks
+// 4. Worker updates DB with embedding and status = 'completed'
+func (m *ProductionMemoryManager) StoreDistilledTask(ctx context.Context, taskID string, distilled *models.Task) error {
+	if distilled == nil {
+		return fmt.Errorf("distilled task cannot be nil")
+	}
+
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Use write buffer for async embedding chain (write backpressure layer per design standard)
+	writeItem := &postgres.WriteItem{
+		TenantID: tenantID,
+		Table:    "experiences_1024",
+		Content:  fmt.Sprintf("%v", distilled.Payload), // Use payload as content
+		Metadata: map[string]interface{}{
+			"output":   "", // Extract from payload if available
+			"type":     "solution",
+			"agent_id": "style-agent",
+		},
+	}
+
+	if err := m.writeBuffer.Write(ctx, writeItem); err != nil {
+		return fmt.Errorf("write to buffer: %w", err)
+	}
+
+	slog.Debug("Distilled task queued for async embedding", "task_id", taskID)
+	return nil
+}
+
+// SearchSimilarTasks searches for similar tasks using intelligent retrieval.
+// Args:
+// ctx - database operation context.
+// query - search query.
+// limit - maximum number of results.
+// Returns list of similar tasks or error if search fails.
+// Note: This returns experiences (agent knowledge) rather than execution tasks.
+func (m *ProductionMemoryManager) SearchSimilarTasks(ctx context.Context, query string, limit int) ([]*models.Task, error) {
+	if query == "" {
+		return nil, fmt.Errorf("query cannot be empty")
+	}
+
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Create search request
+	searchRequest := &services.SearchRequest{
+		Query:    query,
+		TenantID: tenantID,
+		TopK:     limit,
+		Plan:     services.DefaultRetrievalPlan(),
+	}
+
+	// Enable experience search only (hybrid search: vector + BM25)
+	searchRequest.Plan.SearchExperience = true
+	searchRequest.Plan.SearchKnowledge = false
+	searchRequest.Plan.SearchTools = false
+	searchRequest.Plan.ExperienceWeight = 1.0
+
+	// Execute search with fallback (per design standard)
+	results, err := m.retrievalService.Search(ctx, searchRequest)
+	if err != nil {
+		return nil, fmt.Errorf("search similar tasks: %w", err)
+	}
+
+	// Convert experiences to models.Task format
+	tasks := make([]*models.Task, 0, len(results))
+	for _, result := range results {
+		if result.Source == "experience" {
+			// Convert experience to Task format for backward compatibility
+			task := &models.Task{
+				TaskID:   result.ID,
+				TaskType: models.AgentType("experience"),
+				Payload: map[string]any{
+					"input":  result.Content,
+					"output": result.Metadata["output"],
+					"score":  result.Score,
+				},
+				Priority:  int(result.Score * 100), // Convert score to priority
+				CreatedAt: result.CreatedAt,
+			}
+			tasks = append(tasks, task)
+		}
+	}
+
+	slog.Debug("Similar experiences found", "query", query, "count", len(tasks))
+	return tasks, nil
+}
+
+// getCurrentTenantID returns the current tenant ID with fallback.
+func (m *ProductionMemoryManager) getCurrentTenantID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.currentTenantID != "" {
+		return m.currentTenantID
+	}
+
+	return "default" // Fallback to default tenant
+}

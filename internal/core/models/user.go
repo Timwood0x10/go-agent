@@ -1,8 +1,9 @@
 package models
 
 import (
-	"errors"
 	"time"
+
+	"goagent/internal/core/errors"
 )
 
 // UserProfile represents user profile information.
@@ -34,16 +35,16 @@ func NewUserProfile(userID, name string) *UserProfile {
 	}
 }
 
-// Validate checks if the user profile is valid.
+// Validate validates the user profile.
 func (p *UserProfile) Validate() error {
 	if p.UserID == "" {
-		return errors.New("invalid user ID")
+		return errors.ErrInvalidUserID
 	}
 	if p.Age < 0 || p.Age > 150 {
-		return errors.New("invalid age")
+		return errors.ErrInvalidAge
 	}
 	if p.Budget != nil && !p.Budget.IsValid() {
-		return errors.New("invalid budget range")
+		return errors.ErrInvalidBudget
 	}
 	return nil
 }

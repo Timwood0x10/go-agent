@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package engine
 
 import (
@@ -496,3 +497,5 @@ func TestAgentDefinitionCoverage(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

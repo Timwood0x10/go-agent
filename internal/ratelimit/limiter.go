@@ -25,13 +25,15 @@ type LimiterConfig struct {
 	RefillRate time.Duration // token refill interval
 }
 
-// DefaultConfig returns default configuration.
+// DefaultConfig returns the default rate limiter configuration.
+// Returns:
+// *LimiterConfig - default configuration with sensible defaults.
 func DefaultConfig() *LimiterConfig {
 	return &LimiterConfig{
-		Rate:       10,
-		Burst:      20,
-		Timeout:    5 * time.Second,
-		RefillRate: time.Second,
+		Rate:       DefaultRate,
+		Burst:      DefaultBurst,
+		Timeout:    DefaultLimiterTimeout,
+		RefillRate: DefaultRefillRate,
 	}
 }
 
@@ -49,7 +51,9 @@ type Factory struct {
 	creators map[LimiterType]func(*LimiterConfig) Limiter
 }
 
-// NewFactory creates a new Factory.
+// NewFactory creates a new Factory with built-in limiter types registered.
+// Returns:
+// *Factory - a new Factory instance with token bucket, sliding window, and semaphore limiters registered.
 func NewFactory() *Factory {
 	f := &Factory{
 		creators: make(map[LimiterType]func(*LimiterConfig) Limiter),
@@ -70,12 +74,21 @@ func NewFactory() *Factory {
 	return f
 }
 
-// Register registers a limiter creator.
+// Register registers a limiter creator function for a specific limiter type.
+// Args:
+// limiterType - the type identifier for the limiter.
+// creator - function that creates a limiter instance from configuration.
 func (f *Factory) Register(limiterType LimiterType, creator func(*LimiterConfig) Limiter) {
 	f.creators[limiterType] = creator
 }
 
-// Create creates a limiter by type.
+// Create creates a limiter instance of the specified type.
+// Args:
+// limiterType - the type of limiter to create.
+// config - the limiter configuration (uses defaults if nil).
+// Returns:
+// Limiter - the created limiter instance.
+// error - ErrUnsupportedLimiterType if limiter type is not registered.
 func (f *Factory) Create(limiterType LimiterType, config *LimiterConfig) (Limiter, error) {
 	creator, exists := f.creators[limiterType]
 	if !exists {
@@ -93,6 +106,12 @@ func (f *Factory) Create(limiterType LimiterType, config *LimiterConfig) (Limite
 var DefaultFactory = NewFactory()
 
 // CreateLimiter creates a limiter using the default factory.
+// Args:
+// limiterType - the type of limiter to create.
+// config - the limiter configuration (uses defaults if nil).
+// Returns:
+// Limiter - the created limiter instance.
+// error - error if limiter creation fails.
 func CreateLimiter(limiterType LimiterType, config *LimiterConfig) (Limiter, error) {
 	return DefaultFactory.Create(limiterType, config)
 }

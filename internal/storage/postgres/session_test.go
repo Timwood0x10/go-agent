@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -398,3 +399,5 @@ func (m *mockDBTX) QueryContext(ctx context.Context, query string, args ...inter
 func (m *mockDBTX) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return nil
 }
+
+// nolint: errcheck // Test code may ignore return values

@@ -267,10 +267,10 @@ func (v *Validator) ValidateRecommendResult(result *models.RecommendResult) erro
 	// Convert RecommendResult items to []interface{} for validation
 	itemsInterface := make([]interface{}, len(result.Items))
 	for i, item := range result.Items {
-		// Convert Style []StyleTag to []interface{}
-		styleInterface := make([]interface{}, len(item.Style))
-		for j, s := range item.Style {
-			styleInterface[j] = string(s)
+		// Convert AgentPreferences []string to []interface{}
+		agentPreferencesInterface := make([]interface{}, len(item.AgentPreferences))
+		for j, s := range item.AgentPreferences {
+			agentPreferencesInterface[j] = string(s)
 		}
 		// Convert Colors []string to []interface{}
 		colorsInterface := make([]interface{}, len(item.Colors))
@@ -279,18 +279,18 @@ func (v *Validator) ValidateRecommendResult(result *models.RecommendResult) erro
 		}
 
 		itemsInterface[i] = map[string]interface{}{
-			"item_id":      item.ItemID,
-			"name":         item.Name,
-			"category":     item.Category,
-			"description":  item.Description,
-			"price":        item.Price,
-			"url":          item.URL,
-			"image_url":    item.ImageURL,
-			"style":        styleInterface,
-			"colors":       colorsInterface,
-			"match_reason": item.MatchReason,
-			"brand":        item.Brand,
-			"metadata":     item.Metadata,
+			"item_id":           item.ItemID,
+			"name":              item.Name,
+			"category":          item.Category,
+			"description":       item.Description,
+			"price":             item.Price,
+			"url":               item.URL,
+			"image_url":         item.ImageURL,
+			"agent_preferences": agentPreferencesInterface,
+			"colors":            colorsInterface,
+			"match_reason":      item.MatchReason,
+			"brand":             item.Brand,
+			"metadata":          item.Metadata,
 		}
 	}
 

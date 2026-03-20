@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package postgres
 
 import (
@@ -36,7 +37,7 @@ func TestConfig_DSN(t *testing.T) {
 	}
 
 	dsn := cfg.DSN()
-	expected := "host=localhost port=5432 user=user password=password dbname=testdb sslmode=disable"
+	expected := "host=localhost port=5432 user=user password=password dbname=testdb sslmode=disable client_encoding=UTF8"
 	if dsn != expected {
 		t.Errorf("expected %s, got %s", expected, dsn)
 	}
@@ -191,3 +192,5 @@ func TestRepository(t *testing.T) {
 		_ = err
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values

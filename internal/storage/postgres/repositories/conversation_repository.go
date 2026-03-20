@@ -1,0 +1,420 @@
+// Package repositories provides data access layer for storage system.
+package repositories
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"goagent/internal/core/errors"
+	"goagent/internal/storage/postgres"
+	storage_models "goagent/internal/storage/postgres/models"
+)
+
+// ConversationRepository provides data access for conversation history.
+// This implements CRUD operations for storing and retrieving conversation messages.
+// It depends on the DBTX interface to support both database connections and transactions.
+type ConversationRepository struct {
+	db postgres.DBTX
+}
+
+// NewConversationRepository creates a new ConversationRepository instance.
+// Args:
+// db - database connection or transaction implementing DBTX interface.
+// Returns new ConversationRepository instance.
+func NewConversationRepository(db postgres.DBTX) *ConversationRepository {
+	return &ConversationRepository{db: db}
+}
+
+// Create inserts a new conversation message into the database.
+// Args:
+// ctx - database operation context.
+// conv - conversation message to create. ID should be empty to let database generate it.
+// Returns error if insert operation fails.
+func (r *ConversationRepository) Create(ctx context.Context, conv *storage_models.Conversation) error {
+	// Build query based on whether ID is provided
+	var query string
+	var args []interface{}
+
+	// Check if CreatedAt is zero value (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := conv.CreatedAt.IsZero()
+
+	if conv.ID == "" {
+		// Insert with auto-generated ID
+		if createdAtIsZero {
+			query = `
+				INSERT INTO conversations
+				(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt,
+			}
+		} else {
+			query = `
+				INSERT INTO conversations
+				(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+			}
+		}
+	} else {
+		// Insert with specified ID
+		if createdAtIsZero {
+			query = `
+				INSERT INTO conversations
+				(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt,
+			}
+		} else {
+			query = `
+				INSERT INTO conversations
+				(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+			}
+		}
+	}
+
+	var id string
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&id)
+
+	if err != nil {
+		return fmt.Errorf("create conversation: %w", err)
+	}
+
+	conv.ID = id
+	return nil
+}
+
+// GetByID retrieves a conversation by ID.
+// Args:
+// ctx - database operation context.
+// id - conversation ID, must be non-empty.
+// Returns conversation or error if not found or invalid argument.
+func (r *ConversationRepository) GetByID(ctx context.Context, id string) (*storage_models.Conversation, error) {
+	if id == "" {
+		return nil, errors.ErrInvalidArgument
+	}
+
+	query := `
+		SELECT id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at
+		FROM conversations
+		WHERE id = $1
+	`
+
+	conv := &storage_models.Conversation{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&conv.ID, &conv.SessionID, &conv.TenantID, &conv.UserID,
+		&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, errors.ErrRecordNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get conversation by id: %w", err)
+	}
+
+	return conv, nil
+}
+
+// GetBySession retrieves all conversation messages for a specific session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of results to return.
+// Returns list of conversation messages ordered by created time (ascending).
+func (r *ConversationRepository) GetBySession(ctx context.Context, sessionID, tenantID string, limit int) ([]*storage_models.Conversation, error) {
+	query := `
+		SELECT id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at
+		FROM conversations
+		WHERE session_id = $1 AND tenant_id = $2
+		ORDER BY created_at ASC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, sessionID, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get conversations by session: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	conversations := make([]*storage_models.Conversation, 0)
+	for rows.Next() {
+		conv := &storage_models.Conversation{}
+		err := rows.Scan(
+			&conv.ID, &conv.SessionID, &conv.TenantID, &conv.UserID,
+			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		conversations = append(conversations, conv)
+	}
+
+	return conversations, nil
+}
+
+// DeleteBySession removes all conversation messages for a specific session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// tenantID - tenant identifier for isolation.
+// Returns number of deleted messages or error if operation fails.
+func (r *ConversationRepository) DeleteBySession(ctx context.Context, sessionID, tenantID string) (int64, error) {
+	query := `
+		DELETE FROM conversations
+		WHERE session_id = $1 AND tenant_id = $2
+	`
+
+	result, err := r.db.ExecContext(ctx, query, sessionID, tenantID)
+	if err != nil {
+		return 0, fmt.Errorf("delete conversations by session: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return rows, nil
+}
+
+// Delete removes a conversation message by its ID.
+// Args:
+// ctx - database operation context.
+// id - conversation message identifier.
+// Returns error if delete operation fails.
+func (r *ConversationRepository) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM conversations WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("delete conversation: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return errors.ErrRecordNotFound
+	}
+
+	return nil
+}
+
+// GetByUser retrieves recent conversation messages for a specific user.
+// Args:
+// ctx - database operation context.
+// userID - user identifier.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of results to return.
+// Returns list of recent conversation messages ordered by created time (descending).
+func (r *ConversationRepository) GetByUser(ctx context.Context, userID, tenantID string, limit int) ([]*storage_models.Conversation, error) {
+	query := `
+		SELECT id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at
+		FROM conversations
+		WHERE user_id = $1 AND tenant_id = $2
+		ORDER BY created_at DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get conversations by user: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	conversations := make([]*storage_models.Conversation, 0)
+	for rows.Next() {
+		conv := &storage_models.Conversation{}
+		err := rows.Scan(
+			&conv.ID, &conv.SessionID, &conv.TenantID, &conv.UserID,
+			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		conversations = append(conversations, conv)
+	}
+
+	return conversations, nil
+}
+
+// GetByAgent retrieves recent conversation messages for a specific agent.
+// Args:
+// ctx - database operation context.
+// agentID - agent identifier.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of results to return.
+// Returns list of recent conversation messages ordered by created time (descending).
+func (r *ConversationRepository) GetByAgent(ctx context.Context, agentID, tenantID string, limit int) ([]*storage_models.Conversation, error) {
+	query := `
+		SELECT id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at
+		FROM conversations
+		WHERE agent_id = $1 AND tenant_id = $2
+		ORDER BY created_at DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, agentID, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get conversations by agent: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
+
+	conversations := make([]*storage_models.Conversation, 0)
+	for rows.Next() {
+		conv := &storage_models.Conversation{}
+		err := rows.Scan(
+			&conv.ID, &conv.SessionID, &conv.TenantID, &conv.UserID,
+			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		conversations = append(conversations, conv)
+	}
+
+	return conversations, nil
+}
+
+// CleanupExpired removes conversation messages that have expired.
+// Args:
+// ctx - database operation context.
+// Returns number of deleted messages or error if operation fails.
+func (r *ConversationRepository) CleanupExpired(ctx context.Context) (int64, error) {
+	query := `
+		DELETE FROM conversations
+		WHERE expires_at IS NOT NULL AND expires_at < NOW()
+	`
+
+	result, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup expired conversations: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return rows, nil
+}
+
+// UpdateExpiresAt updates the expiration time for a conversation session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// tenantID - tenant identifier for isolation.
+// expiresAt - new expiration time.
+// Returns number of updated messages or error if operation fails.
+func (r *ConversationRepository) UpdateExpiresAt(ctx context.Context, sessionID, tenantID string, expiresAt time.Time) (int64, error) {
+	query := `
+		UPDATE conversations
+		SET expires_at = $1
+		WHERE session_id = $2 AND tenant_id = $3
+	`
+
+	result, err := r.db.ExecContext(ctx, query, expiresAt, sessionID, tenantID)
+	if err != nil {
+		return 0, fmt.Errorf("update expires at: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
+
+	return rows, nil
+}
+
+// CountBySession returns the number of messages in a session.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// tenantID - tenant identifier for isolation.
+// Returns message count or error if query fails.
+func (r *ConversationRepository) CountBySession(ctx context.Context, sessionID, tenantID string) (int64, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM conversations
+		WHERE session_id = $1 AND tenant_id = $2
+	`
+
+	var count int64
+	err := r.db.QueryRowContext(ctx, query, sessionID, tenantID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count messages in session: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetRecentSessions retrieves recent conversation sessions for a tenant.
+// Args:
+// ctx - database operation context.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of sessions to return.
+// Returns list of session identifiers ordered by last activity (descending).
+func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID string, limit int) ([]string, error) {
+	query := `
+		SELECT session_id
+		FROM conversations
+		WHERE tenant_id = $1
+		GROUP BY session_id
+		ORDER BY MAX(created_at) DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get recent sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	sessions := make([]string, 0)
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			continue
+		}
+		sessions = append(sessions, sessionID)
+	}
+
+	return sessions, nil
+}

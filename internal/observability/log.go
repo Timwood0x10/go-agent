@@ -119,12 +119,3 @@ func (t *LogTracer) WithTrace(ctx context.Context) context.Context {
 	traceID := generateTraceID()
 	return context.WithValue(ctx, defaultTraceID, traceID)
 }
-
-// callErrorToString is deprecated, errors are now handled directly in log methods.
-// Kept for backwards compatibility if needed.
-func callErrorToString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}

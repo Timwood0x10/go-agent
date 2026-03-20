@@ -3,6 +3,7 @@ package shutdown
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -61,7 +62,11 @@ type PhaseHandler struct {
 // Callback is a function called during shutdown.
 type Callback func(ctx context.Context) error
 
-// NewManager creates a new ShutdownManager.
+// NewManager creates a new ShutdownManager with the specified timeout.
+// Args:
+// timeout - maximum duration for the entire shutdown process.
+// Returns:
+// *Manager - a new ShutdownManager instance.
 func NewManager(timeout time.Duration) *Manager {
 	return &Manager{
 		phases:  make(map[Phase]*PhaseHandler),
@@ -69,7 +74,10 @@ func NewManager(timeout time.Duration) *Manager {
 	}
 }
 
-// RegisterPhase registers a handler for a phase.
+// RegisterPhase registers a handler for a shutdown phase.
+// Args:
+// phase - the shutdown phase to register (PhasePreShutdown, PhaseGraceful, PhaseForce, PhaseDone).
+// timeout - maximum duration for this phase.
 func (m *Manager) RegisterPhase(phase Phase, timeout time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -80,7 +88,12 @@ func (m *Manager) RegisterPhase(phase Phase, timeout time.Duration) {
 	}
 }
 
-// AddCallback adds a callback to a phase.
+// AddCallback adds a callback function to a shutdown phase.
+// Args:
+// phase - the shutdown phase to add the callback to.
+// callback - the function to call during shutdown.
+// Returns:
+// error - error if phase is not registered.
 func (m *Manager) AddCallback(phase Phase, callback Callback) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -94,7 +107,11 @@ func (m *Manager) AddCallback(phase Phase, callback Callback) error {
 	return nil
 }
 
-// StartShutdown initiates the shutdown process.
+// StartShutdown initiates the shutdown process, executing all registered phases in order.
+// Args:
+// ctx - context for cancellation and timeout control.
+// Returns:
+// error - error if shutdown fails or is already in progress.
 func (m *Manager) StartShutdown(ctx context.Context) error {
 	m.mu.Lock()
 	if m.currentPhase != 0 {
@@ -176,7 +193,9 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 		panicCount := 0
 		for panicInfo := range panicChan {
 			panicCount++
-			fmt.Printf("Shutdown phase %s: panic recovered: %v\n", phase, panicInfo)
+			slog.Error("Shutdown panic recovered",
+				"phase", phase,
+				"panic", panicInfo)
 		}
 
 		// Then check for errors
@@ -204,7 +223,10 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 	}
 }
 
-// SetOnTimeout sets the callback for phase timeout.
+// SetOnTimeout sets the callback function to invoke when a phase times out.
+// Args:
+// phase - the shutdown phase to set the timeout callback for.
+// fn - the function to call on timeout.
 func (m *Manager) SetOnTimeout(phase Phase, fn func()) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -214,7 +236,10 @@ func (m *Manager) SetOnTimeout(phase Phase, fn func()) {
 	}
 }
 
-// SetOnPanic sets the callback for panic during phase execution.
+// SetOnPanic sets the callback function to invoke when a panic occurs during phase execution.
+// Args:
+// phase - the shutdown phase to set the panic callback for.
+// fn - the function to call on panic, receives the panic value.
 func (m *Manager) SetOnPanic(phase Phase, fn func(interface{})) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -225,6 +250,8 @@ func (m *Manager) SetOnPanic(phase Phase, fn func(interface{})) {
 }
 
 // CurrentPhase returns the current shutdown phase.
+// Returns:
+// Phase - the current shutdown phase (0 if shutdown has not started).
 func (m *Manager) CurrentPhase() Phase {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -232,12 +259,14 @@ func (m *Manager) CurrentPhase() Phase {
 	return m.currentPhase
 }
 
-// Wait waits for all in-progress operations to complete.
+// Wait blocks until all in-progress shutdown operations complete.
 func (m *Manager) Wait() {
 	m.wg.Wait()
 }
 
-// IsShutdown returns true if shutdown has started (past PhasePreShutdown).
+// IsShutdown returns true if shutdown has started (past PhasePreShutdown phase).
+// Returns:
+// bool - true if shutdown has started, false otherwise.
 func (m *Manager) IsShutdown() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

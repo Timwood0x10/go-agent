@@ -1,3 +1,4 @@
+// nolint: errcheck // Test code may ignore return values
 package output
 
 import (
@@ -472,3 +473,6 @@ func TestValidator(t *testing.T) {
 		}
 	})
 }
+
+// nolint: errcheck // Test code may ignore return values
+// nolint: errcheck // Test code may ignore return values

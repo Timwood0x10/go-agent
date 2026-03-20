@@ -18,6 +18,7 @@ import (
 	"goagent/internal/config"
 	"goagent/internal/core/models"
 	"goagent/internal/llm/output"
+	"goagent/internal/memory"
 	"goagent/internal/observability"
 	"goagent/internal/protocol/ahp"
 )
@@ -99,13 +100,14 @@ func main() {
 }
 
 type components struct {
-	llmAdapter   output.LLMAdapter
-	llmFactory   *output.Factory
-	llmConfig    *output.Config
-	tracer       observability.Tracer
-	messageQueue *ahp.MessageQueue
-	validator    *output.Validator
-	template     *output.TemplateEngine
+	llmAdapter    output.LLMAdapter
+	llmFactory    *output.Factory
+	llmConfig     *output.Config
+	tracer        observability.Tracer
+	messageQueue  *ahp.MessageQueue
+	validator     *output.Validator
+	template      *output.TemplateEngine
+	memoryManager memory.MemoryManager
 }
 
 func initializeComponents(cfg *config.Config) (*components, error) {
@@ -135,14 +137,22 @@ func initializeComponents(cfg *config.Config) (*components, error) {
 	// Create template engine
 	template := output.NewTemplateEngine()
 
+	// Initialize memory manager with default configuration.
+	memoryConfig := memory.DefaultMemoryConfig()
+	memoryManager, err := memory.NewMemoryManager(memoryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create memory manager: %w", err)
+	}
+
 	return &components{
-		llmAdapter:   llmAdapter,
-		llmFactory:   llmFactory,
-		llmConfig:    llmCfg,
-		tracer:       tracer,
-		messageQueue: messageQueue,
-		validator:    validator,
-		template:     template,
+		llmAdapter:    llmAdapter,
+		llmFactory:    llmFactory,
+		llmConfig:     llmCfg,
+		tracer:        tracer,
+		messageQueue:  messageQueue,
+		validator:     validator,
+		template:      template,
+		memoryManager: memoryManager,
 	}, nil
 }
 
@@ -246,6 +256,7 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 		resultAggregator,
 		comps.messageQueue,
 		hbMon,
+		comps.memoryManager,
 		leaderCfg,
 	)
 }

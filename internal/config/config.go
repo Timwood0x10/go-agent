@@ -7,6 +7,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// DefaultTaskDistillationPrompt is the default prompt for task distillation
+	DefaultTaskDistillationPrompt = "Please concisely summarize the key information for the following task, including: user needs, preferences, and budget range. Simply return a JSON object. {\"user_needs\": \"...\", \"preferences\": \"...\", \"budget\": \"...\"}"
+)
+
 // Config holds all configuration for the server.
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
@@ -344,7 +349,7 @@ func (c *Config) setDefaults() {
 		c.Memory.UserProfile.Storage = "memory"
 	}
 	if c.Memory.TaskDistillation.Prompt == "" {
-		c.Memory.TaskDistillation.Prompt = "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。只需返回JSON对象：{\"user_needs\": \"...\", \"preferences\": \"...\", \"budget\": \"...\"}"
+		c.Memory.TaskDistillation.Prompt = DefaultTaskDistillationPrompt
 	}
 	// Validation defaults
 	if c.Validation.SchemaType == "" {

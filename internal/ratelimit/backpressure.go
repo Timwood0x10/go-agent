@@ -199,7 +199,7 @@ var (
 
 // AdaptiveLimiter adjusts rate based on current load.
 type AdaptiveLimiter struct {
-	baseLimiter    Limiter
+	limiter        *TokenBucketLimiter
 	mu             sync.RWMutex
 	minRate        float64
 	maxRate        float64
@@ -210,11 +210,21 @@ type AdaptiveLimiter struct {
 
 // NewAdaptiveLimiter creates a new AdaptiveLimiter.
 func NewAdaptiveLimiter(base Limiter, minRate, maxRate float64) *AdaptiveLimiter {
+	// Extract current rate from base limiter
+	rate := base.Rate()
+	burst := int(rate) // Default burst to rate
+
+	config := &LimiterConfig{
+		Rate:    rate,
+		Burst:   burst,
+		Timeout: 30 * time.Second,
+	}
+
 	return &AdaptiveLimiter{
-		baseLimiter:    base,
+		limiter:        NewTokenBucketLimiter(config),
 		minRate:        minRate,
 		maxRate:        maxRate,
-		currentRate:    maxRate,
+		currentRate:    rate,
 		decreaseFactor: 0.9,
 		increaseFactor: 1.1,
 	}
@@ -222,24 +232,32 @@ func NewAdaptiveLimiter(base Limiter, minRate, maxRate float64) *AdaptiveLimiter
 
 // Allow checks if request is allowed.
 func (a *AdaptiveLimiter) Allow(ctx context.Context) (bool, error) {
-	return a.baseLimiter.Allow(ctx)
+	a.mu.RLock()
+	limiter := a.limiter
+	a.mu.RUnlock()
+	return limiter.Allow(ctx)
 }
 
 // Wait blocks until request can be processed.
 func (a *AdaptiveLimiter) Wait(ctx context.Context) error {
-	return a.baseLimiter.Wait(ctx)
+	a.mu.RLock()
+	limiter := a.limiter
+	a.mu.RUnlock()
+	return limiter.Wait(ctx)
 }
 
 // Reset resets the limiter.
 func (a *AdaptiveLimiter) Reset() {
-	a.baseLimiter.Reset()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.limiter.Reset()
+	a.currentRate = a.maxRate
 }
 
 // Rate returns current rate.
 func (a *AdaptiveLimiter) Rate() float64 {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-
 	return a.currentRate
 }
 
@@ -252,6 +270,14 @@ func (a *AdaptiveLimiter) Increase() {
 	if a.currentRate > a.maxRate {
 		a.currentRate = a.maxRate
 	}
+
+	// Update limiter rate
+	config := &LimiterConfig{
+		Rate:    a.currentRate,
+		Burst:   int(a.currentRate),
+		Timeout: 30 * time.Second,
+	}
+	a.limiter = NewTokenBucketLimiter(config)
 }
 
 // Decrease decreases the rate.
@@ -263,4 +289,12 @@ func (a *AdaptiveLimiter) Decrease() {
 	if a.currentRate < a.minRate {
 		a.currentRate = a.minRate
 	}
+
+	// Update limiter rate
+	config := &LimiterConfig{
+		Rate:    a.currentRate,
+		Burst:   int(a.currentRate),
+		Timeout: 30 * time.Second,
+	}
+	a.limiter = NewTokenBucketLimiter(config)
 }
