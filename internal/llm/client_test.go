@@ -142,10 +142,22 @@ func TestClient_GetModel(t *testing.T) {
 
 func TestNewClientFromEnv(t *testing.T) {
 	// Set environment variables
-	os.Setenv("LLM_PROVIDER", "ollama")
-	os.Setenv("LLM_MODEL", "llama3")
-	defer os.Unsetenv("LLM_PROVIDER")
-	defer os.Unsetenv("LLM_MODEL")
+	if err := os.Setenv("LLM_PROVIDER", "ollama"); err != nil {
+		t.Fatalf("Failed to set LLM_PROVIDER: %v", err)
+	}
+	if err := os.Setenv("LLM_MODEL", "llama3"); err != nil {
+		t.Fatalf("Failed to set LLM_MODEL: %v", err)
+	}
+	defer func() {
+		if err := os.Unsetenv("LLM_PROVIDER"); err != nil {
+			t.Logf("Failed to unset LLM_PROVIDER: %v", err)
+		}
+	}()
+	defer func() {
+		if err := os.Unsetenv("LLM_MODEL"); err != nil {
+			t.Logf("Failed to unset LLM_MODEL: %v", err)
+		}
+	}()
 
 	client, err := NewClientFromEnv()
 	if err != nil {

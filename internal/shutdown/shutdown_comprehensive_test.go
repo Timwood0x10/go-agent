@@ -25,22 +25,30 @@ func TestManager_StartShutdown_Success(t *testing.T) {
 
 	// Add callbacks
 	var executedPhases []Phase
-	manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
 		executedPhases = append(executedPhases, PhasePreShutdown)
 		return nil
-	})
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		executedPhases = append(executedPhases, PhaseGraceful)
 		return nil
-	})
-	manager.AddCallback(PhaseForce, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseForce, func(ctx context.Context) error {
 		executedPhases = append(executedPhases, PhaseForce)
 		return nil
-	})
-	manager.AddCallback(PhaseDone, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseDone, func(ctx context.Context) error {
 		executedPhases = append(executedPhases, PhaseDone)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	// Execute shutdown
 	ctx := context.Background()
@@ -118,10 +126,12 @@ func TestManager_CallbackTimeout(t *testing.T) {
 	})
 
 	// Add callback that takes longer than phase timeout
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		time.Sleep(200 * time.Millisecond)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -147,9 +157,11 @@ func TestManager_CallbackPanic(t *testing.T) {
 	})
 
 	// Add callback that panics
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		panic("test panic")
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -172,9 +184,11 @@ func TestManager_CallbackError(t *testing.T) {
 	manager.RegisterPhase(PhaseGraceful, 1*time.Second)
 
 	// Add callback that returns error
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		return errors.New("callback error")
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -194,18 +208,24 @@ func TestManager_MultipleCallbacks(t *testing.T) {
 	manager.RegisterPhase(PhaseGraceful, 1*time.Second)
 
 	var executedCount atomic.Int32
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		executedCount.Add(1)
 		return nil
-	})
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		executedCount.Add(1)
 		return nil
-	})
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		executedCount.Add(1)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -226,18 +246,24 @@ func TestManager_MixedSuccessAndFailure(t *testing.T) {
 	var successCount atomic.Int32
 	var errorCount atomic.Int32
 
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		successCount.Add(1)
 		return nil
-	})
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		errorCount.Add(1)
 		return errors.New("callback error")
-	})
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		successCount.Add(1)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -261,9 +287,11 @@ func TestManager_EmptyPhase(t *testing.T) {
 	manager.RegisterPhase(PhaseGraceful, 1*time.Second)
 
 	// Only add callback to PreShutdown phase
-	manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -296,15 +324,19 @@ func TestManager_Wait(t *testing.T) {
 	manager.RegisterPhase(PhaseGraceful, 2*time.Second)
 
 	executed := false
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		time.Sleep(500 * time.Millisecond)
 		executed = true
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	go func() {
-		manager.StartShutdown(ctx)
+		if err := manager.StartShutdown(ctx); err != nil {
+			t.Logf("StartShutdown failed: %v", err)
+		}
 	}()
 
 	// Wait for shutdown to complete
@@ -328,21 +360,25 @@ func TestManager_IsShutdown(t *testing.T) {
 		t.Errorf("expected IsShutdown to be false initially")
 	}
 
-	manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhasePreShutdown, func(ctx context.Context) error {
 		// In PreShutdown phase, IsShutdown should still be false
 		if manager.IsShutdown() {
 			t.Errorf("expected IsShutdown to be false during PreShutdown")
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
-	manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
+	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		// In Graceful phase, IsShutdown should be true
 		if !manager.IsShutdown() {
 			t.Errorf("expected IsShutdown to be true during Graceful")
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to add callback: %v", err)
+	}
 
 	ctx := context.Background()
 	err := manager.StartShutdown(ctx)
@@ -649,10 +685,12 @@ func TestPhaseExecutor_OnFailure_RollbackError(t *testing.T) {
 func TestPhaseExecutor_Duration(t *testing.T) {
 	executor := NewPhaseExecutor(PhaseGraceful, 3)
 
-	executor.Execute(context.Background(), func(ctx context.Context) error {
+	if err := executor.Execute(context.Background(), func(ctx context.Context) error {
 		time.Sleep(100 * time.Millisecond)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
 
 	duration := executor.Duration()
 	if duration < 100*time.Millisecond {
@@ -665,10 +703,12 @@ func TestPhaseExecutor_Duration_Running(t *testing.T) {
 
 	ctx := context.Background()
 	go func() {
-		executor.Execute(ctx, func(ctx context.Context) error {
+		if err := executor.Execute(ctx, func(ctx context.Context) error {
 			time.Sleep(500 * time.Millisecond)
 			return nil
-		})
+		}); err != nil {
+			t.Logf("Execute failed: %v", err)
+		}
 	}()
 
 	// Wait a bit for executor to start
@@ -702,15 +742,21 @@ func TestCallbackRegistry_Register(t *testing.T) {
 func TestCallbackRegistry_Register_Multiple(t *testing.T) {
 	registry := NewCallbackRegistry()
 
-	registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
+	if err := registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
 		return nil
-	}, 5*time.Second)
-	registry.Register(PhaseGraceful, "callback2", 5, func(ctx context.Context) error {
+	}, 5*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := registry.Register(PhaseGraceful, "callback2", 5, func(ctx context.Context) error {
 		return nil
-	}, 3*time.Second)
-	registry.Register(PhaseGraceful, "callback3", 15, func(ctx context.Context) error {
+	}, 3*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := registry.Register(PhaseGraceful, "callback3", 15, func(ctx context.Context) error {
 		return nil
-	}, 7*time.Second)
+	}, 7*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	count := registry.Count(PhaseGraceful)
 	if count != 3 {
@@ -727,9 +773,11 @@ func TestCallbackRegistry_Register_Multiple(t *testing.T) {
 func TestCallbackRegistry_Unregister(t *testing.T) {
 	registry := NewCallbackRegistry()
 
-	registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
+	if err := registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
 		return nil
-	}, 5*time.Second)
+	}, 5*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	err := registry.Unregister(PhaseGraceful, "callback1")
 	if err != nil {
@@ -763,12 +811,16 @@ func TestCallbackRegistry_GetCallbacks_NotRegistered(t *testing.T) {
 func TestCallbackRegistry_Clear(t *testing.T) {
 	registry := NewCallbackRegistry()
 
-	registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
+	if err := registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
 		return nil
-	}, 5*time.Second)
-	registry.Register(PhaseGraceful, "callback2", 5, func(ctx context.Context) error {
+	}, 5*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if err := registry.Register(PhaseGraceful, "callback2", 5, func(ctx context.Context) error {
 		return nil
-	}, 3*time.Second)
+	}, 3*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
 	registry.Clear(PhaseGraceful)
 
@@ -790,13 +842,14 @@ func TestCallbackRegistry_Count_Empty(t *testing.T) {
 func TestCallbackRegistry_SetOnError(t *testing.T) {
 	registry := NewCallbackRegistry()
 
-	registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
+	if err := registry.Register(PhaseGraceful, "callback1", 10, func(ctx context.Context) error {
 		return nil
-	}, 5*time.Second)
+	}, 5*time.Second); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
 
-	onErrorCalled := false
 	err := registry.SetOnError(PhaseGraceful, "callback1", func(err error) {
-		onErrorCalled = true
+		// Error handler is set but not called in this test
 	})
 
 	if err != nil {
@@ -805,9 +858,6 @@ func TestCallbackRegistry_SetOnError(t *testing.T) {
 
 	// Note: SetOnError sets the handler but doesn't call it
 	// The handler would be called when the callback is executed
-	if !onErrorCalled {
-		// This is expected since the callback wasn't executed
-	}
 }
 
 func TestCallbackRegistry_SetOnError_NotFound(t *testing.T) {
@@ -1061,7 +1111,9 @@ func TestSignalHandler_Start_AlreadyStarted(t *testing.T) {
 		t.Errorf("expected ErrSignalHandlerAlreadyStarted, got %v", err)
 	}
 
-	handler.Stop()
+	if err := handler.Stop(); err != nil {
+		t.Logf("Stop failed: %v", err)
+	}
 }
 
 func TestSignalHandler_Stop_NotStarted(t *testing.T) {
@@ -1099,7 +1151,9 @@ func TestSignalHandler_WaitForSignal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindProcess failed: %v", err)
 	}
-	proc.Signal(os.Interrupt)
+	if err := proc.Signal(os.Interrupt); err != nil {
+		t.Logf("Signal failed: %v", err)
+	}
 
 	select {
 	case sig := <-sigChan:
@@ -1155,7 +1209,9 @@ func TestSignalHandler_WaitForContextOrSignal_Signal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindProcess failed: %v", err)
 	}
-	proc.Signal(os.Interrupt)
+	if err := proc.Signal(os.Interrupt); err != nil {
+		t.Logf("Signal failed: %v", err)
+	}
 
 	select {
 	case sig := <-sigChan:

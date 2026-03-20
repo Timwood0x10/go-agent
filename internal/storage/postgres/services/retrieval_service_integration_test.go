@@ -487,7 +487,11 @@ func TestCountResultsBySource_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Logf("Failed to close database: %v", err)
+		}
+	}()
 
 	// Create retrieval service
 	pool := createTestPool(db)
@@ -529,7 +533,11 @@ func TestValidateRequest_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Logf("Failed to close database: %v", err)
+		}
+	}()
 
 	// Create retrieval service
 	pool := createTestPool(db)
