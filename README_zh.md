@@ -69,7 +69,7 @@ GoAgent 是一个**通用多智能体框架**，用户只需通过**配置文件
 ### 运行旅行规划示例
 
 ```bash
-cd /Users/scc/go/src/goagent
+cd /goagent
 
 # 设置 API Key
 export OPENROUTER_API_KEY="your-api-key"
@@ -81,7 +81,7 @@ go run ./examples/travel/main.go
 ### 知识库示例
 
 ```bash
-cd /Users/scc/go/src/goagent
+cd /goagent
 
 # 启动 PostgreSQL + pgvector
 docker run -d \
@@ -267,6 +267,33 @@ memory:
     vector_store: false     # 存储在 pgvector 中
     prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
 ```
+
+### 检索策略（可选）
+
+框架提供两种检索服务以适应不同使用场景：
+
+| 使用场景 | 推荐服务 | 描述 |
+|----------|---------|------|
+| **单知识库检索**（RAG、Q&A、文档搜索） | ✅ SimpleRetrievalService | 纯向量相似度搜索，无复杂权重计算。最适合单源语义搜索场景。 |
+| **精确匹配查询**（如 "a = x"、配置项查询） | ✅ SimpleRetrievalService | 精确模式，采用 Exact Match → Keyword → Vector 流程（提前返回）。适合需要确定性匹配的精确查询。 |
+| **多源融合检索**（Knowledge + Experience + Tools） | ✅ RetrievalService | 混合搜索，支持多源融合、查询重写和时间衰减。用于复杂企业系统。 |
+| **复杂企业系统**（需要时间衰减、权重控制） | ✅ RetrievalService | 高级功能，包括查询权重、源权重、基于时间的评分和结果重排。 |
+
+**SimpleRetrievalService 特性：**
+- 纯向量相似度搜索（1 - cosine_distance）
+- 精确模式：Exact Match → Keyword → Vector（提前返回）
+- 无复杂权重计算
+- 无时间衰减
+- 无查询重写
+- 简单高效，适合单知识库场景
+
+**RetrievalService 特性：**
+- 多源搜索（Knowledge + Experience + Tools）
+- 查询重写及权重控制（original=1.0, rule=0.7, llm=0.5）
+- 源权重配置
+- 基于时间的评分衰减
+- 结果融合和重排
+- 企业级高级功能
 
 ## 架构
 

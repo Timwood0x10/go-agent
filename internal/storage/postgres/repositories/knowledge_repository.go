@@ -607,6 +607,59 @@ func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, te
 	return chunks, nil
 }
 
+// SearchBySubstring performs exact substring matching using ILIKE.
+// This is used for precision mode to find exact matches in content.
+// Args:
+// ctx - database operation context.
+// query - search query string for substring matching.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of results to return.
+// Returns list of knowledge chunks matching the substring or error if search fails.
+func (r *KnowledgeRepository) SearchBySubstring(ctx context.Context, query, tenantID string, limit int) ([]*storage_models.KnowledgeChunk, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	sqlQuery := `
+		SELECT id, tenant_id, content, embedding, embedding_model, embedding_version,
+			   embedding_status, source_type, source, metadata, document_id,
+			   chunk_index, content_hash, access_count, created_at, updated_at
+		FROM knowledge_chunks_1024
+		WHERE content ILIKE '%' || $1 || '%'
+		  AND tenant_id = $2
+		  AND embedding_status = 'completed'
+		ORDER BY created_at DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("substring search: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	chunks := make([]*storage_models.KnowledgeChunk, 0)
+	for rows.Next() {
+		chunk := &storage_models.KnowledgeChunk{}
+		err := rows.Scan(
+			&chunk.ID, &chunk.TenantID, &chunk.Content, &chunk.Embedding,
+			&chunk.EmbeddingModel, &chunk.EmbeddingVersion, &chunk.EmbeddingStatus,
+			&chunk.SourceType, &chunk.Source, &chunk.Metadata, &chunk.DocumentID,
+			&chunk.ChunkIndex, &chunk.ContentHash, &chunk.AccessCount,
+			&chunk.CreatedAt, &chunk.UpdatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks, nil
+}
+
 // UpdateEmbedding updates the embedding for a knowledge chunk.
 // Args:
 // ctx - database operation context.

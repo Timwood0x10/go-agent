@@ -69,7 +69,7 @@ No heavy third-party framework dependencies.
 ### Run the Travel Planning Example
 
 ```bash
-cd /Users/scc/go/src/goagent
+cd /goagent
 
 # Set API key
 export OPENROUTER_API_KEY="your-api-key"
@@ -81,7 +81,7 @@ go run ./examples/travel/main.go
 ### Try Knowledge Base Example
 
 ```bash
-cd /Users/scc/go/src/goagent
+cd goagent
 
 # Start PostgreSQL + pgvector
 docker run -d \
@@ -267,6 +267,33 @@ memory:
     vector_store: false     # Store distilled results in pgvector
     prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
 ```
+
+### Retrieval Strategies (Optional)
+
+The framework provides two retrieval services for different use cases:
+
+| Use Case | Recommended Service | Description |
+|----------|---------------------|-------------|
+| **Single Knowledge Base Retrieval** (RAG, Q&A, Document Search) | ✅ SimpleRetrievalService | Pure vector similarity search without complex weights. Best for single-source semantic search scenarios. |
+| **Exact Match Queries** (e.g., "a = x", configuration lookups) | ✅ SimpleRetrievalService | Precision mode with Exact Match → Keyword → Vector pipeline. Ideal for precise queries requiring deterministic matching. |
+| **Multi-Source Fusion Retrieval** (Knowledge + Experience + Tools) | ✅ RetrievalService | Hybrid search with multi-source fusion, query rewriting, and time decay. For complex enterprise systems. |
+| **Complex Enterprise Systems** (time decay, weight control) | ✅ RetrievalService | Advanced features including query weights, source weights, time-based scoring, and result reranking. |
+
+**SimpleRetrievalService Features:**
+- Pure vector similarity search (1 - cosine_distance)
+- Precision mode: Exact Match → Keyword → Vector (early return)
+- No complex weight calculations
+- No time decay
+- No query rewrites
+- Simple and effective for single knowledge base scenarios
+
+**RetrievalService Features:**
+- Multi-source search (Knowledge + Experience + Tools)
+- Query rewriting with weight control (original=1.0, rule=0.7, llm=0.5)
+- Source weight configuration
+- Time-based score decay
+- Result merging and reranking
+- Complex enterprise-grade features
 
 ## Architecture
 

@@ -210,6 +210,12 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 		return nil, err
 	}
 
+	// Check if precision mode should be used
+	if s.isPrecisionMode(req.Query) {
+		s.logger.Info("Using precision mode", "query", req.Query)
+		return s.searchPrecision(ctx, req), nil
+	}
+
 	// Set default plan if not provided
 	if req.Plan == nil {
 		req.Plan = DefaultRetrievalPlan()
@@ -289,6 +295,170 @@ func (s *RetrievalService) validateRequest(req *SearchRequest) error {
 		req.TopK = 10
 	}
 	return nil
+}
+
+// isPrecisionMode determines if precision mode should be used for the query.
+// Precision mode is triggered for:
+// - Short queries (≤10 characters)
+// - Queries containing special symbols (=+-*/:)
+// This uses deterministic matching to cover semantic retrieval for precise queries.
+func (s *RetrievalService) isPrecisionMode(query string) bool {
+	// Short queries use exact/keyword matching for precision
+	if len(query) <= 10 {
+		return true
+	}
+
+	// Core expression patterns: containing equals sign or mathematical operators
+	if strings.ContainsAny(query, "=+-*/:") {
+		return true
+	}
+
+	return false
+}
+
+// searchPrecision executes the precision retrieval pipeline.
+// It follows strict order: Exact Match -> Keyword -> Vector (fallback)
+func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchRequest) []*SearchResult {
+	s.logger.Debug("Executing precision search pipeline", "query", req.Query)
+
+	// 1. Exact Match (highest priority)
+	exact, err := s.searchExact(ctx, req)
+	if err != nil {
+		s.logger.Error("Failed to execute exact match search", "error", err)
+		return []*SearchResult{}
+	}
+	if len(exact) > 0 {
+		s.logger.Debug("Precision search: exact match found", "count", len(exact))
+		return exact
+	}
+
+	// 2. Keyword Search (second priority)
+	keyword, err := s.searchKeyword(ctx, req)
+	if err != nil {
+		s.logger.Error("Failed to execute keyword search", "error", err)
+		return []*SearchResult{}
+	}
+	if len(keyword) > 0 {
+		s.logger.Debug("Precision search: keyword match found", "count", len(keyword))
+		return keyword
+	}
+
+	// 3. Vector Search (fallback)
+	vector, err := s.searchVector(ctx, req)
+	if err != nil {
+		s.logger.Error("Failed to execute vector search", "error", err)
+		return []*SearchResult{}
+	}
+	s.logger.Debug("Precision search: using vector fallback", "count", len(vector))
+
+	return vector
+}
+
+// searchExact performs exact substring matching.
+func (s *RetrievalService) searchExact(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
+	s.logger.Debug("Running exact match search", "query", req.Query)
+
+	chunks, err := s.kbRepo.SearchBySubstring(ctx, req.Query, req.TenantID, 5)
+	if err != nil {
+		s.logger.Error("Exact match search failed", "error", err)
+		return nil, fmt.Errorf("exact match search: %w", err)
+	}
+
+	if len(chunks) == 0 {
+		return []*SearchResult{}, nil
+	}
+
+	results := make([]*SearchResult, 0, len(chunks))
+	for _, chunk := range chunks {
+		results = append(results, &SearchResult{
+			ID:        chunk.ID,
+			Content:   chunk.Content,
+			Score:     1.0, // Fixed highest score for exact matches
+			Source:    "knowledge",
+			SubSource: "exact",
+			CreatedAt: chunk.CreatedAt,
+		})
+	}
+
+	return results, nil
+}
+
+// searchKeyword performs BM25 keyword search with simplified scoring.
+func (s *RetrievalService) searchKeyword(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
+	s.logger.Debug("Running keyword search", "query", req.Query)
+
+	chunks, err := s.kbRepo.SearchByKeyword(ctx, req.Query, req.TenantID, req.TopK)
+	if err != nil {
+		s.logger.Error("Keyword search failed", "error", err)
+		return nil, fmt.Errorf("keyword search: %w", err)
+	}
+
+	if len(chunks) == 0 {
+		return []*SearchResult{}, nil
+	}
+
+	results := make([]*SearchResult, 0, len(chunks))
+	for _, chunk := range chunks {
+		score := 1.0
+		if chunk.Metadata != nil {
+			if keywordScore, ok := chunk.Metadata["keyword_score"].(float64); ok {
+				score = math.Min(keywordScore, 1.0)
+			}
+		}
+
+		results = append(results, &SearchResult{
+			ID:        chunk.ID,
+			Content:   chunk.Content,
+			Score:     score,
+			Source:    "knowledge",
+			SubSource: "keyword",
+			CreatedAt: chunk.CreatedAt,
+		})
+	}
+
+	return results, nil
+}
+
+// searchVector performs vector similarity search.
+func (s *RetrievalService) searchVector(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
+	s.logger.Debug("Running vector search", "query", req.Query)
+
+	embedding := s.getEmbedding(ctx, req.Query)
+	if embedding == nil || len(embedding) == 0 {
+		s.logger.Warn("No embedding available for vector search")
+		return []*SearchResult{}, nil
+	}
+
+	chunks, err := s.kbRepo.SearchByVector(ctx, embedding, req.TenantID, req.TopK)
+	if err != nil {
+		s.logger.Error("Vector search failed", "error", err)
+		return nil, fmt.Errorf("vector search: %w", err)
+	}
+
+	if len(chunks) == 0 {
+		return []*SearchResult{}, nil
+	}
+
+	results := make([]*SearchResult, 0, len(chunks))
+	for _, chunk := range chunks {
+		score := 0.0
+		if chunk.Metadata != nil {
+			if similarity, ok := chunk.Metadata["similarity"].(float64); ok {
+				score = similarity
+			}
+		}
+
+		results = append(results, &SearchResult{
+			ID:        chunk.ID,
+			Content:   chunk.Content,
+			Score:     score,
+			Source:    "knowledge",
+			SubSource: "vector",
+			CreatedAt: chunk.CreatedAt,
+		})
+	}
+
+	return results, nil
 }
 
 // getEmbedding retrieves embedding for a query with caching.
