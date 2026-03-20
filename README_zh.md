@@ -29,6 +29,40 @@ GoAgent 是一个**通用多智能体框架**，用户只需通过**配置文件
 - **限流**：令牌桶、滑动窗口、信号量限流
 - **工具系统**：可扩展的工具注册表
 - **结果校验**：JSON Schema 校验，自动重试
+- **向量存储**：PostgreSQL + pgvector 支持语义搜索和 RAG
+
+## 系统要求
+
+### 最低要求
+- Go 1.26.1 或更高版本
+- LLM API 访问权限（OpenAI、Ollama 或 OpenRouter）
+
+### 可选要求（用于高级功能）
+- PostgreSQL 16+ 带 pgvector 扩展（用于向量存储）
+- Redis（用于缓存）
+- golangci-lint（用于开发）
+
+### 依赖项
+
+框架使用极少的外部依赖：
+- `github.com/fsnotify/fsnotify` - 文件系统监听
+- `github.com/google/uuid` - UUID 生成
+- `github.com/lib/pq` - PostgreSQL 驱动
+- `github.com/stretchr/testify` - 测试框架
+- `golang.org/x/*` - 标准 Go 扩展库
+- `gopkg.in/yaml.v3` - YAML 解析
+
+无重量级第三方框架依赖。
+
+- **多智能体架构**：Leader 智能体协调多个子智能体并行执行
+- **AHP 协议**：自定义智能体心跳协议，用于智能体间通信
+- **工作流引擎**：动态 DAG 工作流编排，支持热加载
+- **LLM 集成**：统一适配 OpenAI、Ollama、OpenRouter 等 LLM 提供商
+- **内存系统**：三级内存管理（会话、用户、任务），支持 RAG
+- **优雅关闭**：五阶段关闭流程，支持回调注册
+- **限流**：令牌桶、滑动窗口、信号量限流
+- **工具系统**：可扩展的工具注册表
+- **结果校验**：JSON Schema 校验，自动重试
 
 ## 快速开始
 
@@ -44,10 +78,32 @@ export OPENROUTER_API_KEY="your-api-key"
 go run ./examples/travel/main.go
 ```
 
-### 试试看
+### 知识库示例
 
+```bash
+cd /Users/scc/go/src/goagent
+
+# 启动 PostgreSQL + pgvector
+docker run -d \
+  --name postgres-pgvector \
+  -p 5433:5432 \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=goagent \
+  pgvector/pgvector:pg16
+
+# 导入文档
+cd examples/knowledge-base
+go run main.go --save example.md
+
+# 问答
+go run main.go --chat
 ```
-=== Request 1: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
+
+### 示例输出
+
+旅行规划示例：
+```
+=== 请求: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
 ```
 
 ## 配置详解
@@ -175,31 +231,41 @@ validation:
 - `retry_on_fail: true` - 校验失败时自动重试 LLM 调用
 - `strict_mode: true` - 校验失败时返回错误；否则仅记录日志并继续使用未校验的结果
 
-### 存储设置（未来功能）
+### 存储设置（可选）
 
 ```yaml
 storage:
-  enabled: false
+  enabled: false            # 启用 PostgreSQL 存储
   type: "postgres"
   host: "localhost"
   port: 5432
+  username: "postgres"
+  password: "postgres"
+  database: "goagent"
+  ssl_mode: "disable"
   pgvector:
-    enabled: false
-    dimension: 1536
+    enabled: false          # 启用 pgvector 向量搜索
+    dimension: 1536         # 嵌入维度
+    table_name: "embeddings"
 ```
 
-### 内存设置（未来功能）
+### 内存设置（可选）
 
 ```yaml
 memory:
-  enabled: false
+  enabled: false            # 启用内存系统
   session:
     enabled: true
-    max_history: 50
+    max_history: 50         # 最大对话轮次
   user_profile:
-    enabled: false
+    enabled: false          # 启用持久化用户画像
+    storage: "memory"       # "memory" 或 "postgres"
+    vector_db: false         # 存储为向量
   task_distillation:
-    enabled: false
+    enabled: false          # 启用任务蒸馏
+    storage: "memory"       # "memory" 或 "postgres"
+    vector_store: false     # 存储在 pgvector 中
+    prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
 ```
 
 ## 架构
@@ -290,31 +356,105 @@ goagent/
 
 ## 示例
 
-详细示例请参阅 `examples/travel/README_zh.md`。
+### 1. 旅行规划智能体 (`examples/travel/`)
+多智能体旅行助手，演示：
+- 从自然语言中解析用户画像
+- 基于触发词的动态任务规划
+- 子智能体并行执行
+- 结果聚合
+
+**运行：**
+```bash
+export OPENROUTER_API_KEY="your-api-key"
+go run ./examples/travel/main.go
+```
+
+### 2. 知识库 (`examples/knowledge-base/`)
+本地文档检索和问答系统，演示：
+- 文档导入和分块
+- 向量相似度检索 (pgvector)
+- 多租户隔离
+- 交互式聊天界面
+
+**运行：**
+```bash
+cd examples/knowledge-base
+go run main.go --save example.md
+go run main.go --chat
+```
+
+### 3. 简单智能体 (`examples/simple/`)
+基础多智能体示例，包含穿搭推荐。
+
+**运行：**
+```bash
+go run ./examples/simple/main.go
+```
+
+详细配置请参阅各示例的 README 文件。
 
 ## 开发
 
+### 前置要求
+- Go 1.26.1+
+- golangci-lint: `brew install golangci-lint`
+- staticcheck: `go install honnef.co/go/tools/cmd/staticcheck@latest`
+- goimports: `go install golang.org/x/tools/cmd/goimports@latest`
+
+### 命令
+
 ```bash
-# 运行测试
+# 安装依赖
+make install
+
+# 格式化代码
+make fmt
+
+# 运行所有检查（lint + test）
+make check
+
+# 运行测试并生成覆盖率
 make test
 
-# 开启竞态检测的测试
+# 运行测试并开启竞态检测
 make test-race
 
-# 代码检查
+# 运行代码检查
 make lint
 
-# 构建
+# 运行 CI 检查（install, fmt, lint, test-race）
+make ci
+
+# 构建二进制文件
 make build
+
+# 构建所有二进制文件
+make build-all
+
+# 清理构建产物
+make clean
+
+# 显示帮助信息
+make help
 ```
+
+
+运行 `make check-all` 验证所有覆盖率要求。
 
 ## 文档
 
-- [架构](docs/arch.md)
-- [智能体定义](docs/agents/)
-- [LLM 集成](docs/llm/)
-- [存储](docs/storage/)
-- [内存](docs/memory/)
+- [架构](docs/arch.md) - 系统架构概览
+- [智能体](docs/agents/) - 智能体设计和定义
+- [核心](docs/core/) - 核心组件（错误、模型、注册表）
+- [引擎](docs/engine/) - 工作流引擎设计
+- [LLM](docs/llm/) - LLM 集成和查询重写
+- [内存](docs/memory/) - 内存系统设计
+- [协议](docs/protocol/) - AHP 协议规范
+- [限流](docs/ratelimit/) - 限流策略
+- [关闭](docs/shutdown/) - 优雅关闭机制
+- [存储](docs/storage/) - PostgreSQL 存储与 pgvector
+- [工具](docs/tools/) - 工具系统设计
+- [检索策略](docs/retrieval-strategy_zh.md) - 知识检索策略
 
 ## 许可证
 
