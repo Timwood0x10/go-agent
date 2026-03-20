@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/llm"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	"goagent/internal/storage/postgres/repositories"
@@ -101,6 +103,7 @@ type RetrievalTrace struct {
 type RetrievalService struct {
 	db               *postgres.Pool
 	embeddingClient  *embedding.EmbeddingClient
+	llmClient        *llm.Client
 	tenantGuard      *postgres.TenantGuard
 	retrievalGuard   *postgres.RetrievalGuard
 	kbRepo           *repositories.KnowledgeRepository
@@ -117,6 +120,7 @@ type RetrievalService struct {
 // Args:
 // pool - database connection pool.
 // embeddingClient - embedding service client for vector search.
+// llmClient - LLM client for query rewriting (optional, can be nil).
 // tenantGuard - tenant isolation guard.
 // retrievalGuard - rate limiting and circuit breaker for retrieval.
 // kbRepo - knowledge repository for data access.
@@ -126,6 +130,7 @@ type RetrievalService struct {
 func NewRetrievalService(
 	pool *postgres.Pool,
 	embeddingClient *embedding.EmbeddingClient,
+	llmClient *llm.Client,
 	tenantGuard *postgres.TenantGuard,
 	retrievalGuard *postgres.RetrievalGuard,
 	kbRepo *repositories.KnowledgeRepository,
@@ -135,6 +140,7 @@ func NewRetrievalService(
 	return &RetrievalService{
 		db:              pool,
 		embeddingClient: embeddingClient,
+		llmClient:       llmClient,
 		tenantGuard:     tenantGuard,
 		retrievalGuard:  retrievalGuard,
 		kbRepo:          kbRepo,
@@ -555,28 +561,66 @@ func (s *RetrievalService) uniqueRewrites(rewrites []string) []string {
 // query - original query text.
 // Returns list of rewritten queries or error.
 func (s *RetrievalService) llmBasedRewrite(ctx context.Context, query string) ([]string, error) {
-	// For now, return empty as LLM integration is not implemented
-	// In production, this would call an LLM API like:
-	//
-	// prompt := fmt.Sprintf(`
-	// Rewrite the following query to improve search results.
-	// Return up to 3 alternative queries, one per line.
-	// Keep the original intent but use different wording.
-	//
-	// Query: %s
-	// `, query)
-	//
-	// response, err := s.llmClient.Generate(ctx, prompt)
-	// if err != nil {
-	//     s.logger.Warn("LLM rewrite failed", "error", err)
-	//     return []string{}, err
-	// }
-	//
-	// rewrites := parseLLMResponse(response)
-	// return s.validateRewrites(query, rewrites), nil
+	// Check if LLM client is available and enabled
+	if s.llmClient == nil || !s.llmClient.IsEnabled() {
+		s.logger.Debug("LLM client not available or disabled, skipping LLM rewrite")
+		return []string{}, nil
+	}
 
-	s.logger.Debug("LLM-based query rewriting not yet implemented", "query", query)
-	return []string{}, nil
+	// Build prompt for query rewriting
+	prompt := fmt.Sprintf(`You are a search query optimization assistant. Your task is to rewrite the given search query to improve retrieval results.
+
+Rules:
+1. Keep the original intent but use different wording
+2. Generate up to 3 alternative queries
+3. Return each query on a separate line
+4. Be concise and clear
+5. Focus on semantic similarity rather than exact matches
+
+Original Query: %s
+
+Rewritten Queries (one per line):`, query)
+
+	// Call LLM API with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	response, err := s.llmClient.Generate(timeoutCtx, prompt)
+	if err != nil {
+		s.logger.Warn("LLM rewrite failed", "error", err, "provider", s.llmClient.GetProvider())
+		return []string{}, nil // Don't fail the whole process, just return empty
+	}
+
+	// Parse response into individual queries
+	rewrites := s.parseLLMResponse(response)
+
+	s.logger.Info("LLM rewrite completed", "original", query, "rewrites_count", len(rewrites), "provider", s.llmClient.GetProvider())
+
+	return rewrites, nil
+}
+
+// parseLLMResponse parses LLM response into individual query lines.
+// Args:
+// response - LLM response text.
+// Returns list of parsed queries.
+func (s *RetrievalService) parseLLMResponse(response string) []string {
+	queries := []string{}
+
+	// Split by lines and filter empty lines
+	lines := strings.Split(response, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			queries = append(queries, line)
+		}
+	}
+
+	// Limit to 3 queries
+	if len(queries) > 3 {
+		queries = queries[:3]
+	}
+
+	return queries
 }
 
 // calculateSimilarity calculates similarity between two strings.

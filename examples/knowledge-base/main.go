@@ -189,7 +189,7 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	// Create retrieval service
 	tenantGuard := postgres.NewTenantGuard(pool)
 	retrievalGuard := postgres.NewRetrievalGuard(100, 5, 30*time.Second, 30*time.Second)
-	retrievalService := services.NewRetrievalService(pool, embeddingClient, tenantGuard, retrievalGuard, kbRepo, nil, nil)
+	retrievalService := services.NewRetrievalService(pool, embeddingClient, nil, tenantGuard, retrievalGuard, kbRepo, nil, nil)
 
 	return &KnowledgeBase{
 		config:    config,

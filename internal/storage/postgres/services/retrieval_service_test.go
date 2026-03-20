@@ -711,7 +711,7 @@ func TestNewRetrievalService(t *testing.T) {
 	retrievalGuard := &postgres.RetrievalGuard{}
 	kbRepo := &repositories.KnowledgeRepository{}
 
-	service := NewRetrievalService(pool, embeddingClient, tenantGuard, retrievalGuard, kbRepo,
+	service := NewRetrievalService(pool, embeddingClient, nil, tenantGuard, retrievalGuard, kbRepo,
 		nil, /* expRepo */
 		nil, /* tool_repo */
 	)

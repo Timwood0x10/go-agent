@@ -97,6 +97,7 @@ func NewProductionMemoryManager(
 	retrievalService := services.NewRetrievalService(
 		dbPool,
 		embeddingClient,
+		nil, // llmClient (will be created from env if needed)
 		tenantGuard,
 		retrievalGuard,
 		knowledgeRepo,

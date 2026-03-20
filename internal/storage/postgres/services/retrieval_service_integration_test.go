@@ -96,6 +96,7 @@ func TestSearchKnowledgeVector_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - user will start embedding service when needed
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
@@ -195,12 +196,12 @@ func TestBm25SearchKnowledge_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for BM25 search
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
 		nil, /* expRepo */
 		nil, /* toolRepo */
-
 	)
 
 	ctx := context.Background()
@@ -275,6 +276,7 @@ func TestMergeAndRank_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for merge and rank test
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		kbRepo,
@@ -370,6 +372,7 @@ func TestGetEmbedding_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - will be nil, getEmbedding will return nil
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo not needed for this test
@@ -404,6 +407,7 @@ func TestFilterByScore_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for score filtering test
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo
@@ -452,6 +456,7 @@ func TestCalculateTimeDecay_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for time decay test
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo
@@ -489,6 +494,7 @@ func TestCountResultsBySource_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for count results test
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo
@@ -530,6 +536,7 @@ func TestValidateRequest_Integration(t *testing.T) {
 	service := NewRetrievalService(
 		pool,
 		nil, // embeddingClient - not needed for validation test
+		nil, // llmClient
 		&postgres.TenantGuard{},
 		&postgres.RetrievalGuard{},
 		nil, // kbRepo
