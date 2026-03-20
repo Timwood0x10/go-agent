@@ -543,8 +543,8 @@ func TestShouldRewriteQuery_Additional(t *testing.T) {
 // TestQueryRewrite tests query rewriting functionality.
 func TestQueryRewrite(t *testing.T) {
 	service := &RetrievalService{
-		logger:        slog.Default(),
-		synonymRules:  loadSynonymRules(),
+		logger:         slog.Default(),
+		synonymRules:   loadSynonymRules(),
 		embeddingCache: make(map[string][]float64),
 	}
 

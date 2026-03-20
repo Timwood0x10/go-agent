@@ -57,6 +57,21 @@ type WeightedQuery struct {
 	Source string  `json:"source"` // Source: original, rewrite_rule, rewrite_llm
 }
 
+// ResultDebugInfo contains detailed debugging information for a search result.
+// This helps answer "why this result is ranked first?" and supports observability.
+type ResultDebugInfo struct {
+	ID           string                 `json:"id"`            // Result ID
+	Score        float64                `json:"score"`         // Final score
+	Query        string                 `json:"query"`         // Query that matched this result
+	QueryWeight  float64                `json:"query_weight"`  // Weight of the query
+	Source       string                 `json:"source"`        // Result source (knowledge/experience/tool)
+	SubSource    string                 `json:"sub_source"`    // Sub-source (vector/keyword)
+	SourceWeight float64                `json:"source_weight"` // Weight from source
+	SubWeight    float64                `json:"sub_weight"`    // Weight from sub-source
+	Signals      map[string]interface{} `json:"signals"`       // Applied signals (success, reuse_count, etc.)
+	Breakdown    map[string]float64     `json:"breakdown"`     // Score breakdown for analysis
+}
+
 // QueryPriorityConfig defines priority weights for different query types.
 // This controls how much influence rewrites have on retrieval results.
 type QueryPriorityConfig struct {
@@ -490,12 +505,15 @@ func loadSynonymRules() map[string][]string {
 func (s *RetrievalService) ruleBasedRewrite(original string) []string {
 	rewrites := []string{}
 
+	// Normalize English queries (expand contractions, standardize format)
+	normalized := normalizeEnglishQuery(original)
+
 	// Use synonym rules loaded from configuration file
-	queryLower := toLower(original)
+	queryLower := toLower(normalized)
 	for key, synonyms := range s.synonymRules {
 		if contains(queryLower, key) {
 			for _, synonym := range synonyms {
-				rewrites = append(rewrites, replaceCaseInsensitive(original, key, synonym))
+				rewrites = append(rewrites, replaceCaseInsensitive(normalized, key, synonym))
 			}
 		}
 	}
@@ -1072,12 +1090,12 @@ func (s *RetrievalService) bm25SearchExperience(ctx context.Context, query strin
 	results := make([]*SearchResult, 0, len(experiences))
 	for _, exp := range experiences {
 		result := &SearchResult{
-			ID:        exp.ID,
-			Content:   exp.Output,
-			Score:     exp.Score * 0.5, // BM25 scores are typically lower
-			Source:    "experience",
-			SubSource: "keyword",
-			Query:     query,
+			ID:          exp.ID,
+			Content:     exp.Output,
+			Score:       exp.Score * 0.5, // BM25 scores are typically lower
+			Source:      "experience",
+			SubSource:   "keyword",
+			Query:       query,
 			QueryWeight: 1.0,
 			Metadata: map[string]interface{}{
 				"task_type": exp.Type,
@@ -1282,9 +1300,26 @@ func (s *RetrievalService) applySourceSignals(baseScore float64, result *SearchR
 			}
 		}
 
+		// Execution time signal (faster experiences get preference)
+		if executionTime, ok := result.Metadata["execution_time"].(float64); ok {
+			// Normalize execution time: < 1s = 1.2x, 1-5s = 1.0x, > 5s = 0.8x
+			if executionTime < 1.0 {
+				baseScore *= 1.2 // Very fast experiences get boost
+			} else if executionTime < 5.0 {
+				baseScore *= 1.0 // Normal speed, no change
+			} else {
+				baseScore *= 0.8 // Slow experiences get penalty
+			}
+		}
+
 		// Reuse count signal (highly reusable experiences get boost)
 		if reuseCount, ok := result.Metadata["reuse_count"].(int); ok && reuseCount > 3 {
 			baseScore *= 1.1
+		}
+
+		// Lessons learned signal (experiences with lessons get boost)
+		if lessons, ok := result.Metadata["lessons"].(string); ok && lessons != "" {
+			baseScore *= 1.05 // Experiences with documented lessons get slight boost
 		}
 	}
 
@@ -1305,6 +1340,85 @@ func (s *RetrievalService) applySourceSignals(baseScore float64, result *SearchR
 	}
 
 	return baseScore
+}
+
+// GenerateDebugInfo generates detailed debugging information for a search result.
+// This helps answer "why this result is ranked first?" and supports observability.
+// Args:
+// result - search result to generate debug info for.
+// plan - retrieval plan with weight configuration (optional, can be nil for default weights).
+// Returns ResultDebugInfo with scoring breakdown and signals.
+func (s *RetrievalService) GenerateDebugInfo(result *SearchResult, plan *RetrievalPlan) *ResultDebugInfo {
+	sourceWeight := 1.0
+	if plan != nil {
+		switch result.Source {
+		case "experience":
+			sourceWeight = plan.ExperienceWeight
+		case "tool":
+			sourceWeight = plan.ToolsWeight
+		case "knowledge":
+			sourceWeight = plan.KnowledgeWeight
+		case "task_result":
+			sourceWeight = plan.TaskResultsWeight
+		}
+	} else {
+		// Use default weights when plan is not provided
+		switch result.Source {
+		case "experience":
+			sourceWeight = 1.2
+		case "tool":
+			sourceWeight = 1.1
+		case "knowledge":
+			sourceWeight = 1.0
+		default:
+			sourceWeight = 1.0
+		}
+	}
+
+	info := &ResultDebugInfo{
+		ID:           result.ID,
+		Score:        result.Score,
+		Query:        result.Query,
+		QueryWeight:  result.QueryWeight,
+		Source:       result.Source,
+		SubSource:    result.SubSource,
+		SourceWeight: sourceWeight,
+		SubWeight:    s.subSourceWeight(result.SubSource),
+		Signals:      make(map[string]interface{}),
+		Breakdown:    make(map[string]float64),
+	}
+
+	// Collect source-specific signals
+	if result.Source == "experience" {
+		if success, ok := result.Metadata["success"].(bool); ok {
+			info.Signals["success"] = success
+		}
+		if reuseCount, ok := result.Metadata["reuse_count"].(int); ok {
+			info.Signals["reuse_count"] = reuseCount
+		}
+		if executionTime, ok := result.Metadata["execution_time"].(float64); ok {
+			info.Signals["execution_time"] = executionTime
+		}
+		if lessons, ok := result.Metadata["lessons"].(string); ok {
+			info.Signals["lessons"] = lessons
+		}
+	}
+
+	if result.Source == "tool" {
+		if requiresAuth, ok := result.Metadata["requires_auth"].(bool); ok {
+			info.Signals["requires_auth"] = requiresAuth
+		}
+		if successRate, ok := result.Metadata["success_rate"].(float64); ok {
+			info.Signals["success_rate"] = successRate
+		}
+	}
+
+	// Score breakdown for analysis
+	info.Breakdown["query"] = result.QueryWeight
+	info.Breakdown["source"] = info.SourceWeight
+	info.Breakdown["sub_source"] = info.SubWeight
+
+	return info
 }
 
 // calculateTimeDecay calculates time-based decay factor for scoring.
@@ -1394,4 +1508,103 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// normalizeEnglishQuery normalizes English queries by expanding contractions and standardizing format.
+// This improves query matching by converting common contractions to their full forms.
+// Args:
+// query - original query text.
+// Returns normalized query text.
+func normalizeEnglishQuery(query string) string {
+	// Define common English contractions and their expansions
+	contractions := map[string]string{
+		"i'm":       "i am",
+		"you're":    "you are",
+		"he's":      "he is",
+		"she's":     "she is",
+		"it's":      "it is",
+		"we're":     "we are",
+		"they're":   "they are",
+		"don't":     "do not",
+		"doesn't":   "does not",
+		"didn't":    "did not",
+		"won't":     "will not",
+		"wouldn't":  "would not",
+		"shouldn't": "should not",
+		"can't":     "cannot",
+		"couldn't":  "could not",
+		"mightn't":  "might not",
+		"mustn't":   "must not",
+		"let's":     "let us",
+		"that's":    "that is",
+		"what's":    "what is",
+		"where's":   "where is",
+		"who's":     "who is",
+		"how's":     "how is",
+	}
+
+	// Normalize to lowercase for matching
+	queryLower := toLower(query)
+
+	// Replace contractions with their full forms
+	for contraction, expansion := range contractions {
+		queryLower = replaceAllIgnoreCase(queryLower, contraction, expansion)
+	}
+
+	// Trim extra spaces
+	queryLower = trimSpaces(queryLower)
+
+	return queryLower
+}
+
+// replaceAllIgnoreCase replaces all occurrences of a substring case-insensitively.
+// Args:
+// s - original string.
+// old - substring to replace.
+// new - replacement string.
+// Returns string with all replacements applied.
+func replaceAllIgnoreCase(s, old, new string) string {
+	sLower := toLower(s)
+	oldLower := toLower(old)
+
+	result := ""
+	i := 0
+	for i < len(sLower) {
+		if i <= len(sLower)-len(oldLower) && sLower[i:i+len(oldLower)] == oldLower {
+			result += new
+			i += len(oldLower)
+		} else {
+			result += string(s[i])
+			i++
+		}
+	}
+
+	return result
+}
+
+// trimSpaces removes extra spaces from a string, keeping only single spaces.
+// Args:
+// s - string to trim.
+// Returns string with normalized spacing.
+func trimSpaces(s string) string {
+	// Trim leading and trailing spaces
+	s = strings.TrimSpace(s)
+
+	// Replace multiple spaces with single space
+	var result strings.Builder
+	prevSpace := false
+
+	for _, ch := range s {
+		if ch == ' ' {
+			if !prevSpace {
+				result.WriteRune(ch)
+				prevSpace = true
+			}
+		} else {
+			result.WriteRune(ch)
+			prevSpace = false
+		}
+	}
+
+	return result.String()
 }
