@@ -1217,6 +1217,26 @@ func (s *RetrievalService) rerankResults(results []*SearchResult, plan *Retrieva
 		return results
 	}
 
+	// Check if multiple sources are actually being searched
+	// Only apply source weight if multiple sources are enabled
+	multipleSourcesEnabled := false
+	activeSources := 0
+	if plan.SearchKnowledge {
+		activeSources++
+	}
+	if plan.SearchExperience {
+		activeSources++
+	}
+	if plan.SearchTools {
+		activeSources++
+	}
+	if plan.SearchTaskResults {
+		activeSources++
+	}
+	if activeSources > 1 {
+		multipleSourcesEnabled = true
+	}
+
 	// Apply all weights here (unified scoring entry point)
 	for _, result := range results {
 		baseScore := result.Score
@@ -1224,8 +1244,11 @@ func (s *RetrievalService) rerankResults(results []*SearchResult, plan *Retrieva
 		// 1. Query weight (only applied here, not in merge)
 		baseScore *= result.QueryWeight
 
-		// 2. Source weight
-		baseScore *= s.sourceWeight(result.Source, plan)
+		// 2. Source weight - only apply if multiple sources are being searched
+		// This avoids reducing scores in single-source retrieval
+		if multipleSourcesEnabled {
+			baseScore *= s.sourceWeight(result.Source, plan)
+		}
 
 		// 3. SubSource weight (vector vs keyword)
 		baseScore *= s.subSourceWeight(result.SubSource)

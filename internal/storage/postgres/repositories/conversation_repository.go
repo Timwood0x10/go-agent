@@ -38,29 +38,59 @@ func (r *ConversationRepository) Create(ctx context.Context, conv *storage_model
 	var query string
 	var args []interface{}
 
+	// Check if CreatedAt is zero value (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := conv.CreatedAt.IsZero()
+
 	if conv.ID == "" {
 		// Insert with auto-generated ID
-		query = `
-			INSERT INTO conversations
-			(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			RETURNING id
-		`
-		args = []interface{}{
-			conv.SessionID, conv.TenantID, conv.UserID,
-			conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO conversations
+				(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt,
+			}
+		} else {
+			query = `
+				INSERT INTO conversations
+				(session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+			}
 		}
 	} else {
 		// Insert with specified ID
-		query = `
-			INSERT INTO conversations
-			(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING id
-		`
-		args = []interface{}{
-			conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
-			conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO conversations
+				(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt,
+			}
+		} else {
+			query = `
+				INSERT INTO conversations
+				(id, session_id, tenant_id, user_id, agent_id, role, content, expires_at, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				RETURNING id
+			`
+			args = []interface{}{
+				conv.ID, conv.SessionID, conv.TenantID, conv.UserID,
+				conv.AgentID, conv.Role, conv.Content, conv.ExpiresAt, conv.CreatedAt,
+			}
 		}
 	}
 

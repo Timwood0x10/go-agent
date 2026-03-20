@@ -59,35 +59,71 @@ func (r *TaskResultRepository) Create(ctx context.Context, result *storage_model
 	var query string
 	var args []interface{}
 
+	// Check if CreatedAt is zero value (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := result.CreatedAt.IsZero()
+
 	if result.ID == "" {
 		// Insert with auto-generated ID
-		query = `
-			INSERT INTO task_results_1024
-			(tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, $14)
-			RETURNING id
-		`
-		args = []interface{}{
-			result.TenantID, result.SessionID, result.TaskType,
-			result.AgentID, inputJSON, outputJSON, embeddingStr,
-			result.EmbeddingModel, result.EmbeddingVersion, result.Status,
-			result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO task_results_1024
+				(tenant_id, session_id, task_type, agent_id, input, output, embedding,
+				 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				result.TenantID, result.SessionID, result.TaskType,
+				result.AgentID, inputJSON, outputJSON, embeddingStr,
+				result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+				result.Error, result.LatencyMs, metadataJSON,
+			}
+		} else {
+			query = `
+				INSERT INTO task_results_1024
+				(tenant_id, session_id, task_type, agent_id, input, output, embedding,
+				 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11, $12, $13, $14)
+				RETURNING id
+			`
+			args = []interface{}{
+				result.TenantID, result.SessionID, result.TaskType,
+				result.AgentID, inputJSON, outputJSON, embeddingStr,
+				result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+				result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+			}
 		}
 	} else {
 		// Insert with specified ID
-		query = `
-			INSERT INTO task_results_1024
-			(id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
-			 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10, $11, $12, $13, $14, $15)
-			RETURNING id
-		`
-		args = []interface{}{
-			result.ID, result.TenantID, result.SessionID, result.TaskType,
-			result.AgentID, inputJSON, outputJSON, embeddingStr,
-			result.EmbeddingModel, result.EmbeddingVersion, result.Status,
-			result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO task_results_1024
+				(id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
+				 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10, $11, $12, $13, $14, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				result.ID, result.TenantID, result.SessionID, result.TaskType,
+				result.AgentID, inputJSON, outputJSON, embeddingStr,
+				result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+				result.Error, result.LatencyMs, metadataJSON,
+			}
+		} else {
+			query = `
+				INSERT INTO task_results_1024
+				(id, tenant_id, session_id, task_type, agent_id, input, output, embedding,
+				 embedding_model, embedding_version, status, error, latency_ms, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10, $11, $12, $13, $14, $15)
+				RETURNING id
+			`
+			args = []interface{}{
+				result.ID, result.TenantID, result.SessionID, result.TaskType,
+				result.AgentID, inputJSON, outputJSON, embeddingStr,
+				result.EmbeddingModel, result.EmbeddingVersion, result.Status,
+				result.Error, result.LatencyMs, metadataJSON, result.CreatedAt,
+			}
 		}
 	}
 

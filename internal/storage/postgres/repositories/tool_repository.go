@@ -48,51 +48,103 @@ func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) 
 	var query string
 	var args []interface{}
 
+	// Check if CreatedAt is zero value (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := tool.CreatedAt.IsZero()
+
 	if tool.ID == "" {
 		// Insert with auto-generated ID
-		query = `
-			INSERT INTO tools
-			(tenant_id, name, description, embedding, embedding_model, embedding_version,
-			 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
-			VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-			ON CONFLICT (tenant_id, name) DO UPDATE SET
-				description = EXCLUDED.description,
-				embedding = EXCLUDED.embedding,
-				embedding_model = EXCLUDED.embedding_model,
-				embedding_version = EXCLUDED.embedding_version,
-				agent_type = EXCLUDED.agent_type,
-				tags = EXCLUDED.tags,
-				metadata = EXCLUDED.metadata
-			RETURNING id
-		`
-		args = []interface{}{
-			tool.TenantID, tool.Name, tool.Description,
-			embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
-			tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
-			tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO tools
+				(tenant_id, name, description, embedding, embedding_model, embedding_version,
+				 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+				VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+				ON CONFLICT (tenant_id, name) DO UPDATE SET
+					description = EXCLUDED.description,
+					embedding = EXCLUDED.embedding,
+					embedding_model = EXCLUDED.embedding_model,
+					embedding_version = EXCLUDED.embedding_version,
+					agent_type = EXCLUDED.agent_type,
+					tags = EXCLUDED.tags,
+					metadata = EXCLUDED.metadata
+				RETURNING id
+			`
+			args = []interface{}{
+				tool.TenantID, tool.Name, tool.Description,
+				embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+				tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+				tool.LastUsedAt, metadataJSON,
+			}
+		} else {
+			query = `
+				INSERT INTO tools
+				(tenant_id, name, description, embedding, embedding_model, embedding_version,
+				 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+				VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+				ON CONFLICT (tenant_id, name) DO UPDATE SET
+					description = EXCLUDED.description,
+					embedding = EXCLUDED.embedding,
+					embedding_model = EXCLUDED.embedding_model,
+					embedding_version = EXCLUDED.embedding_version,
+					agent_type = EXCLUDED.agent_type,
+					tags = EXCLUDED.tags,
+					metadata = EXCLUDED.metadata
+				RETURNING id
+			`
+			args = []interface{}{
+				tool.TenantID, tool.Name, tool.Description,
+				embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+				tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+				tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+			}
 		}
 	} else {
 		// Insert with specified ID
-		query = `
-			INSERT INTO tools
-			(id, tenant_id, name, description, embedding, embedding_model, embedding_version,
-			 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
-			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-			ON CONFLICT (tenant_id, name) DO UPDATE SET
-				description = EXCLUDED.description,
-				embedding = EXCLUDED.embedding,
-				embedding_model = EXCLUDED.embedding_model,
-				embedding_version = EXCLUDED.embedding_version,
-				agent_type = EXCLUDED.agent_type,
-				tags = EXCLUDED.tags,
-				metadata = EXCLUDED.metadata
-			RETURNING id
-		`
-		args = []interface{}{
-			tool.ID, tool.TenantID, tool.Name, tool.Description,
-			embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
-			tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
-			tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO tools
+				(id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+				 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+				ON CONFLICT (tenant_id, name) DO UPDATE SET
+					description = EXCLUDED.description,
+					embedding = EXCLUDED.embedding,
+					embedding_model = EXCLUDED.embedding_model,
+					embedding_version = EXCLUDED.embedding_version,
+					agent_type = EXCLUDED.agent_type,
+					tags = EXCLUDED.tags,
+					metadata = EXCLUDED.metadata
+				RETURNING id
+			`
+			args = []interface{}{
+				tool.ID, tool.TenantID, tool.Name, tool.Description,
+				embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+				tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+				tool.LastUsedAt, metadataJSON,
+			}
+		} else {
+			query = `
+				INSERT INTO tools
+				(id, tenant_id, name, description, embedding, embedding_model, embedding_version,
+				 agent_type, tags, usage_count, success_rate, last_used_at, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+				ON CONFLICT (tenant_id, name) DO UPDATE SET
+					description = EXCLUDED.description,
+					embedding = EXCLUDED.embedding,
+					embedding_model = EXCLUDED.embedding_model,
+					embedding_version = EXCLUDED.embedding_version,
+					agent_type = EXCLUDED.agent_type,
+					tags = EXCLUDED.tags,
+					metadata = EXCLUDED.metadata
+				RETURNING id
+			`
+			args = []interface{}{
+				tool.ID, tool.TenantID, tool.Name, tool.Description,
+				embeddingStr, tool.EmbeddingModel, tool.EmbeddingVersion,
+				tool.AgentType, tool.Tags, tool.UsageCount, tool.SuccessRate,
+				tool.LastUsedAt, metadataJSON, tool.CreatedAt,
+			}
 		}
 	}
 

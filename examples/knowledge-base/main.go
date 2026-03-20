@@ -24,13 +24,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// KnowledgeBase simplified knowledge base interface
-type KnowledgeBase struct {
-	config    *Config
-	pool      *postgres.Pool
-	repo      *repositories.KnowledgeRepository
-	retrieval *services.RetrievalService
-	embedding *embedding.EmbeddingClient
+// SearchResult simple search result (local type for backward compatibility)
+type SearchResult struct {
+	Content string
+	Source  string
+	Score   float64
 }
 
 // Config configuration structure
@@ -59,6 +57,15 @@ type Chunk struct {
 	Index int
 	Text  string
 	Hash  string
+}
+
+// KnowledgeBase simplified knowledge base interface
+type KnowledgeBase struct {
+	config    *Config
+	pool      *postgres.Pool
+	repo      *repositories.KnowledgeRepository
+	embedding *embedding.EmbeddingClient
+	retrieval *services.SimpleRetrievalService
 }
 
 func main() {
@@ -186,17 +193,23 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(pool.GetDB(), pool.GetDB())
 
-	// Create retrieval service
-	tenantGuard := postgres.NewTenantGuard(pool)
-	retrievalGuard := postgres.NewRetrievalGuard(100, 5, 30*time.Second, 30*time.Second)
-	retrievalService := services.NewRetrievalService(pool, embeddingClient, nil, tenantGuard, retrievalGuard, kbRepo, nil, nil)
+	// Create simple retrieval service (pure vector similarity, no complex weights)
+	retrievalService := services.NewSimpleRetrievalService(
+		kbRepo,
+		embeddingClient,
+		&services.SimpleRetrievalConfig{
+			TopK:        config.Knowledge.TopK,
+			MinScore:    config.Knowledge.MinScore,
+			QueryPrefix: "query:",
+		},
+	)
 
 	return &KnowledgeBase{
 		config:    config,
 		pool:      pool,
 		repo:      kbRepo,
-		retrieval: retrievalService,
 		embedding: embeddingClient,
+		retrieval: retrievalService,
 	}, nil
 }
 
@@ -218,7 +231,7 @@ func (kb *KnowledgeBase) ImportDocuments(ctx context.Context, tenantID, docPath 
 	// Batch process chunks
 	successCount := 0
 	for i, chunk := range chunks {
-		log.Printf("Processing chunk %d/%d...", i+1, len(chunks))
+		log.Printf("Processing chunk %d/%d... content: %s", i+1, len(chunks), truncateString(chunk.Text, 100))
 
 		// Generate embedding vector (with timeout)
 		chunkCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -230,7 +243,9 @@ func (kb *KnowledgeBase) ImportDocuments(ctx context.Context, tenantID, docPath 
 			continue
 		}
 
-		// Note: embedding service already returns normalized vectors, so no need to normalize again
+		// IMPORTANT: Normalize embedding vector for pgvector cosine distance
+		// pgvector's <=> operator requires normalized vectors for accurate cosine distance
+		embedding = postgres.NormalizeVector(embedding)
 
 		// Store to database
 		knowledgeChunk := &storage_models.KnowledgeChunk{
@@ -265,26 +280,13 @@ func (kb *KnowledgeBase) ImportDocuments(ctx context.Context, tenantID, docPath 
 	return docID, nil
 }
 
-// Search retrieve knowledge base
-func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) ([]*services.SearchResult, error) {
+// Search retrieve knowledge base using simple vector similarity
+func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) ([]*SearchResult, error) {
 	log.Printf("Searching for: %s (tenant: %s)", question, tenantID)
 
-	req := &services.SearchRequest{
-		Query:    question,
-		TenantID: tenantID,
-		TopK:     kb.config.Knowledge.TopK,
-		MinScore: kb.config.Knowledge.MinScore,
-		Plan: &services.RetrievalPlan{
-			SearchKnowledge:     true,
-			KnowledgeWeight:     1.0,
-			EnableKeywordSearch: true,
-			EnableTimeDecay:     true,
-			TopK:                kb.config.Knowledge.TopK,
-		},
-		EnableTrace: true,
-	}
-
-	results, err := kb.retrieval.Search(ctx, req)
+	// Use SimpleRetrievalService for pure vector similarity search
+	// This follows ChromaDB's simple approach: direct vector similarity without complex weights
+	results, err := kb.retrieval.Search(ctx, tenantID, question)
 	if err != nil {
 		log.Printf("Search error: %v", err)
 		return nil, err
@@ -292,10 +294,20 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 
 	log.Printf("Search returned %d results", len(results))
 	for i, result := range results {
-		log.Printf("  Result %d: score=%.3f, content=%s", i, result.Score, truncateString(result.Content, 50))
+		log.Printf("  Result %d: score=%.3f, source=%s, content=%s", i, result.Score, result.Source, truncateString(result.Content, 50))
 	}
 
-	return results, nil
+	// Convert to local SearchResult type for backward compatibility
+	var localResults []*SearchResult
+	for _, r := range results {
+		localResults = append(localResults, &SearchResult{
+			Content: r.Content,
+			Source:  r.Source,
+			Score:   r.Score,
+		})
+	}
+
+	return localResults, nil
 }
 
 // truncateString truncate string for log output
@@ -499,16 +511,16 @@ func setDefaults(config *Config) {
 		config.EmbeddingModel = "e5-large-v2"
 	}
 	if config.Knowledge.ChunkSize == 0 {
-		config.Knowledge.ChunkSize = 500
+		config.Knowledge.ChunkSize = 1000
 	}
 	if config.Knowledge.ChunkOverlap == 0 {
-		config.Knowledge.ChunkOverlap = 50
+		config.Knowledge.ChunkOverlap = 100
 	}
 	if config.Knowledge.TopK == 0 {
 		config.Knowledge.TopK = 5
 	}
 	if config.Knowledge.MinScore == 0 {
-		config.Knowledge.MinScore = 0.3
+		config.Knowledge.MinScore = 0.6
 	}
 }
 

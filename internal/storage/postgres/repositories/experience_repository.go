@@ -42,39 +42,74 @@ func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.E
 	// Convert embedding to pgvector format
 	embeddingStr := float64ToVectorString(exp.Embedding)
 
-	// Build query with optional decay_at
+	// Build query with optional decay_at and created_at
 	var query string
 	var args []interface{}
 
+	// Check if CreatedAt is zero value (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := exp.CreatedAt.IsZero()
+
 	if exp.DecayAt.IsZero() {
 		// Don't set decay_at, let database use default value
-		query = `
-			INSERT INTO experiences_1024
-			(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			 score, success, agent_id, metadata, created_at)
-			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12)
-			RETURNING id
-		`
-		args = []interface{}{
-			exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
-			exp.EmbeddingModel, exp.EmbeddingVersion,
-			exp.Score, exp.Success, exp.AgentID, metadataJSON,
-			exp.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO experiences_1024
+				(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+				 score, success, agent_id, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+				exp.EmbeddingModel, exp.EmbeddingVersion,
+				exp.Score, exp.Success, exp.AgentID, metadataJSON,
+			}
+		} else {
+			query = `
+				INSERT INTO experiences_1024
+				(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+				 score, success, agent_id, metadata, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12)
+				RETURNING id
+			`
+			args = []interface{}{
+				exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+				exp.EmbeddingModel, exp.EmbeddingVersion,
+				exp.Score, exp.Success, exp.AgentID, metadataJSON,
+				exp.CreatedAt,
+			}
 		}
 	} else {
 		// Set decay_at explicitly
-		query = `
-			INSERT INTO experiences_1024
-			(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
-			 score, success, agent_id, metadata, decay_at, created_at)
-			VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)
-			RETURNING id
-		`
-		args = []interface{}{
-			exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
-			exp.EmbeddingModel, exp.EmbeddingVersion,
-			exp.Score, exp.Success, exp.AgentID, metadataJSON,
-			exp.DecayAt, exp.CreatedAt,
+		if createdAtIsZero {
+			query = `
+				INSERT INTO experiences_1024
+				(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+				 score, success, agent_id, metadata, decay_at, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, NOW())
+				RETURNING id
+			`
+			args = []interface{}{
+				exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+				exp.EmbeddingModel, exp.EmbeddingVersion,
+				exp.Score, exp.Success, exp.AgentID, metadataJSON,
+				exp.DecayAt,
+			}
+		} else {
+			query = `
+				INSERT INTO experiences_1024
+				(tenant_id, type, input, output, embedding, embedding_model, embedding_version,
+				 score, success, agent_id, metadata, decay_at, created_at)
+				VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11, $12, $13)
+				RETURNING id
+			`
+			args = []interface{}{
+				exp.TenantID, exp.Type, exp.Input, exp.Output, embeddingStr,
+				exp.EmbeddingModel, exp.EmbeddingVersion,
+				exp.Score, exp.Success, exp.AgentID, metadataJSON,
+				exp.DecayAt, exp.CreatedAt,
+			}
 		}
 	}
 
