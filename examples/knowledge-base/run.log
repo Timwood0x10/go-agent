@@ -1,40 +1,47 @@
-go run main.go --save ./example.md
-2026/03/19 14:40:53 Importing document: ./example.md
-2026/03/19 14:40:53 Document split into 7 chunks
-2026/03/19 14:40:53 Processing chunk 1/7...
-2026/03/19 14:40:53 Processing chunk 2/7...
-2026/03/19 14:40:53 Processing chunk 3/7...
-2026/03/19 14:40:53 Processing chunk 4/7...
-2026/03/19 14:40:53 Processing chunk 5/7...
-2026/03/19 14:40:53 Processing chunk 6/7...
-2026/03/19 14:40:53 Processing chunk 7/7...
-2026/03/19 14:40:54 Successfully imported 7/7 chunks
-2026/03/19 14:40:54 Document imported successfully. Document ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2
+go run main.go --chat
+2026/03/20 19:23:00 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/20 19:23:00 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/20 19:23:00 Memory enabled - Conversation history and distillation supported
+2026/03/20 19:23:00 INFO Memory manager started
+2026/03/20 19:23:00 Session created: session_default_1774005780866243000
+
+You: 你好，吃了没
+2026/03/20 19:23:04 RAG check: 你好，吃了没 -> needs RAG: false
+
+Assistant:
+您好！我是你的助手。如果你有任何问题或需要帮助，请随时告诉我。今天有什么事吗？
+
+You: go 编码规范，有什么推荐的吗？
+2026/03/20 19:23:20 RAG check: go 编码规范，有什么推荐的吗？ -> needs RAG: true
+2026/03/20 19:23:20 Searching for: go 编码规范，有什么推荐的吗？ (tenant: default)
+2026/03/20 19:23:20 INFO SimpleRetrievalService.Search tenant_id=default query="go 编码规范，有什么推荐的吗？" top_k=10 min_score=0.4
+2026/03/20 19:23:20 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/20 19:23:20 INFO Vector search query vector_length=9739 vector_preview=[-0.008055,-0.066333,-0.011645,-0.074511,0.008136,-0.005087,-0.049896,0.048650,-0.078134,-0.034095,-
+2026/03/20 19:23:20 INFO Vector search query succeeded
+2026/03/20 19:23:20 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/20 19:23:20 INFO Search completed results_count=10 min_score=0.4
+2026/03/20 19:23:20 Search returned 10 results
+2026/03/20 19:23:20   Result 0: score=0.606, source=/goagent/plan/code_rules.md, content=# Code Rules for Go Project
+
+**Strict Coding Stand...
+2026/03/20 19:23:20   Result 1: score=0.584, source=/goagent/plan/code_rules.md, content=ective_go) and [Code Review Comments](https://gith...
+2026/03/20 19:23:20   Result 2: score=0.520, source=/goagent/plan/code_rules.md, content=ure optimization.
+
+- All code MUST pass `go vet`, ...
+2026/03/20 19:23:20   Result 3: score=0.520, source=/goagent/plan/code_rules.md, content=. Use `gofmt` / `goimports` exclusively.
 
 
-----
 
+## 2. ...
+2026/03/20 19:23:20   Result 4: score=0.490, source=/goagent/plan/code_rules.md, content= be meaningful, not just perfunctory assertions; t...
+2026/03/20 19:23:20   Result 5: score=0.488, source=/goagent/plan/code_rules.md, content=ion.
 
-混合检索是如何设计的呢？
-2026/03/19 14:41:48 Searching for: 混合检索是如何设计的呢？ (tenant: default)
-2026/03/19 14:41:48 INFO Checking embedding client client_nil=false enabled=true
-2026/03/19 14:41:48 INFO Checking embedding circuit breaker
-2026/03/19 14:41:48 INFO Getting embeddings for queries
-2026/03/19 14:41:48 INFO Embeddings obtained original_len=1024 rewritten_len=1024
-2026/03/19 14:41:48 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=5
-2026/03/19 14:41:48 INFO Vector search query vector_length=9726 vector_preview=[0.027615,-0.022419,0.029855,0.011216,-0.026503,0.038523,-0.051842,-0.010105,-0.022080,0.008727,0.04
-2026/03/19 14:41:48 INFO Vector search query succeeded
-2026/03/19 14:41:48 INFO Vector search completed rows_scanned=5 chunks_returned=5
-2026/03/19 14:41:48 INFO Vector search succeeded results_count=5
-2026/03/19 14:41:48 INFO Before score filter results_count=5 min_score=0.6
-2026/03/19 14:41:48 INFO Result before filter index=0 score=0.8510771013407791 content=" LLM生成答案\n```\n\n### 2. 语义搜索\n\n为应用添加智能语义搜索功能：\n\n```go\n/..."
-2026/03/19 14:41:48 INFO Result before filter index=1 score=0.8438935038472272 content=" queryEmbedding, tenantID, 10)\n```\n\n### 2. 多租户隔离\n\n..."
-2026/03/19 14:41:48 INFO Result before filter index=2 score=0.8273870533436413 content="# 示例文档 - GoAgent Storage模块\n\n## 概述\n\nGoAgent Storage..."
-2026/03/19 14:41:48 INFO Result before filter index=3 score=0.827012706917361 content="# 性能优化\n\n### 1. 索引优化\n\n确保关键字段有索引：\n\n```sql\nCREATE IND..."
-2026/03/19 14:41:48 INFO Result before filter index=4 score=0.8256451252199051 content="自动加密**: 自动加密敏感字段\n- **密钥轮换**: 支持定期轮换密钥\n\n## 架构设计\n\n##..."
-2026/03/19 14:41:48 INFO After score filter results_count=5
-2026/03/19 14:41:48 Search returned 5 results
-2026/03/19 14:41:48   Result 0: score=0.851, content= LLM生成答案
+- Race Conditions: Must pass go test -race l...
+2026/03/20 19:23:20   Result 6: score=0.483, source=/goagent/plan/code_rules.md, content=in, meaningless names, or single letters (except `...
+2026/03/20 19:23:20   Result 7: score=0.475, source=/goagent/plan/code_rules.md, content=github.com/gin-gonic/gin"
+
+"github.com/redis/go-re...
+2026/03/20 19:23:20   Result 8: score=0.470, source=./example.md, content= LLM生成答案
 ```
 
 ### 2. 语义搜索
@@ -43,224 +50,60 @@ go run main.go --save ./example.md
 
 ```go
 /...
-2026/03/19 14:41:48   Result 1: score=0.844, content= queryEmbedding, tenantID, 10)
-```
+2026/03/20 19:23:20   Result 9: score=0.468, source=/goagent/plan/code_rules.md, content=Key Takeaways
 
-### 2. 多租户隔离
+1. Naming, formatting, and comments...
 
-...
-2026/03/19 14:41:48   Result 2: score=0.827, content=# 示例文档 - GoAgent Storage模块
+Assistant:
+根据 Go 编码规范，以下是推荐的：
+
+1. 必须遵循 official Go standards：[Effective Go](https://go.dev/doc/effective_go) 和 [Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)。
+2. 必须使用 `gofmt` / `goimports` 才能使用（不推荐手动编写代码）。
+3. 包名必须遵循以下规则：小写，短， meaningful，不含下划线和 camelCase。
+4. 代码必须遵循以下语义搜索规则：[Document 9 - Score: 0.470] 
+5. 错误处理和并发性是关键关注点，必须严格按照标准来进行。
+
+这些是 Go 编码规范的基本要求。
+
+You: 那如何用go实现一个agent啊
+2026/03/20 19:23:41 RAG check: 那如何用go实现一个agent啊 -> needs RAG: true
+2026/03/20 19:23:41 Searching for: 那如何用go实现一个agent啊 (tenant: default)
+2026/03/20 19:23:41 INFO SimpleRetrievalService.Search tenant_id=default query=那如何用go实现一个agent啊 top_k=10 min_score=0.4
+2026/03/20 19:23:41 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/20 19:23:41 INFO Vector search query vector_length=9724 vector_preview=[0.046223,-0.032881,-0.009755,-0.046716,0.003195,-0.030394,-0.040222,0.077588,-0.035560,0.023215,-0.
+2026/03/20 19:23:41 INFO Vector search query succeeded
+2026/03/20 19:23:41 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/20 19:23:41 INFO Search completed results_count=10 min_score=0.4
+2026/03/20 19:23:41 Search returned 10 results
+2026/03/20 19:23:41   Result 0: score=0.703, source=./example.md, content=# 示例文档 - GoAgent Storage模块
 
 ## 概述
 
 GoAgent Storage...
-2026/03/19 14:41:48   Result 3: score=0.827, content=# 性能优化
+2026/03/20 19:23:41   Result 1: score=0.650, source=./example.md, content=**: 每个用户/项目使用独立租户
+- **验证访问**: 验证所有跨租户操作
+- **定期清理**...
+2026/03/20 19:23:41   Result 2: score=0.583, source=/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
+* 4. 覆盖全面...
+2026/03/20 19:23:41   Result 3: score=0.560, source=/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
+2026/03/20 19:23:41   Result 4: score=0.554, source=/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
 
-### 1. 索引优化
+# 一、笔记核心设计思路
 
-确保关键字段有索引：
+本笔记聚焦Agent系统开发...
+2026/03/20 19:23:41   Result 5: score=0.552, source=/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
 
-```sql
-CREATE IND...
-2026/03/19 14:41:48   Result 4: score=0.826, content=自动加密**: 自动加密敏感字段
-- **密钥轮换**: 支持定期轮换密钥
+## 场景4...
+2026/03/20 19:23:41   Result 6: score=0.543, source=/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
 
-## 架构设计
-
-##...
-
-Found 5 relevant results:
-
-[1] Score: 0.851
-Content:  LLM生成答案
-```
-
-### 2. 语义搜索
-
-为应用添加智能语义搜索功能：
-
-```go
-// 语义搜索
-results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
-
-// 混合搜索
-results := retrievalService.Search(ctx, req)
-```
-
-### 3. 推荐系统
-
-基于向量相似度的内容推荐：
-
-```go
-// 找到相似内容
-similarItems := kbRepo.SearchByVector(ctx, itemEmbedding, tenantID, 5)
-```
-
-### 4. 知识库管理
-
-构建企业知识库或文档管理系统：
-
-```go
-// 导入文档
-kb.ImportDocuments(ctx, tenantID, docPath)
-
-// 知识问答
-answer := kb.Chat(ctx, tenantID, question)
-```
-
-## 性能优化
-
-### 1. 索引优化
-
-确保关键字段有索引：
-
-```sql
-CREATE IND
-Source: document
-
-[2] Score: 0.844
-Content:  queryEmbedding, tenantID, 10)
-```
-
-### 2. 多租户隔离
-
-通过RLS（Row Level Security）和Tenant Guard实现严格的多租户数据隔离：
-
-- **自动隔离**: 所有操作自动应用租户过滤
-- **双重保护**: 数据库RLS + 应用层Tenant Guard
+#...
+2026/03/20 19:23:41   Result 7: score=0.530, source=./example.md, content=用层Tenant Guard
 - **安全验证**: 验证所有跨租户访问
 
 示例：
 ```go
-// 设置租户上下文
-tenantGuard.SetTenantContext(ctx, "tenant-001")
-
-// 后续所有操作自动隔离
-results := kbRepo.SearchByVector(ctx, embedding, "tenant-001", limit)
-```
-
-### 3. 混合检索
-
-结合向量检索和BM25全文检索，提高检索准确性：
-
-- **向量检索**: 基于语义相似度
-- **BM25检索**: 基于关键词匹配
-- **结果融合**: 使用RRF算法合并结果
-- **时间衰减**: 新知识优先
-
-示例：
-```go
-req := &SearchReque
-Source: document
-
-[3] Score: 0.827
-Content: # 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
-
-- **高维向量存储**: 支持1024维向量存储
-- **余弦相似度**: 使用余弦相似度进行向量检索
-- **批量操作**: 支持批量插入和检索
-- **索引优化**: 自动创建向量索引提高查询性能
-
-示例：
-```go
-// 创建知识块
-chunk := &KnowledgeChunk{
-    Content:   "这是知识内容",
-    Embedding: []float64{0.1, 0.2, ...}, // 1024维向量
-}
-
-// 向量检索
-results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
-```
-
-### 2. 多租户隔离
-
-
-Source: document
-
-[4] Score: 0.827
-Content: # 性能优化
-
-### 1. 索引优化
-
-确保关键字段有索引：
-
-```sql
-CREATE INDEX idx_tenant_id ON knowledge_chunks_1024(tenant_id);
-CREATE INDEX idx_document_id ON knowledge_chunks_1024(document_id);
-CREATE INDEX idx_embedding_status ON knowledge_chunks_1024(embedding_status);
-```
-
-### 2. 批量操作
-
-使用批量接口提高性能：
-
-```go
-// 批量插入
-kbRepo.CreateBatch(ctx, chunks)
-
-// 批量检索
-embeddings := embeddingClient.EmbedBatch(ctx, texts)
-```
-
-### 3. 连接池配置
-
-优化连接池参数：
-
-```go
-config := &postgres.Config{
-    MaxOpenConns:    25,
-    MaxIdleConns:    10
-Source: document
-
-[5] Score: 0.826
-Content: 自动加密**: 自动加密敏感字段
-- **密钥轮换**: 支持定期轮换密钥
-
-## 架构设计
-
-### 分层架构
-
-Storage模块采用清晰的分层架构：
-
-```
-应用层 (Application)
-    ↓
-服务层 (Services)
-    ↓
-数据访问层 (Repositories)
-    ↓
-核心层 (Core)
-    ↓
-PostgreSQL + pgvector
-```
-
-### 核心组件
-
-1. **Pool**: 数据库连接池管理
-2. **TenantGuard**: 租户隔离守卫
-3. **RetrievalGuard**: 检索限流熔断
-4. **Repository**: 统一数据访问接口
-5. **Service**: 业务逻辑服务
-
-## 使用场景
-
-### 1. RAG系统
-
-Storage模块非常适合构建RAG（Retrieval-Augmented Generation）系统：
-
-```
-用户问题 → 向量化 → 检索知识库 → 构建上下文 → LLM生成答案
+//...
+2026/03/20 19:23:41   Result 8: score=0.523, source=./example.md, content= LLM生成答案
 ```
 
 ### 2. 语义搜索
@@ -268,9 +111,79 @@ Storage模块非常适合构建RAG（Retrieval-Augmented Generation）系统：
 为应用添加智能语义搜索功能：
 
 ```go
+/...
+2026/03/20 19:23:41   Result 9: score=0.517, source=/goagent/plan/code_rules.md, content=ion.
 
----
+- Race Conditions: Must pass go test -race l...
 
- go run main.go --list
-2026/03/19 14:42:53 Documents:
-2026/03/19 14:42:53   - ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2, Source: ./example.md, Chunks: 7
+Assistant:
+根据提供的知识基础，GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统。要使用 Go 实现一个 agent，需要了解 Agent 系统的设计原则和高频问题+工程化解决方案。
+
+首先，需要遵循 Effective Go 和 Code Review Comments 的编码规范，并且必须使用 `gofmt` / `goimports` 来生成代码。同时，需要确保代码遵循语义搜索规则并且在处理错误和并发性时严格按照标准来进行。
+
+其次，需要了解 Agent 系统的核心场景解决方案，包括：
+
+1. 向量存储与检索
+2. 语义搜索
+3. 推荐系统
+
+这些场景解决方案可以帮助您实现高性能的向量存储和检索、智能语义搜索和推荐系统。
+
+最后，需要了解 Agent 系统设计的核心笔记，包括逻辑闭环、统一调度、优先级队列、降级策略等。这些知识可以帮助您快速掌握 Agent 系统设计的核心逻辑。
+
+综上所述，使用 Go 实
+
+You: 那agent 如何编排呢？
+2026/03/20 19:24:49 RAG check: 那agent 如何编排呢？ -> needs RAG: true
+2026/03/20 19:24:49 Searching for: 那agent 如何编排呢？ (tenant: default)
+2026/03/20 19:24:49 INFO SimpleRetrievalService.Search tenant_id=default query="那agent 如何编排呢？" top_k=10 min_score=0.4
+2026/03/20 19:24:50 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/20 19:24:50 INFO Vector search query vector_length=9737 vector_preview=[0.082122,-0.057224,-0.013397,-0.091196,-0.018454,-0.027128,0.017461,0.007869,0.006780,0.023059,-0.0
+2026/03/20 19:24:50 INFO Vector search query succeeded
+2026/03/20 19:24:50 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/20 19:24:50 INFO Search completed results_count=10 min_score=0.4
+2026/03/20 19:24:50 Search returned 10 results
+2026/03/20 19:24:50   Result 0: score=0.612, source=/Documents/agent/agent_design.md, content=| 统一调度、优先级队列、降级策略           | 资源管控 + 过载保护     |
+
+#...
+2026/03/20 19:24:50   Result 1: score=0.602, source=/Documents/agent/agent_design.md, content=坑点，便于快速回顾和复用；新增面试答题技巧，贴合转行求职需求，帮助突出个人优势；
+* 4. 覆盖全面...
+2026/03/20 19:24:50   Result 2: score=0.598, source=/Documents/agent/agent_design.md, content=oken预算控制：为每个Agent任务设置Token上限，避免大任务占用过多推理资源，超出预算则触发...
+2026/03/20 19:24:50   Result 3: score=0.584, source=/Documents/agent/agent_design.md, content=性需求）和“终止策略”的必要性（资源保护），体现系统设计的“灵活性”和“成本意识”。
+
+## 场景4...
+2026/03/20 19:24:50   Result 4: score=0.573, source=/Documents/agent/agent_design.md, content=# Agent系统设计核心笔记（完整版）
+
+# 一、笔记核心设计思路
+
+本笔记聚焦Agent系统开发...
+2026/03/20 19:24:50   Result 5: score=0.567, source=/Documents/agent/agent_design.md, content=明不同类型不满意的优化策略，最后提到“循环控制”和“长期闭环”，突出“以用户为中心”的工程设计，同时...
+2026/03/20 19:24:50   Result 6: score=0.545, source=/Documents/agent/agent_design.md, content=id绑定需精准：确保引用的知识库内容与事实陈述强关联，避免“虚假引用”；
+* 监督Agent轻量化：...
+2026/03/20 19:24:50   Result 7: score=0.528, source=/Documents/agent/agent_design.md, content=性。
+
+### 【面试答题技巧】
+
+先拆解幻觉的三大本质（推理/事实/理解偏差），再按“基础校验→核...
+2026/03/20 19:24:50   Result 8: score=0.520, source=/Documents/agent/agent_design.md, content=做摘要、意图结构化提取，减少Leader的上下文Token量，避免Token爆炸和决策混乱；
+* 4...
+2026/03/20 19:24:50   Result 9: score=0.516, source=/Documents/agent/agent_design.md, content=问题】
+
+用户需求存在隐性约束未被挖掘，或当前Agent能力无法匹配用户预期，持续优化已无法提升满意...
+
+Assistant:
+根据提供的知识基础，Agent系统编排主要关注以下几个方面：
+
+1.统一调度：使用合适的调度算法来确保所有任务按照优先顺序执行。
+2.优先级队列：按任务重要性和用户等级来设置优先级，高优先级任务优先执行。
+3.循环保险丝：监控资源使用率，并触发过载保护以限制新任务接入。
+4.过载降级策略：在过载时关闭非核心功能并触发终止策略以保护资源。
+
+这些机制可以帮助确保Agent系统的稳定性和性能，减少延迟和错误率。
+
+You: 那你还记得我的名字吗？ 我，小 明啊
+2026/03/20 19:26:14 RAG check: 那你还记得我的名字吗？ ，小明啊 -> needs RAG: false
+2026/03/20 19:26:15 Distillation threshold reached, triggering memory distillation...
+
+Assistant:
+对不起，我是一位新助手，目前我并没有存储任何信息或记忆，所以我完全是第一次与你相遇。希望我们可以从scratch开始，认识您！

@@ -20,6 +20,8 @@ import (
 	storage_models "goagent/internal/storage/postgres/models"
 	"goagent/internal/storage/postgres/repositories"
 	"goagent/internal/storage/postgres/services"
+	"goagent/internal/llm"
+	"goagent/internal/memory"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,6 +46,23 @@ type Config struct {
 	EmbeddingServiceURL string `yaml:"embedding_service_url"`
 	EmbeddingModel      string `yaml:"embedding_model"`
 
+	LLM struct {
+		Provider  string `yaml:"provider"`
+		APIKey    string `yaml:"api_key"`
+		BaseURL   string `yaml:"base_url"`
+		Model     string `yaml:"model"`
+		Timeout   int    `yaml:"timeout"`
+		MaxTokens int    `yaml:"max_tokens"`
+	} `yaml:"llm"`
+
+	Memory struct {
+		Enabled                 bool `yaml:"enabled"`
+		MaxHistory              int  `yaml:"max_history"`
+		MaxSessions             int  `yaml:"max_sessions"`
+		EnableDistillation      bool `yaml:"enable_distillation"`
+		DistillationThreshold   int  `yaml:"distillation_threshold"`
+	} `yaml:"memory"`
+
 	Knowledge struct {
 		ChunkSize    int     `yaml:"chunk_size"`
 		ChunkOverlap int     `yaml:"chunk_overlap"`
@@ -61,11 +80,15 @@ type Chunk struct {
 
 // KnowledgeBase simplified knowledge base interface
 type KnowledgeBase struct {
-	config    *Config
-	pool      *postgres.Pool
-	repo      *repositories.KnowledgeRepository
-	embedding *embedding.EmbeddingClient
-	retrieval *services.SimpleRetrievalService
+	config       *Config
+	pool         *postgres.Pool
+	repo         *repositories.KnowledgeRepository
+	embedding    *embedding.EmbeddingClient
+	llmClient    *llm.Client
+	retrieval    *services.SimpleRetrievalService
+	memory       memory.MemoryManager
+	sessionID    string
+	messageCount int
 }
 
 func main() {
@@ -204,12 +227,55 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 		},
 	)
 
+	// Create LLM client for RAG (optional, may be nil)
+	var llmClient *llm.Client
+	if config.LLM.Provider != "" && config.LLM.Model != "" {
+		llmConfig := &llm.Config{
+			Provider: config.LLM.Provider,
+			APIKey:   config.LLM.APIKey,
+			BaseURL:  config.LLM.BaseURL,
+			Model:    config.LLM.Model,
+			Timeout:  config.LLM.Timeout,
+		}
+		var err error
+		llmClient, err = llm.NewClient(llmConfig)
+		if err != nil {
+			log.Printf("Failed to create LLM client: %v, RAG will be disabled", err)
+			llmClient = nil
+		}
+	}
+
+	// Create memory manager for conversation history
+	var memManager memory.MemoryManager
+	if config.Memory.Enabled {
+		memConfig := &memory.MemoryConfig{
+			Enabled:        true,
+			Storage:        "memory",
+			MaxHistory:     config.Memory.MaxHistory,
+			MaxSessions:    config.Memory.MaxSessions,
+			SessionTTL:     24 * time.Hour,
+			TaskTTL:        7 * 24 * time.Hour,
+			VectorDim:      128,
+			EnablePostgres: false,
+		}
+		var err error
+		memManager, err = memory.NewMemoryManager(memConfig)
+		if err != nil {
+			log.Printf("Failed to create memory manager: %v", err)
+			memManager = nil
+		}
+	}
+
 	return &KnowledgeBase{
-		config:    config,
-		pool:      pool,
-		repo:      kbRepo,
-		embedding: embeddingClient,
-		retrieval: retrievalService,
+		config:       config,
+		pool:         pool,
+		repo:         kbRepo,
+		embedding:    embeddingClient,
+		llmClient:    llmClient,
+		retrieval:    retrievalService,
+		memory:       memManager,
+		sessionID:    "",
+		messageCount: 0,
 	}, nil
 }
 
@@ -310,6 +376,170 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 	return localResults, nil
 }
 
+// GenerateAnswer generates a response based on retrieved documents using LLM.
+// This implements the complete RAG pipeline: retrieve → generate → validate.
+// Args:
+// ctx - operation context.
+// tenantID - tenant identifier for isolation.
+// question - user question.
+// Returns generated answer or error if generation fails.
+func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question string) (string, error) {
+	// Step 0: Add user question to memory
+	if kb.memory != nil && kb.sessionID != "" {
+		_ = kb.memory.AddMessage(ctx, kb.sessionID, "user", question)
+	}
+
+	// Step 1: Determine if RAG is needed using LLM
+	needsRAG := true
+	if kb.llmClient != nil {
+		ragPrompt := fmt.Sprintf(`You are a knowledge retrieval assistant. Determine if the following question requires searching the knowledge base.
+
+Question: %s
+
+Answer with "YES" if this question needs knowledge base search:
+- Asking about specific documentation, code rules, technical specifications
+- Questions about facts, procedures, configurations
+- Technical queries about code, systems, or frameworks
+
+Answer with "NO" if this is general conversation:
+- Greetings (hello, hi, 你好)
+- Personal introductions (my name is..., 我叫...)
+- General chat (how are you, 谢谢)
+- Questions about personal information (what's your name, 还记得我的名字吗)
+
+Answer (YES/NO only):`, question)
+
+		ragCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ragResponse, err := kb.llmClient.Generate(ragCtx, ragPrompt)
+		cancel()
+
+		if err == nil {
+			needsRAG = strings.Contains(strings.ToUpper(ragResponse), "YES")
+			log.Printf("RAG check: %s -> needs RAG: %v", question, needsRAG)
+		}
+	}
+
+	var answer string
+	if needsRAG {
+		// Step 2: Retrieve relevant documents
+		results, err := kb.Search(ctx, tenantID, question)
+		if err != nil {
+			return "", fmt.Errorf("retrieve documents: %w", err)
+		}
+
+		// If no documents found, inform user
+		if len(results) == 0 {
+			answer = "No relevant information found in the knowledge base. Please try rephrasing your question."
+		} else {
+			// Step 3: Build context from retrieved documents
+			var contextBuilder strings.Builder
+			for i, result := range results {
+				contextBuilder.WriteString(fmt.Sprintf("[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content))
+			}
+
+			// Step 4: Build conversation history context
+			var historyContext strings.Builder
+			if kb.memory != nil && kb.sessionID != "" {
+				messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+				if err == nil && len(messages) > 0 {
+					// Get last 5 messages for context
+					start := len(messages) - 5
+					if start < 0 {
+						start = 0
+					}
+					for _, msg := range messages[start:] {
+						historyContext.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
+					}
+				}
+			}
+
+			// Step 5: Generate answer with LLM
+			if kb.llmClient != nil {
+				prompt := fmt.Sprintf(`You are a helpful assistant that answers questions based on the provided knowledge base and conversation history.
+
+User Question: %s
+
+Conversation History:
+%s
+
+Knowledge Base Context:
+%s
+
+CRITICAL INSTRUCTIONS:
+1. Answer the user's question based ONLY on the provided knowledge base context.
+2. If the user's question contains INCORRECT ASSUMPTIONS or MISUNDERSTANDINGS, POLITELY CORRECT them with FACTS from the context.
+3. DO NOT simply agree with the user if they are wrong - use facts to correct them.
+4. DO NOT make up information that is not in the context.
+5. If the context doesn't contain the answer, say "I don't have enough information to answer this question."
+6. Be concise and direct.
+7. Cite the relevant document numbers (e.g., [Document 1]) when using information from specific documents.
+
+Answer:`, question, historyContext.String(), contextBuilder.String())
+
+				// Call LLM with timeout
+				genCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+				var genErr error
+				answer, genErr = kb.llmClient.Generate(genCtx, prompt)
+				cancel()
+
+				if genErr != nil {
+					log.Printf("LLM generation failed: %v, falling back to raw results", genErr)
+					// Fall back to showing raw results if LLM fails
+					answer = kb.formatRawResults(results)
+				}
+			} else {
+				// Step 6: If LLM client is not available, format raw results
+				answer = kb.formatRawResults(results)
+			}
+		}
+	} else {
+		// General conversation without RAG
+		if kb.llmClient != nil {
+			prompt := fmt.Sprintf(`You are a helpful assistant. Respond to the user's question naturally.
+
+User: %s
+
+Assistant:`, question)
+
+			genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			var genErr error
+			answer, genErr = kb.llmClient.Generate(genCtx, prompt)
+			cancel()
+
+			if genErr != nil {
+				answer = "I'm sorry, I'm having trouble generating a response right now. Please try again."
+			}
+		} else {
+			answer = "LLM not configured. Please configure the llm section in config.yaml."
+		}
+	}
+
+	// Step 7: Add assistant answer to memory
+	if kb.memory != nil && kb.sessionID != "" {
+		_ = kb.memory.AddMessage(ctx, kb.sessionID, "assistant", answer)
+
+		// Step 8: Check for distillation threshold
+		kb.messageCount++
+		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
+			log.Printf("Distillation threshold reached, triggering memory distillation...")
+			kb.messageCount = 0
+		}
+	}
+
+	return answer, nil
+}
+
+// formatRawResults formats search results for display when LLM is not available.
+func (kb *KnowledgeBase) formatRawResults(results []*SearchResult) string {
+	var output strings.Builder
+	output.WriteString(fmt.Sprintf("Found %d relevant documents:\n\n", len(results)))
+	for i, result := range results {
+		output.WriteString(fmt.Sprintf("[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content))
+	}
+	output.WriteString("Please configure LLM settings in config.yaml to enable natural language answers.")
+	return output.String()
+}
+
 // truncateString truncate string for log output
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -375,9 +605,36 @@ func (kb *KnowledgeBase) DeleteDocument(ctx context.Context, tenantID, documentI
 	return nil
 }
 
-// StartChat start interactive Q&A
+// StartChat start interactive Q&A with RAG and memory
 func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 	scanner := NewTextScanner()
+
+	// Check if LLM is configured
+	llmEnabled := kb.llmClient != nil && kb.llmClient.IsEnabled()
+	if llmEnabled {
+		log.Println("LLM enabled - Using RAG (Retrieval + Generation) mode")
+	} else {
+		log.Println("LLM not configured - Using retrieval-only mode")
+		log.Println("To enable LLM answers, configure llm section in config.yaml")
+	}
+
+	// Check if memory is enabled
+	memoryEnabled := kb.memory != nil
+	if memoryEnabled {
+		log.Println("Memory enabled - Conversation history and distillation supported")
+		// Start memory manager
+		if err := kb.memory.Start(ctx); err != nil {
+			log.Printf("Failed to start memory manager: %v", err)
+		}
+		// Create session
+		sessionID, err := kb.memory.CreateSession(ctx, tenantID)
+		if err != nil {
+			log.Printf("Failed to create session: %v", err)
+		} else {
+			kb.sessionID = sessionID
+			log.Printf("Session created: %s", sessionID)
+		}
+	}
 
 	for {
 		fmt.Print("\nYou: ")
@@ -401,37 +658,41 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 			break
 		}
 
-		// Set timeout for each retrieval operation (30 seconds)
-		searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		results, err := kb.Search(searchCtx, tenantID, question)
+		// Set timeout for each RAG operation (120 seconds)
+		ragCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+		answer, err := kb.GenerateAnswer(ragCtx, tenantID, question)
 		cancel()
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Println("Search timeout. Please try again.")
+				log.Println("Response timeout. Please try again.")
 			} else {
-				log.Printf("Search failed: %v", err)
+				log.Printf("Failed to generate answer: %v", err)
 			}
 			continue
 		}
 
-		// Display results
-		fmt.Printf("\nFound %d relevant results:\n", len(results))
-		for i, result := range results {
-			fmt.Printf("\n[%d] Score: %.3f\n", i+1, result.Score)
-			fmt.Printf("Content: %s\n", result.Content)
-			fmt.Printf("Source: %s\n", result.Source)
-		}
+		// Display generated answer
+		fmt.Printf("\nAssistant:\n%s\n", answer)
+	}
 
-		// If no results
-		if len(results) == 0 {
-			fmt.Println("No relevant information found in the knowledge base.")
+	// Cleanup: stop memory manager
+	if memoryEnabled && kb.memory != nil {
+		if err := kb.memory.Stop(ctx); err != nil {
+			log.Printf("Failed to stop memory manager: %v", err)
 		}
 	}
 }
 
 // Close close connection
 func (kb *KnowledgeBase) Close() error {
+	// Stop memory manager if running
+	if kb.memory != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = kb.memory.Stop(ctx)
+	}
+	// Close database connection
 	return kb.pool.Close()
 }
 
@@ -509,6 +770,30 @@ func setDefaults(config *Config) {
 	}
 	if config.EmbeddingModel == "" {
 		config.EmbeddingModel = "e5-large-v2"
+	}
+	if config.LLM.Provider == "" {
+		config.LLM.Provider = "openrouter"
+	}
+	if config.LLM.BaseURL == "" {
+		config.LLM.BaseURL = "https://openrouter.ai/api/v1"
+	}
+	if config.LLM.Model == "" {
+		config.LLM.Model = "meta-llama/llama-3.1-8b-instruct"
+	}
+	if config.LLM.Timeout == 0 {
+		config.LLM.Timeout = 60
+	}
+	if config.LLM.MaxTokens == 0 {
+		config.LLM.MaxTokens = 2048
+	}
+	if config.Memory.MaxHistory == 0 {
+		config.Memory.MaxHistory = 10
+	}
+	if config.Memory.MaxSessions == 0 {
+		config.Memory.MaxSessions = 100
+	}
+	if config.Memory.DistillationThreshold == 0 {
+		config.Memory.DistillationThreshold = 5
 	}
 	if config.Knowledge.ChunkSize == 0 {
 		config.Knowledge.ChunkSize = 1000
