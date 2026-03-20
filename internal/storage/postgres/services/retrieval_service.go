@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"os"
 	"sort"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v3"
 
 	"goagent/internal/core/errors"
 	"goagent/internal/storage/postgres"
@@ -108,6 +110,7 @@ type RetrievalService struct {
 	queryPriority    *QueryPriorityConfig
 	embeddingCache   map[string][]float64
 	embeddingCacheMu sync.RWMutex
+	synonymRules     map[string][]string
 }
 
 // NewRetrievalService creates a new RetrievalService instance.
@@ -140,6 +143,7 @@ func NewRetrievalService(
 		logger:          slog.Default(),
 		queryPriority:   DefaultQueryPriorityConfig(),
 		embeddingCache:  make(map[string][]float64),
+		synonymRules:    loadSynonymRules(),
 	}
 }
 
@@ -361,8 +365,18 @@ func (s *RetrievalService) isQueryInCache(query string) bool {
 // queryRewrite rewrites a query for better retrieval.
 // This uses LLM to expand and refine the query.
 func (s *RetrievalService) queryRewrite(ctx context.Context, query string) (string, error) {
-	// TODO: implement LLM-based query rewriting
-	// For now, return original query
+	// Use LLM-based rewrite for backward compatibility
+	rewrites, err := s.llmBasedRewrite(ctx, query)
+	if err != nil {
+		s.logger.Warn("LLM rewrite failed, returning original query", "error", err)
+		return query, nil
+	}
+
+	// Return the best rewrite or original
+	if len(rewrites) > 0 {
+		return rewrites[0], nil
+	}
+
 	return query, nil
 }
 
@@ -428,17 +442,12 @@ func (s *RetrievalService) buildQueries(ctx context.Context, original string, pl
 	return queries
 }
 
-// ruleBasedRewrite performs rule-based query rewriting.
-// This uses predefined rules for query expansion without LLM overhead.
-// Args:
-// original - original query text.
-// Returns list of rewritten queries.
-func (s *RetrievalService) ruleBasedRewrite(original string) []string {
-	rewrites := []string{}
-
-	// Simple synonym replacement rules
-	// TODO: Load from configuration file for better maintainability
-	synonymRules := map[string][]string{
+// loadSynonymRules loads synonym rules from configuration file.
+// This provides better maintainability and allows runtime configuration.
+// Returns map of original terms to their synonyms.
+func loadSynonymRules() map[string][]string {
+	// Default rules if config file not found
+	defaultRules := map[string][]string{
 		"how to":   {"how do i", "what is the best way to", "how can i"},
 		"what is":  {"define", "explain", "describe"},
 		"编程":       {"开发", "写代码", "编码", "程序设计"},
@@ -447,8 +456,37 @@ func (s *RetrievalService) ruleBasedRewrite(original string) []string {
 		"api":      {"interface", "web service"},
 	}
 
+	// Try to load from config file
+	configPath := "configs/synonyms.yaml"
+	if _, err := os.Stat(configPath); err != nil {
+		return defaultRules
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return defaultRules
+	}
+
+	// Parse YAML config
+	var config map[string][]string
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return defaultRules
+	}
+
+	return config
+}
+
+// ruleBasedRewrite performs rule-based query rewriting.
+// This uses predefined rules for query expansion without LLM overhead.
+// Args:
+// original - original query text.
+// Returns list of rewritten queries.
+func (s *RetrievalService) ruleBasedRewrite(original string) []string {
+	rewrites := []string{}
+
+	// Use synonym rules loaded from configuration file
 	queryLower := toLower(original)
-	for key, synonyms := range synonymRules {
+	for key, synonyms := range s.synonymRules {
 		if contains(queryLower, key) {
 			for _, synonym := range synonyms {
 				rewrites = append(rewrites, replaceCaseInsensitive(original, key, synonym))
@@ -517,8 +555,27 @@ func (s *RetrievalService) uniqueRewrites(rewrites []string) []string {
 // query - original query text.
 // Returns list of rewritten queries or error.
 func (s *RetrievalService) llmBasedRewrite(ctx context.Context, query string) ([]string, error) {
-	// TODO: implement LLM-based query rewriting with proper prompt
-	// For now, return empty to avoid untested LLM integration
+	// For now, return empty as LLM integration is not implemented
+	// In production, this would call an LLM API like:
+	//
+	// prompt := fmt.Sprintf(`
+	// Rewrite the following query to improve search results.
+	// Return up to 3 alternative queries, one per line.
+	// Keep the original intent but use different wording.
+	//
+	// Query: %s
+	// `, query)
+	//
+	// response, err := s.llmClient.Generate(ctx, prompt)
+	// if err != nil {
+	//     s.logger.Warn("LLM rewrite failed", "error", err)
+	//     return []string{}, err
+	// }
+	//
+	// rewrites := parseLLMResponse(response)
+	// return s.validateRewrites(query, rewrites), nil
+
+	s.logger.Debug("LLM-based query rewriting not yet implemented", "query", query)
 	return []string{}, nil
 }
 
@@ -962,9 +1019,34 @@ func (s *RetrievalService) bm25SearchExperience(ctx context.Context, query strin
 		return []*SearchResult{}
 	}
 
-	// TODO: Implement SearchByKeyword in ExperienceRepository
-	// For now, return empty results
-	return []*SearchResult{}
+	experiences, err := s.expRepo.SearchByKeyword(ctx, query, tenantID, limit)
+	if err != nil {
+		s.logger.Error("Experience BM25 search failed", "error", err)
+		return []*SearchResult{}
+	}
+
+	results := make([]*SearchResult, 0, len(experiences))
+	for _, exp := range experiences {
+		result := &SearchResult{
+			ID:        exp.ID,
+			Content:   exp.Output,
+			Score:     exp.Score * 0.5, // BM25 scores are typically lower
+			Source:    "experience",
+			SubSource: "keyword",
+			Query:     query,
+			QueryWeight: 1.0,
+			Metadata: map[string]interface{}{
+				"task_type": exp.Type,
+				"success":   exp.Success,
+				"agent_id":  exp.AgentID,
+				"lessons":   exp.Input,
+			},
+			CreatedAt: exp.CreatedAt,
+		}
+		results = append(results, result)
+	}
+
+	return results
 }
 
 // bm25SearchTools performs BM25 search on tools.

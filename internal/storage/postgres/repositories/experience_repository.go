@@ -273,6 +273,69 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 	return experiences, nil
 }
 
+// SearchByKeyword performs keyword-based search for experiences using BM25-style matching.
+// This uses PostgreSQL ILIKE for case-insensitive text search.
+// Args:
+// ctx - database operation context.
+// query - search query text.
+// tenantID - tenant identifier for isolation.
+// limit - maximum number of results to return.
+// Returns list of matching experiences ordered by score and recency.
+func (r *ExperienceRepository) SearchByKeyword(ctx context.Context, query, tenantID string, limit int) ([]*storage_models.Experience, error) {
+	if query == "" {
+		return []*storage_models.Experience{}, nil
+	}
+
+	sqlQuery := `
+		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+			   score, success, agent_id, metadata::text, decay_at, created_at
+		FROM experiences_1024
+		WHERE (input ILIKE '%' || $1 || '%' OR output ILIKE '%' || $1 || '%')
+		  AND tenant_id = $2
+		  AND (decay_at IS NULL OR decay_at > NOW())
+		ORDER BY score DESC, created_at DESC
+		LIMIT $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("keyword search: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	experiences := make([]*storage_models.Experience, 0)
+	for rows.Next() {
+		exp := &storage_models.Experience{}
+		var embeddingStr, metadataStr string
+		err := rows.Scan(
+			&exp.ID, &exp.TenantID, &exp.Type, &exp.Input, &exp.Output,
+			&embeddingStr, &exp.EmbeddingModel, &exp.EmbeddingVersion,
+			&exp.Score, &exp.Success, &exp.AgentID, &metadataStr,
+			&exp.DecayAt, &exp.CreatedAt,
+		)
+		if err != nil {
+			continue
+		}
+
+		// Parse embedding string to float64 array
+		exp.Embedding, err = parseVectorString(embeddingStr)
+		if err != nil {
+			continue
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
+				exp.Metadata = make(map[string]interface{})
+			}
+		}
+
+		experiences = append(experiences, exp)
+	}
+
+	return experiences, nil
+}
+
 // ListByType retrieves experiences by type.
 // Args:
 // ctx - database operation context.

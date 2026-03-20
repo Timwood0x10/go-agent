@@ -359,7 +359,11 @@ func TestGetEmbedding_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create retrieval service
 	pool := createTestPool(db)
@@ -389,7 +393,11 @@ func TestFilterByScore_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create retrieval service
 	pool := createTestPool(db)
@@ -433,7 +441,11 @@ func TestCalculateTimeDecay_Integration(t *testing.T) {
 	}
 
 	db := getTestDB(t)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Fatal("Failed to close test database: ", err)
+		}
+	}()
 
 	// Create retrieval service
 	pool := createTestPool(db)
