@@ -327,6 +327,8 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 		if tool.Metadata == nil {
 			tool.Metadata = make(map[string]interface{})
 		}
+		// SQL query already computes similarity as: 1 - cosine_distance
+		// where cosine_distance range is [0,2], so similarity range is [-1,1]
 		tool.Metadata["similarity"] = similarity
 		tools = append(tools, tool)
 	}

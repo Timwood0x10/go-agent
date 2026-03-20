@@ -266,6 +266,8 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 		if exp.Metadata == nil {
 			exp.Metadata = make(map[string]interface{})
 		}
+		// SQL query already computes similarity as: 1 - cosine_distance
+		// where cosine_distance range is [0,2], so similarity range is [-1,1]
 		exp.Metadata["similarity"] = similarity
 		experiences = append(experiences, exp)
 	}

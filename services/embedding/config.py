@@ -12,7 +12,7 @@ class Config:
     """Configuration for embedding service."""
     
     # Model configuration
-    MODEL_NAME: str = os.getenv("MODEL_NAME", "intfloat/e5-large")
+    MODEL_NAME: str = os.getenv("MODEL_NAME", "qwen3-embedding:0.6b")
     EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "1024"))
     BATCH_SIZE: int = int(os.getenv("BATCH_SIZE", "32"))
     MAX_LENGTH: int = int(os.getenv("MAX_LENGTH", "512"))

@@ -34,6 +34,7 @@ func NewKnowledgeRepository(db postgres.DBTX, dbPool *sql.DB) *KnowledgeReposito
 }
 
 // float64ToVectorString converts []float64 to pgvector format string.
+// Uses %.6f format to limit decimal places to 6 for compact representation.
 func float64ToVectorString(vec []float64) string {
 	if len(vec) == 0 {
 		return "[]"
@@ -41,7 +42,7 @@ func float64ToVectorString(vec []float64) string {
 
 	strs := make([]string, len(vec))
 	for i, v := range vec {
-		strs[i] = fmt.Sprintf("%f", v)
+		strs[i] = fmt.Sprintf("%.6f", v)
 	}
 	return "[" + strings.Join(strs, ",") + "]"
 }
@@ -106,43 +107,88 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.
 	var query string
 	var args []interface{}
 
+	// Check if CreatedAt and UpdatedAt are zero values (0001-01-01)
+	// If zero, use NOW() from database instead
+	createdAtIsZero := chunk.CreatedAt.IsZero()
+	updatedAtIsZero := chunk.UpdatedAt.IsZero()
+
 	if embeddingStr == nil {
-		query = `
-			INSERT INTO knowledge_chunks_1024
-			(tenant_id, content, embedding, embedding_model, embedding_version,
-			 embedding_status, source_type, source, metadata, document_id,
-			 chunk_index, content_hash, access_count, created_at, updated_at)
-			VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-			ON CONFLICT (content_hash) DO UPDATE SET
-				access_count = knowledge_chunks_1024.access_count + 1,
-				updated_at = NOW()
-			RETURNING id
-		`
-		args = []interface{}{
-			chunk.TenantID, chunk.Content,
-			chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
-			chunk.SourceType, chunk.Source, metadataJSON, documentID,
-			chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
-			chunk.CreatedAt, chunk.UpdatedAt,
+		if createdAtIsZero && updatedAtIsZero {
+			query = `
+				INSERT INTO knowledge_chunks_1024
+				(tenant_id, content, embedding, embedding_model, embedding_version,
+				 embedding_status, source_type, source, metadata, document_id,
+				 chunk_index, content_hash, access_count, created_at, updated_at)
+				VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+				ON CONFLICT (content_hash) DO UPDATE SET
+					access_count = knowledge_chunks_1024.access_count + 1,
+					updated_at = NOW()
+				RETURNING id
+			`
+			args = []interface{}{
+				chunk.TenantID, chunk.Content,
+				chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+				chunk.SourceType, chunk.Source, metadataJSON, documentID,
+				chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+			}
+		} else {
+			query = `
+				INSERT INTO knowledge_chunks_1024
+				(tenant_id, content, embedding, embedding_model, embedding_version,
+				 embedding_status, source_type, source, metadata, document_id,
+				 chunk_index, content_hash, access_count, created_at, updated_at)
+				VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+				ON CONFLICT (content_hash) DO UPDATE SET
+					access_count = knowledge_chunks_1024.access_count + 1,
+					updated_at = NOW()
+				RETURNING id
+			`
+			args = []interface{}{
+				chunk.TenantID, chunk.Content,
+				chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+				chunk.SourceType, chunk.Source, metadataJSON, documentID,
+				chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+				chunk.CreatedAt, chunk.UpdatedAt,
+			}
 		}
 	} else {
-		query = `
-			INSERT INTO knowledge_chunks_1024
-			(tenant_id, content, embedding, embedding_model, embedding_version,
-			 embedding_status, source_type, source, metadata, document_id,
-			 chunk_index, content_hash, access_count, created_at, updated_at)
-			VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-			ON CONFLICT (content_hash) DO UPDATE SET
-				access_count = knowledge_chunks_1024.access_count + 1,
-				updated_at = NOW()
-			RETURNING id
-		`
-		args = []interface{}{
-			chunk.TenantID, chunk.Content, embeddingStr,
-			chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
-			chunk.SourceType, chunk.Source, metadataJSON, documentID,
-			chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
-			chunk.CreatedAt, chunk.UpdatedAt,
+		if createdAtIsZero && updatedAtIsZero {
+			query = `
+				INSERT INTO knowledge_chunks_1024
+				(tenant_id, content, embedding, embedding_model, embedding_version,
+				 embedding_status, source_type, source, metadata, document_id,
+				 chunk_index, content_hash, access_count, created_at, updated_at)
+				VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+				ON CONFLICT (content_hash) DO UPDATE SET
+					access_count = knowledge_chunks_1024.access_count + 1,
+					updated_at = NOW()
+				RETURNING id
+			`
+			args = []interface{}{
+				chunk.TenantID, chunk.Content, embeddingStr,
+				chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+				chunk.SourceType, chunk.Source, metadataJSON, documentID,
+				chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+			}
+		} else {
+			query = `
+				INSERT INTO knowledge_chunks_1024
+				(tenant_id, content, embedding, embedding_model, embedding_version,
+				 embedding_status, source_type, source, metadata, document_id,
+				 chunk_index, content_hash, access_count, created_at, updated_at)
+				VALUES ($1, $2, $3::vector, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+				ON CONFLICT (content_hash) DO UPDATE SET
+					access_count = knowledge_chunks_1024.access_count + 1,
+					updated_at = NOW()
+				RETURNING id
+			`
+			args = []interface{}{
+				chunk.TenantID, chunk.Content, embeddingStr,
+				chunk.EmbeddingModel, chunk.EmbeddingVersion, chunk.EmbeddingStatus,
+				chunk.SourceType, chunk.Source, metadataJSON, documentID,
+				chunk.ChunkIndex, chunk.ContentHash, chunk.AccessCount,
+				chunk.CreatedAt, chunk.UpdatedAt,
+			}
 		}
 	}
 
@@ -455,6 +501,8 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 		}
 
 		// Store similarity in metadata for downstream processing
+		// SQL query already computes similarity as: 1 - cosine_distance
+		// where cosine_distance range is [0,2], so similarity range is [-1,1]
 		if chunk.Metadata == nil {
 			chunk.Metadata = make(map[string]interface{})
 		}

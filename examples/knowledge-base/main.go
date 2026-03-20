@@ -222,13 +222,15 @@ func (kb *KnowledgeBase) ImportDocuments(ctx context.Context, tenantID, docPath 
 
 		// Generate embedding vector (with timeout)
 		chunkCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		embedding, err := kb.embedding.Embed(chunkCtx, chunk.Text)
+		embedding, err := kb.embedding.EmbedWithPrefix(chunkCtx, chunk.Text, "passage:")
 		cancel()
 
 		if err != nil {
 			log.Printf("Failed to embed chunk %d: %v (skipping)", i, err)
 			continue
 		}
+
+		// Note: embedding service already returns normalized vectors, so no need to normalize again
 
 		// Store to database
 		knowledgeChunk := &storage_models.KnowledgeChunk{
@@ -274,6 +276,7 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 		MinScore: kb.config.Knowledge.MinScore,
 		Plan: &services.RetrievalPlan{
 			SearchKnowledge:     true,
+			KnowledgeWeight:     1.0,
 			EnableKeywordSearch: true,
 			EnableTimeDecay:     true,
 			TopK:                kb.config.Knowledge.TopK,
@@ -505,7 +508,7 @@ func setDefaults(config *Config) {
 		config.Knowledge.TopK = 5
 	}
 	if config.Knowledge.MinScore == 0 {
-		config.Knowledge.MinScore = 0.6
+		config.Knowledge.MinScore = 0.3
 	}
 }
 

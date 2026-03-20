@@ -308,6 +308,7 @@ func (s *RetrievalService) getEmbedding(ctx context.Context, query string) []flo
 		return nil
 	}
 
+	// Note: embedding service already returns normalized vectors, so no need to normalize again
 	return embedding
 }
 
@@ -892,7 +893,7 @@ func (s *RetrievalService) searchKnowledgeVector(ctx context.Context, embedding 
 		result := &SearchResult{
 			ID:        chunk.ID,
 			Content:   chunk.Content,
-			Source:    chunk.SourceType,
+			Source:    "knowledge",
 			SubSource: "vector",
 			Type:      "knowledge",
 			Metadata:  chunk.Metadata,
@@ -1057,7 +1058,7 @@ func (s *RetrievalService) bm25SearchKnowledge(ctx context.Context, query string
 		result := &SearchResult{
 			ID:        chunk.ID,
 			Content:   chunk.Content,
-			Source:    chunk.SourceType,
+			Source:    "knowledge",
 			SubSource: "keyword",
 			Type:      "knowledge",
 			Metadata:  chunk.Metadata,

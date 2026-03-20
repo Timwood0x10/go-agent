@@ -333,6 +333,8 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 		}
 
 		// Store similarity in metadata
+		// SQL query already computes similarity as: 1 - cosine_distance
+		// where cosine_distance range is [0,2], so similarity range is [-1,1]
 		result.Metadata["similarity"] = similarity
 		results = append(results, result)
 	}

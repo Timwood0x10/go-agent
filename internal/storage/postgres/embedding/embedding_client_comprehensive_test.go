@@ -175,7 +175,7 @@ func TestEmbeddingClient_Embed_WithMockServer(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "test text", reqBody["text"])
-		assert.Equal(t, "query", reqBody["prefix"])
+		assert.Equal(t, "query:", reqBody["prefix"])  // Updated: e5-large-v2 uses "query:" prefix
 
 		// Return mock embedding
 		embedding := make([]float64, 1024)

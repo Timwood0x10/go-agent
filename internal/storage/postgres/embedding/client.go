@@ -71,8 +71,24 @@ func NewEmbeddingClient(baseURL, model string, redisClient RedisClient, timeout 
 
 }
 
-// Embed generates a vector embedding for the given text.
+// Embed generates vector embedding for a query text (uses "query" prefix).
+// For document storage, use EmbedWithPrefix with "passage:" prefix.
+// Args:
+// ctx - operation context.
+// text - text to embed.
+// Returns embedding vector or error.
 func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float64, error) {
+	return c.EmbedWithPrefix(ctx, text, "query:")
+}
+
+// EmbedWithPrefix generates vector embedding with custom prefix.
+// Use "query:" for search queries and "passage:" for document storage.
+// Args:
+// ctx - operation context.
+// text - text to embed.
+// prefix - prefix to add before text (e.g., "query:", "passage:").
+// Returns embedding vector or error.
+func (c *EmbeddingClient) EmbedWithPrefix(ctx context.Context, text, prefix string) ([]float64, error) {
 	if !c.enabled {
 		return nil, fmt.Errorf("embedding client is disabled")
 	}
@@ -81,7 +97,7 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float64, er
 	normalizedText := c.normalizeText(text)
 
 	// Generate cache key
-	cacheKey := c.getCacheKey(normalizedText, "query")
+	cacheKey := c.getCacheKey(normalizedText, prefix)
 
 	// Try to get from Redis cache
 	if c.redis != nil {
@@ -94,8 +110,8 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float64, er
 		}
 	}
 
-	// Call embedding service
-	embedding, err := c.callEmbeddingService(ctx, normalizedText, "query")
+	// Call embedding service with specified prefix
+	embedding, err := c.callEmbeddingService(ctx, normalizedText, prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +221,8 @@ func (c *EmbeddingClient) getCacheKey(text, method string) string {
 	normalized := c.normalizeText(text)
 
 	// Combine multiple factors for unique key
-	keyData := fmt.Sprintf("%s|%s|%s|%s", normalized, c.model, method, "query")
+	// method is the prefix (e.g., "query:" or "passage:")
+	keyData := fmt.Sprintf("%s|%s|%s", normalized, c.model, method)
 
 	// Use BLAKE2b-256 and truncate to 128 bits for security and performance
 	hash := blake2b.Sum256([]byte(keyData))

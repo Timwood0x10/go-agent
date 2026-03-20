@@ -9,6 +9,7 @@ import hashlib
 import unicodedata
 import re
 import requests
+import numpy as np
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -47,12 +48,12 @@ BACKEND_TYPE = os.getenv("BACKEND_TYPE", "ollama")  # "ollama" or "transformers"
 
 # Ollama configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "hf.co/ChristianAzinn/e5-large-v2-gguf:Q8_0")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3-embedding:0.6b")
 
 # Global variables
 model = None
 redis_client = None
-MODEL_NAME = os.getenv("MODEL_NAME", "e5-large-v2")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen3-embedding:0.6b")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CACHE_TTL = int(os.getenv("CACHE_TTL", "86400"))  # 24 hours
@@ -242,6 +243,8 @@ async def embed(request: EmbedRequest):
     # Generate embedding based on backend type
     if BACKEND_TYPE == "ollama":
         embedding = model.embed(text_with_prefix)
+        # Normalize to unit vector for accurate cosine similarity
+        embedding = normalize_vector(embedding)
     else:
         # sentence-transformers backend
         embedding = model.encode(text_with_prefix).tolist()
@@ -291,6 +294,8 @@ async def embed_batch(request: BatchEmbedRequest):
     # Generate embeddings based on backend type
     if BACKEND_TYPE == "ollama":
         embeddings = model.embed_batch(texts_with_prefix)
+        # Normalize all vectors to unit length
+        embeddings = [normalize_vector(e) for e in embeddings]
     else:
         # sentence-transformers backend
         embeddings = model.encode(texts_with_prefix).tolist()
@@ -319,6 +324,18 @@ async def embed_batch(request: BatchEmbedRequest):
         dimension=len(embeddings[0]) if embeddings else 0,
         cached_count=cached_count
     )
+
+
+def normalize_vector(vec: list) -> list:
+    """
+    Normalize vector to unit length for accurate cosine similarity.
+    Ollama does not guarantee returned vectors are unit vectors.
+    """
+    arr = np.array(vec, dtype=np.float64)
+    norm = np.linalg.norm(arr)
+    if norm > 0:
+        arr = arr / norm
+    return arr.tolist()
 
 
 def normalize_text(text: str) -> str:
