@@ -34,6 +34,16 @@ type EmbeddingClient struct {
 	enabled bool
 }
 
+// GetModel returns the embedding model name.
+func (c *EmbeddingClient) GetModel() string {
+	return c.model
+}
+
+// GetTimeout returns the embedding timeout.
+func (c *EmbeddingClient) GetTimeout() time.Duration {
+	return c.timeout
+}
+
 // NewEmbeddingClient creates a new embedding client.
 
 // redisClient is optional. If nil, the client will work without Redis.

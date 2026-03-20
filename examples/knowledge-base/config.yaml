@@ -9,7 +9,7 @@ embedding_service_url: http://localhost:8000
 embedding_model: qwen3-embedding:0.6b
 
 knowledge:
-  chunk_size: 500
+  chunk_size: 200
   chunk_overlap: 50
   top_k: 10
   min_score: 0.4
