@@ -591,6 +591,7 @@ func TestConversationRepository_CleanupExpired_NoExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, conv.ID, retrieved.ID)
 }
+
 // TestConversationRepository_UpdateExpiresAt tests updating expiration time.
 func TestConversationRepository_UpdateExpiresAt(t *testing.T) {
 	if testing.Short() {
@@ -1017,8 +1018,8 @@ func TestConversationRepository_NullFields(t *testing.T) {
 	conv := &storage_models.Conversation{
 		SessionID: "session-1",
 		TenantID:  "tenant-1",
-		UserID:    "",           // Empty user ID
-		AgentID:   "",           // Empty agent ID
+		UserID:    "", // Empty user ID
+		AgentID:   "", // Empty agent ID
 		Role:      "system",
 		Content:   "System message",
 		CreatedAt: time.Now(),

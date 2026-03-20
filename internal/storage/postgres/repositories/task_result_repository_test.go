@@ -28,18 +28,18 @@ func TestTaskResultRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		LatencyMs:       100,
-		Metadata:        map[string]interface{}{"key": "value"},
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		LatencyMs:        100,
+		Metadata:         map[string]interface{}{"key": "value"},
+		CreatedAt:        time.Now(),
 	}
 
 	err := repo.Create(ctx, result)
@@ -61,17 +61,17 @@ func TestTaskResultRepository_Create_WithID(t *testing.T) {
 	ctx := context.Background()
 
 	result := &storage_models.TaskResult{
-		ID:              "123e4567-e89b-12d3-a456-426614174000",
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		ID:               "123e4567-e89b-12d3-a456-426614174000",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "pending",
-		CreatedAt:       time.Now(),
+		Status:           "pending",
+		CreatedAt:        time.Now(),
 	}
 
 	err := repo.Create(ctx, result)
@@ -93,18 +93,18 @@ func TestTaskResultRepository_Create_WithOutput(t *testing.T) {
 	ctx := context.Background()
 
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Output:          map[string]interface{}{"result": "success"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Output:           map[string]interface{}{"result": "success"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		LatencyMs:       100,
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		LatencyMs:        100,
+		CreatedAt:        time.Now(),
 	}
 
 	err := repo.Create(ctx, result)
@@ -132,19 +132,19 @@ func TestTaskResultRepository_GetByID(t *testing.T) {
 
 	// Create a task result
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Output:          map[string]interface{}{"result": "success"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Output:           map[string]interface{}{"result": "success"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		LatencyMs:       100,
-		Metadata:        map[string]interface{}{"key": "value"},
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		LatencyMs:        100,
+		Metadata:         map[string]interface{}{"key": "value"},
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result)
 	require.NoError(t, err)
@@ -216,19 +216,19 @@ func TestTaskResultRepository_Update(t *testing.T) {
 
 	// Create a task result
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Output:          map[string]interface{}{"result": "old"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Output:           map[string]interface{}{"result": "old"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "pending",
-		LatencyMs:       0,
-		Metadata:        map[string]interface{}{"version": 1},
-		CreatedAt:       time.Now(),
+		Status:           "pending",
+		LatencyMs:        0,
+		Metadata:         map[string]interface{}{"version": 1},
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result)
 	require.NoError(t, err)
@@ -294,16 +294,16 @@ func TestTaskResultRepository_Delete(t *testing.T) {
 
 	// Create a task result
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result)
 	require.NoError(t, err)
@@ -352,40 +352,40 @@ func TestTaskResultRepository_SearchByVector(t *testing.T) {
 	// Create multiple task results with different embeddings
 	results := []*storage_models.TaskResult{
 		{
-			TenantID:        "tenant-1",
-			SessionID:       "session-1",
-			TaskType:        "analysis",
-			AgentID:         "agent-1",
-			Input:           map[string]interface{}{"query": "test1"},
-			Embedding:       createTestEmbedding(),
-			EmbeddingModel:  "e5-large",
+			TenantID:         "tenant-1",
+			SessionID:        "session-1",
+			TaskType:         "analysis",
+			AgentID:          "agent-1",
+			Input:            map[string]interface{}{"query": "test1"},
+			Embedding:        createTestEmbedding(),
+			EmbeddingModel:   "e5-large",
 			EmbeddingVersion: 1,
-			Status:          "completed",
-			CreatedAt:       time.Now(),
+			Status:           "completed",
+			CreatedAt:        time.Now(),
 		},
 		{
-			TenantID:        "tenant-1",
-			SessionID:       "session-1",
-			TaskType:        "analysis",
-			AgentID:         "agent-1",
-			Input:           map[string]interface{}{"query": "test2"},
-			Embedding:       createTestEmbedding(),
-			EmbeddingModel:  "e5-large",
+			TenantID:         "tenant-1",
+			SessionID:        "session-1",
+			TaskType:         "analysis",
+			AgentID:          "agent-1",
+			Input:            map[string]interface{}{"query": "test2"},
+			Embedding:        createTestEmbedding(),
+			EmbeddingModel:   "e5-large",
 			EmbeddingVersion: 1,
-			Status:          "completed",
-			CreatedAt:       time.Now(),
+			Status:           "completed",
+			CreatedAt:        time.Now(),
 		},
 		{
-			TenantID:        "tenant-1",
-			SessionID:       "session-1",
-			TaskType:        "analysis",
-			AgentID:         "agent-1",
-			Input:           map[string]interface{}{"query": "test3"},
-			Embedding:       createTestEmbedding(),
-			EmbeddingModel:  "e5-large",
+			TenantID:         "tenant-1",
+			SessionID:        "session-1",
+			TaskType:         "analysis",
+			AgentID:          "agent-1",
+			Input:            map[string]interface{}{"query": "test3"},
+			Embedding:        createTestEmbedding(),
+			EmbeddingModel:   "e5-large",
 			EmbeddingVersion: 1,
-			Status:          "completed",
-			CreatedAt:       time.Now(),
+			Status:           "completed",
+			CreatedAt:        time.Now(),
 		},
 	}
 
@@ -422,16 +422,16 @@ func TestTaskResultRepository_SearchByVector_EmptyEmbedding(t *testing.T) {
 
 	// Create a task result
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result)
 	require.NoError(t, err)
@@ -458,16 +458,16 @@ func TestTaskResultRepository_SearchByVector_TenantIsolation(t *testing.T) {
 
 	// Create task result for tenant-1
 	result1 := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result1)
 	require.NoError(t, err)
@@ -495,16 +495,16 @@ func TestTaskResultRepository_SearchByVector_Limit(t *testing.T) {
 	// Create 5 task results
 	for i := 0; i < 5; i++ {
 		result := &storage_models.TaskResult{
-			TenantID:        "tenant-1",
-			SessionID:       "session-1",
-			TaskType:        "analysis",
-			AgentID:         "agent-1",
-			Input:           map[string]interface{}{"query": "test"},
-			Embedding:       createTestEmbedding(),
-			EmbeddingModel:  "e5-large",
+			TenantID:         "tenant-1",
+			SessionID:        "session-1",
+			TaskType:         "analysis",
+			AgentID:          "agent-1",
+			Input:            map[string]interface{}{"query": "test"},
+			Embedding:        createTestEmbedding(),
+			EmbeddingModel:   "e5-large",
 			EmbeddingVersion: 1,
-			Status:          "completed",
-			CreatedAt:       time.Now(),
+			Status:           "completed",
+			CreatedAt:        time.Now(),
 		}
 		err := repo.Create(ctx, result)
 		require.NoError(t, err)
@@ -532,31 +532,31 @@ func TestTaskResultRepository_SearchByVector_StatusFilter(t *testing.T) {
 
 	// Create task results with different statuses
 	completedResult := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, completedResult)
 	require.NoError(t, err)
 
 	pendingResult := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "pending",
-		CreatedAt:       time.Now(),
+		Status:           "pending",
+		CreatedAt:        time.Now(),
 	}
 	err = repo.Create(ctx, pendingResult)
 	require.NoError(t, err)
@@ -743,16 +743,16 @@ func TestTaskResultRepository_UpdateEmbedding(t *testing.T) {
 
 	// Create a task result with initial embedding
 	result := &storage_models.TaskResult{
-		TenantID:        "tenant-1",
-		SessionID:       "session-1",
-		TaskType:        "analysis",
-		AgentID:         "agent-1",
-		Input:           map[string]interface{}{"query": "test"},
-		Embedding:       createTestEmbedding(),
-		EmbeddingModel:  "e5-large",
+		TenantID:         "tenant-1",
+		SessionID:        "session-1",
+		TaskType:         "analysis",
+		AgentID:          "agent-1",
+		Input:            map[string]interface{}{"query": "test"},
+		Embedding:        createTestEmbedding(),
+		EmbeddingModel:   "e5-large",
 		EmbeddingVersion: 1,
-		Status:          "completed",
-		CreatedAt:       time.Now(),
+		Status:           "completed",
+		CreatedAt:        time.Now(),
 	}
 	err := repo.Create(ctx, result)
 	require.NoError(t, err)
@@ -1031,7 +1031,7 @@ func TestTaskResultRepository_ComplexInputOutput(t *testing.T) {
 		"result": "success",
 		"data": map[string]interface{}{
 			"count": 42,
-			"list": []interface{}{1, 2, 3},
+			"list":  []interface{}{1, 2, 3},
 		},
 	}
 

@@ -141,7 +141,7 @@ func TestMergeAndRank(t *testing.T) {
 	}
 
 	// Merge and rank
-	merged := service.mergeAndRerank( append( vectorResults,  keywordResults...),  plan)
+	merged := service.mergeAndRerank(append(vectorResults, keywordResults...), plan)
 
 	// Should have 5 unique results
 	if len(merged) != 5 {
@@ -648,7 +648,7 @@ func TestMergeAndRank_WithTaskResultSource(t *testing.T) {
 		{ID: "1", Score: 0.9, Source: "task_result", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 1 {
 		t.Errorf("should have 1 result, got %d", len(merged))
@@ -669,7 +669,7 @@ func TestMergeAndRank_WithUnknownSource(t *testing.T) {
 		{ID: "1", Score: 0.9, Source: "unknown", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 1 {
 		t.Errorf("should have 1 result, got %d", len(merged))
@@ -814,7 +814,7 @@ func TestMergeAndRank_WithAllEmptyResults(t *testing.T) {
 	service := &RetrievalService{}
 	plan := DefaultRetrievalPlan()
 
-	merged := service.mergeAndRerank( append( []*SearchResult{},  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append([]*SearchResult{}, []*SearchResult{}...), plan)
 
 	if merged == nil {
 		t.Error("merged results should not be nil")
@@ -835,7 +835,7 @@ func TestMergeAndRank_WithOnlyVectorResults(t *testing.T) {
 		{ID: "2", Score: 0.8, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( vectorResults,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(vectorResults, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -857,7 +857,7 @@ func TestMergeAndRank_WithOnlyKeywordResults(t *testing.T) {
 		{ID: "2", Score: 0.8, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( []*SearchResult{},  keywordResults...),  plan)
+	merged := service.mergeAndRerank(append([]*SearchResult{}, keywordResults...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -878,7 +878,7 @@ func TestMergeAndRank_WithTimeDecayDisabled(t *testing.T) {
 		{ID: "2", Score: 0.8, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -904,7 +904,7 @@ func TestMergeAndRank_WithDifferentWeights(t *testing.T) {
 		{ID: "2", Score: 0.9, Source: "experience", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -1088,7 +1088,7 @@ func TestMergeAndRank_WithDuplicateIDs(t *testing.T) {
 		{ID: "1", Score: 0.7, Source: "knowledge", SubSource: "keyword", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( vectorResults,  keywordResults...),  plan)
+	merged := service.mergeAndRerank(append(vectorResults, keywordResults...), plan)
 
 	if len(merged) != 1 {
 		t.Errorf("should have 1 unique result, got %d", len(merged))
@@ -1121,7 +1121,7 @@ func TestMergeAndRank_WithMultipleDuplicates(t *testing.T) {
 		{ID: "4", Score: 0.4, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( vectorResults,  keywordResults...),  plan)
+	merged := service.mergeAndRerank(append(vectorResults, keywordResults...), plan)
 
 	if len(merged) != 4 {
 		t.Errorf("should have 4 unique results, got %d", len(merged))
@@ -1399,26 +1399,20 @@ func TestSearchExperienceVector_Empty(t *testing.T) {
 	service := &RetrievalService{
 
 		logger: slog.Default(),
-
 	}
 
 	embedding := []float64{0.1, 0.2, 0.3}
 
 	req := &SearchRequest{
 
-		Query:    "test query",
+		Query: "test query",
 
 		TenantID: "tenant-123",
 
-		TopK:     10,
-
+		TopK: 10,
 	}
 
-
-
 	results := service.searchExperienceVector(context.Background(), embedding, req)
-
-
 
 	if results == nil {
 
@@ -1496,7 +1490,7 @@ func TestMergeAndRank_WithZeroScores(t *testing.T) {
 		{ID: "2", Score: 0.0, Source: "experience", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -1518,7 +1512,7 @@ func TestMergeAndRank_WithVeryHighScores(t *testing.T) {
 		{ID: "2", Score: 99.0, Source: "experience", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -1540,7 +1534,7 @@ func TestMergeAndRank_WithNegativeScores(t *testing.T) {
 		{ID: "2", Score: -0.3, Source: "experience", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 2 {
 		t.Errorf("should have 2 results, got %d", len(merged))
@@ -1780,7 +1774,7 @@ func TestMergeAndRank_WithLargeResultSet(t *testing.T) {
 		}
 	}
 
-	merged := service.mergeAndRerank( append( vectorResults,  keywordResults...),  plan)
+	merged := service.mergeAndRerank(append(vectorResults, keywordResults...), plan)
 
 	if len(merged) != 100 {
 		t.Errorf("should have 100 unique results, got %d", len(merged))
@@ -1806,7 +1800,7 @@ func TestMergeAndRank_WithDifferentSourcesAll(t *testing.T) {
 		{ID: "4", Score: 0.6, Source: "task_result", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 4 {
 		t.Errorf("should have 4 results, got %d", len(merged))
@@ -2005,7 +1999,7 @@ func TestTruncateForLog_WithSpecialCharacters(t *testing.T) {
 	}{
 		{"Hello@World!", 5, "Hello..."},
 		{"Test#123$%", 10, "Test#123$%"}, // 10 characters, no truncation
-		{"Test#123$%", 8, "Test#123..."},  // First 8 chars: "Test#123"
+		{"Test#123$%", 8, "Test#123..."}, // First 8 chars: "Test#123"
 		{"&*()%$#@!", 3, "&*(..."},
 	}
 
@@ -2099,7 +2093,7 @@ func TestMergeAndRank_WithIdenticalScores(t *testing.T) {
 		{ID: "3", Score: 0.5, Source: "knowledge", SubSource: "vector", QueryWeight: 1.0, CreatedAt: now},
 	}
 
-	merged := service.mergeAndRerank( append( results,  []*SearchResult{}...),  plan)
+	merged := service.mergeAndRerank(append(results, []*SearchResult{}...), plan)
 
 	if len(merged) != 3 {
 		t.Errorf("should have 3 results, got %d", len(merged))

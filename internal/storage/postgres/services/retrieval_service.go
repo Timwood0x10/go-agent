@@ -34,10 +34,10 @@ type SearchResult struct {
 	ID        string                 `json:"id"`
 	Content   string                 `json:"content"`
 	Score     float64                `json:"score"`
-	Source    string                 `json:"source"`    // knowledge, experience, tool, task_result
+	Source    string                 `json:"source"`     // knowledge, experience, tool, task_result
 	SubSource string                 `json:"sub_source"` // vector, keyword
-	Type      string                 `json:"type"`      // Result type for filtering
-	Metadata  map[string]interface{} `json:"metadata"`  // Additional metadata
+	Type      string                 `json:"type"`       // Result type for filtering
+	Metadata  map[string]interface{} `json:"metadata"`   // Additional metadata
 	CreatedAt time.Time              `json:"created_at"`
 
 	// Query information for traceability and scoring
@@ -56,7 +56,7 @@ type WeightedQuery struct {
 // QueryPriorityConfig defines priority weights for different query types.
 // This controls how much influence rewrites have on retrieval results.
 type QueryPriorityConfig struct {
-	OriginalWeight    float64 `json:"original_weight"`    // Original query weight (default 1.0)
+	OriginalWeight    float64 `json:"original_weight"`     // Original query weight (default 1.0)
 	RuleRewriteWeight float64 `json:"rule_rewrite_weight"` // Rule-based rewrite weight (default 0.7)
 	LLMRewriteWeight  float64 `json:"llm_rewrite_weight"`  // LLM-based rewrite weight (default 0.5)
 	MaxQueries        int     `json:"max_queries"`         // Maximum number of queries (default 3)
@@ -97,17 +97,17 @@ type RetrievalTrace struct {
 // RetrievalService provides intelligent retrieval across multiple data sources.
 // It implements hybrid search (vector + keyword), query rewriting, and time-based decay.
 type RetrievalService struct {
-	db                *postgres.Pool
-	embeddingClient   *embedding.EmbeddingClient
-	tenantGuard       *postgres.TenantGuard
-	retrievalGuard    *postgres.RetrievalGuard
-	kbRepo            *repositories.KnowledgeRepository
-	expRepo           *repositories.ExperienceRepository
-	toolRepo          *repositories.ToolRepository
-	logger            *slog.Logger
-	queryPriority     *QueryPriorityConfig
-	embeddingCache    map[string][]float64
-	embeddingCacheMu  sync.RWMutex
+	db               *postgres.Pool
+	embeddingClient  *embedding.EmbeddingClient
+	tenantGuard      *postgres.TenantGuard
+	retrievalGuard   *postgres.RetrievalGuard
+	kbRepo           *repositories.KnowledgeRepository
+	expRepo          *repositories.ExperienceRepository
+	toolRepo         *repositories.ToolRepository
+	logger           *slog.Logger
+	queryPriority    *QueryPriorityConfig
+	embeddingCache   map[string][]float64
+	embeddingCacheMu sync.RWMutex
 }
 
 // NewRetrievalService creates a new RetrievalService instance.
@@ -234,14 +234,14 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 	// 6. Generate retrieval trace (if enabled)
 	if req.EnableTrace {
 		req.Trace = &RetrievalTrace{
-			OriginalQuery:  req.Query,
-			RewrittenQuery: "",
-			RewriteUsed:    len(queries) > 1,
-			VectorResults:  0,
-			KeywordResults: 0,
-			FinalResults:   len(finalResults),
-			ExecutionTime:  time.Since(startTime),
-			VectorError:    nil,
+			OriginalQuery:   req.Query,
+			RewrittenQuery:  "",
+			RewriteUsed:     len(queries) > 1,
+			VectorResults:   0,
+			KeywordResults:  0,
+			FinalResults:    len(finalResults),
+			ExecutionTime:   time.Since(startTime),
+			VectorError:     nil,
 			SearchBreakdown: s.countResultsBySource(finalResults),
 		}
 	}
@@ -439,12 +439,12 @@ func (s *RetrievalService) ruleBasedRewrite(original string) []string {
 	// Simple synonym replacement rules
 	// TODO: Load from configuration file for better maintainability
 	synonymRules := map[string][]string{
-		"how to":      {"how do i", "what is the best way to", "how can i"},
-		"what is":     {"define", "explain", "describe"},
-		"编程":         {"开发", "写代码", "编码", "程序设计"},
-		"并发":         {"并行", "多线程", "异步"},
-		"database":    {"db", "data storage"},
-		"api":         {"interface", "web service"},
+		"how to":   {"how do i", "what is the best way to", "how can i"},
+		"what is":  {"define", "explain", "describe"},
+		"编程":       {"开发", "写代码", "编码", "程序设计"},
+		"并发":       {"并行", "多线程", "异步"},
+		"database": {"db", "data storage"},
+		"api":      {"interface", "web service"},
 	}
 
 	queryLower := toLower(original)
@@ -890,7 +890,7 @@ func (s *RetrievalService) searchToolsVector(ctx context.Context, embedding []fl
 			result.Score = similarity
 		} else {
 			// Default score based on success rate and usage
-			result.Score = tool.SuccessRate * 0.7 + float64(tool.UsageCount)/100.0*0.3
+			result.Score = tool.SuccessRate*0.7 + float64(tool.UsageCount)/100.0*0.3
 		}
 
 		results = append(results, result)
@@ -999,7 +999,7 @@ func (s *RetrievalService) bm25SearchTools(ctx context.Context, query string, te
 		}
 
 		// Default score based on success rate and usage
-		result.Score = tool.SuccessRate * 0.7 + float64(tool.UsageCount)/100.0*0.3
+		result.Score = tool.SuccessRate*0.7 + float64(tool.UsageCount)/100.0*0.3
 
 		results = append(results, result)
 	}
