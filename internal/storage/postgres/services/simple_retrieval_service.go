@@ -107,18 +107,8 @@ func (s *SimpleRetrievalService) Search(ctx context.Context, tenantID, query str
 			continue
 		}
 
-		// Log all results before filtering
-		slog.Info("Chunk found",
-			"source", chunk.Source,
-			"similarity", similarity,
-			"min_score", s.config.MinScore,
-			"content_preview", truncateString(chunk.Content, 100))
-
 		// Filter by min_score threshold
 		if similarity < s.config.MinScore {
-			slog.Debug("Skipping low similarity result",
-				"similarity", similarity,
-				"threshold", s.config.MinScore)
 			continue
 		}
 
@@ -149,16 +139,4 @@ func (s *SimpleRetrievalService) SetConfig(config *SimpleRetrievalConfig) {
 // GetConfig returns the current configuration
 func (s *SimpleRetrievalService) GetConfig() *SimpleRetrievalConfig {
 	return s.config
-}
-
-// truncateString truncate string for log output
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen]) + "..."
 }

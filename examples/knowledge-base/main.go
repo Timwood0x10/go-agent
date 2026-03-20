@@ -231,7 +231,7 @@ func (kb *KnowledgeBase) ImportDocuments(ctx context.Context, tenantID, docPath 
 	// Batch process chunks
 	successCount := 0
 	for i, chunk := range chunks {
-		log.Printf("Processing chunk %d/%d... content: %s", i+1, len(chunks), truncateString(chunk.Text, 100))
+		log.Printf("Processing chunk %d/%d...", i+1, len(chunks))
 
 		// Generate embedding vector (with timeout)
 		chunkCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
