@@ -1,0 +1,37 @@
+# Example Configuration for New Layered API
+# This configuration demonstrates how to use the new API client
+
+server:
+  host: "localhost"
+  port: 8080
+
+# API Configuration
+api:
+  request_timeout: 30        # Request timeout in seconds
+  max_retries: 3             # Maximum retry attempts
+  retry_delay: 1             # Delay between retries in seconds
+
+# LLM Configuration
+llm:
+  provider: "ollama"           # "openai", "ollama", or "openrouter"
+  api_key: ""                 # API key (required for openai/openrouter)
+  base_url: "http://localhost:11434"
+  model: "llama3.2"
+  timeout: 60                  # Request timeout in seconds
+
+# Database Configuration (optional, for persistence)
+database:
+  enabled: false
+  type: "postgres"
+  host: "localhost"
+  port: 5433
+  username: "postgres"
+  password: "postgres"
+  database: "goagent"
+  ssl_mode: "disable"
+
+# Output Configuration
+output:
+  format: "simple"
+  show_details: true
+  log_level: "info"

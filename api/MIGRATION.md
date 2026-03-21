@@ -1,0 +1,387 @@
+# API Migration Guide
+
+## 概述
+
+本文档说明如何从旧的API（`goagent/api`包）迁移到新的分层API（`goagent/api/client`包）。
+
+## 为什么迁移？
+
+新的分层API架构具有以下优势：
+
+1. **清晰的职责分离**：Core、Service、Client三层架构，职责明确
+2. **更好的可测试性**：基于接口的设计，易于mock和测试
+3. **更强的扩展性**：易于添加新的功能和模块
+4. **统一的错误处理**：标准化的错误定义和处理
+5. **更好的文档**：完整的类型定义和使用说明
+
+## 迁移步骤
+
+### 步骤1：更新导入路径
+
+**旧代码**：
+```go
+import (
+    "goagent/api"
+    "goagent/api/agent"
+    "goagent/api/memory"
+)
+```
+
+**新代码**：
+```go
+import (
+    "goagent/api/client"
+    "goagent/api/core"
+    "goagent/api/service/agent"
+    "goagent/api/service/memory"
+)
+```
+
+### 步骤2：更新客户端初始化
+
+**旧代码**：
+```go
+config := &api.Config{
+    Database: &api.DatabaseConfig{
+        Host:     "localhost",
+        Port:     5432,
+        User:     "user",
+        Password: "pass",
+        Database: "goagent",
+    },
+    LLM: &api.LLMConfig{
+        Provider: "ollama",
+        BaseURL:  "http://localhost:11434",
+        Model:    "llama3",
+        Timeout:  60,
+    },
+    Memory: &api.MemoryConfig{
+        Enabled:    true,
+        MaxHistory: 100,
+    },
+}
+
+client, err := api.NewClient(config)
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close(context.Background())
+```
+
+**新代码**：
+```go
+config := &client.Config{
+    BaseConfig: &core.BaseConfig{
+        RequestTimeout: 30 * time.Second,
+        MaxRetries:     3,
+        RetryDelay:     1 * time.Second,
+    },
+    Agent: &agentservice.Config{
+        // Agent服务配置
+    },
+    Memory: &memoryservice.Config{
+        // Memory服务配置
+    },
+    Retrieval: &retrievalservice.Config{
+        // Retrieval服务配置
+    },
+    LLM: &llmservice.Config{
+        LLMConfig: &core.LLMConfig{
+            Provider: core.LLMProviderOllama,
+            BaseURL:  "http://localhost:11434",
+            Model:    "llama3",
+            Timeout:  60,
+        },
+    },
+}
+
+client, err := client.NewClient(config)
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close(context.Background())
+```
+
+### 步骤3：更新服务访问方式
+
+**旧代码**：
+```go
+agentSvc := client.Agent()
+memorySvc := client.Memory()
+retrievalSvc := client.Retrieval()
+```
+
+**新代码**：
+```go
+agentSvc, err := client.Agent()
+if err != nil {
+    log.Fatal(err)
+}
+
+memorySvc, err := client.Memory()
+if err != nil {
+    log.Fatal(err)
+}
+
+retrievalSvc, err := client.Retrieval()
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+### 步骤4：更新类型引用
+
+**旧代码**：
+```go
+agent, err := agentSvc.CreateAgent(ctx, "agent-001")
+```
+
+**新代码**：
+```go
+agent, err := agentSvc.CreateAgent(ctx, &core.AgentConfig{
+    ID:   "agent-001",
+    Name: "My Agent",
+    Type: "sub",
+})
+```
+
+### 步骤5：更新错误处理
+
+**旧代码**：
+```go
+agent, err := agentSvc.CreateAgent(ctx, "agent-001")
+if err != nil {
+    if err == agent.ErrInvalidAgentID {
+        // 处理错误
+    }
+    log.Fatal(err)
+}
+```
+
+**新代码**：
+```go
+agent, err := agentSvc.CreateAgent(ctx, &core.AgentConfig{
+    ID: "agent-001",
+})
+if err != nil {
+    if errors.Is(err, agent.ErrInvalidAgentID) {
+        // 处理错误
+    }
+    log.Fatal(err)
+}
+```
+
+## API对比表
+
+### Agent API
+
+| 功能 | 旧API | 新API |
+|------|-------|-------|
+| 创建Agent | `CreateAgent(ctx, agentID)` | `CreateAgent(ctx, *AgentConfig)` |
+| 获取Agent | `GetAgent(ctx, agentID)` | `GetAgent(ctx, agentID)` |
+| 更新Agent | 不支持 | `UpdateAgent(ctx, agentID, updates)` |
+| 删除Agent | `DeleteAgent(ctx, agentID)` | `DeleteAgent(ctx, agentID)` |
+| 列出Agent | 不支持 | `ListAgents(ctx, *AgentFilter)` |
+| 执行任务 | 不支持 | `ExecuteTask(ctx, *Task)` |
+
+### Memory API
+
+| 功能 | 旧API | 新API |
+|------|-------|-------|
+| 创建会话 | `CreateSession(ctx, userID)` | `CreateSession(ctx, *SessionConfig)` |
+| 添加消息 | `AddMessage(ctx, sessionID, role, content)` | `AddMessage(ctx, sessionID, MessageRole, content)` |
+| 获取消息 | `GetMessages(ctx, sessionID)` | `GetMessages(ctx, sessionID, *PaginationRequest)` |
+| 删除会话 | `DeleteSession(ctx, sessionID)` | `DeleteSession(ctx, sessionID)` |
+| 蒸馏任务 | `DistillTask(ctx, taskID)` | `DistillTask(ctx, taskID)` |
+| 搜索任务 | `SearchSimilarTasks(ctx, query, limit)` | `SearchSimilarTasks(ctx, *SearchQuery)` |
+
+### Retrieval API
+
+| 功能 | 旧API | 新API |
+|------|-------|-------|
+| 搜索 | `Search(ctx, tenantID, query)` | `Search(ctx, tenantID, query)` |
+| 自定义搜索 | `SearchWithConfig(ctx, tenantID, query, *Config)` | `SearchWithConfig(ctx, *RetrievalRequest)` |
+| 添加知识 | 不支持 | `AddKnowledge(ctx, *KnowledgeItem)` |
+| 获取知识 | 不支持 | `GetKnowledge(ctx, tenantID, itemID)` |
+| 更新知识 | 不支持 | `UpdateKnowledge(ctx, tenantID, *KnowledgeItem)` |
+| 删除知识 | 不支持 | `DeleteKnowledge(ctx, tenantID, itemID)` |
+| 列出知识 | 不支持 | `ListKnowledge(ctx, tenantID, *KnowledgeFilter)` |
+
+### LLM API
+
+| 功能 | 旧API | 新API |
+|------|-------|-------|
+| 生成文本 | 不支持 | `Generate(ctx, *GenerateRequest)` |
+| 简单生成 | 不支持 | `GenerateSimple(ctx, prompt)` |
+| 生成嵌入 | 不支持 | `GenerateEmbedding(ctx, *EmbeddingRequest)` |
+| 获取配置 | 不支持 | `GetConfig()` |
+| 检查可用性 | 不支持 | `IsEnabled()` |
+
+## 完整迁移示例
+
+### 旧代码示例
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    
+    "goagent/api"
+)
+
+func main() {
+    config := &api.Config{
+        Database: &api.DatabaseConfig{
+            Host:     "localhost",
+            Port:     5432,
+            User:     "user",
+            Password: "pass",
+            Database: "goagent",
+        },
+        Memory: &api.MemoryConfig{
+            Enabled:    true,
+            MaxHistory: 100,
+        },
+    }
+    
+    client, err := api.NewClient(config)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close(context.Background())
+    
+    // Create agent
+    agent, err := client.Agent().CreateAgent(context.Background(), "agent-001")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Create session
+    sessionID, err := client.Memory().CreateSession(context.Background(), "user-001")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Add message
+    err = client.Memory().AddMessage(context.Background(), sessionID, "user", "Hello")
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+### 新代码示例
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "time"
+    
+    "goagent/api/client"
+    "goagent/api/core"
+    "goagent/api/service/agent"
+    "goagent/api/service/memory"
+)
+
+func main() {
+    config := &client.Config{
+        BaseConfig: &core.BaseConfig{
+            RequestTimeout: 30 * time.Second,
+            MaxRetries:     3,
+            RetryDelay:     1 * time.Second,
+        },
+        Agent: &agent.Config{
+            // Agent服务配置
+        },
+        Memory: &memory.Config{
+            // Memory服务配置
+        },
+    }
+    
+    client, err := client.NewClient(config)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close(context.Background())
+    
+    // Get agent service
+    agentSvc, err := client.Agent()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Create agent
+    agent, err := agentSvc.CreateAgent(context.Background(), &core.AgentConfig{
+        ID:   "agent-001",
+        Name: "My Agent",
+        Type: "sub",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Get memory service
+    memorySvc, err := client.Memory()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Create session
+    sessionID, err := memorySvc.CreateSession(context.Background(), &core.SessionConfig{
+        UserID:   "user-001",
+        TenantID: "tenant-001",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Add message
+    err = memorySvc.AddMessage(context.Background(), sessionID, core.MessageRoleUser, "Hello")
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+## 向后兼容性
+
+旧的API仍然可用，但已标记为DEPRECATED。建议：
+
+1. 新项目直接使用新API
+2. 旧项目逐步迁移到新API
+3. 在迁移期间可以同时使用新旧API
+
+## 常见问题
+
+### Q: 必须立即迁移吗？
+
+A: 不是必须的。旧API仍然可用，但建议在合适的时候迁移到新API以获得更好的架构和功能。
+
+### Q: 迁移需要多少时间？
+
+A: 迁移时间取决于代码规模。对于小型项目，可能只需要几个小时。对于大型项目，可能需要几天到几周。
+
+### Q: 新API支持所有旧API的功能吗？
+
+A: 新API支持所有旧API的功能，并提供了更多新功能。如果发现缺少某些功能，请提交issue。
+
+### Q: 可以在同一个项目中同时使用新旧API吗？
+
+A: 可以，但不推荐。建议逐步迁移到新API。
+
+## 获取帮助
+
+如果在迁移过程中遇到问题，请：
+
+1. 查看API文档：[API README](./README.md)
+2. 查看示例代码：[examples/](../examples/)
+3. 提交issue：[GitHub Issues](https://github.com/your-repo/issues)
+
+## 总结
+
+新的分层API架构提供了更好的代码组织和可维护性。通过遵循本指南，你可以平滑地迁移到新API，并享受更好的开发体验。
