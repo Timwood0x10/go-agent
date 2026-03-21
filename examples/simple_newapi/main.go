@@ -65,7 +65,7 @@ func main() {
 	log.Printf("Total Steps: %d", len(result.Steps))
 
 	// Show each step result
-	log.Println("\n=== 推荐结果 ===")
+	log.Println("\n=== Recommendation Results ===")
 
 	// Parse and display recommendations by category
 	for _, step := range result.Steps {
@@ -95,13 +95,13 @@ func main() {
 
 			log.Printf("  %d. %s%s", i+1, item.Name, priceStr)
 			if item.Reason != "" {
-				log.Printf("     理由：%s", item.Reason)
+				log.Printf("     Reason: %s", item.Reason)
 			}
 		}
 	}
 
 	// Show summary
-	log.Printf("\n✓ 为您生成了 %d 类推荐，耗时 %.1f 秒", countCompletedSteps(result.Steps), result.Duration.Seconds())
+	log.Printf("\n✓ Generated %d categories of recommendations in %.1f seconds", countCompletedSteps(result.Steps), result.Duration.Seconds())
 
 	log.Println("\n=== Done! ===")
 }

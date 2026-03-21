@@ -73,7 +73,7 @@ func main() {
 		fmt.Printf("\n✅ Found %d distilled memory records\n", count)
 	}
 
-	// 统计内容
+	// Content statistics
 	fmt.Println("\n=== Content Statistics ===")
 	statsRows, err := db.Query(`
 		SELECT source_type, COUNT(*) as count

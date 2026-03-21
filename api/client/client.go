@@ -13,7 +13,7 @@ import (
 	retrievalSvc "goagent/api/service/retrieval"
 )
 
-// Client provides client interface for all GoAgent modules.
+// Client provides a unified client interface for all GoAgent modules.
 type Client struct {
 	agentService     *agentSvc.Service
 	memoryService    *memorySvc.Service
@@ -23,18 +23,13 @@ type Client struct {
 	configFile       *ConfigFile
 }
 
-// Config configuration for GoAgent client.
+// Config holds configuration for the GoAgent client.
 type Config struct {
-	// BaseConfig is the base configuration.
-	BaseConfig *core.BaseConfig
-	// Agent is the agent service configuration.
-	Agent *agentSvc.Config
-	// Memory is the memory service configuration.
-	Memory *memorySvc.Config
-	// Retrieval is the retrieval service configuration.
-	Retrieval *retrievalSvc.Config
-	// LLM is the LLM service configuration.
-	LLM *llmSvc.Config
+	BaseConfig *core.BaseConfig   // Base configuration
+	Agent      *agentSvc.Config   // Agent service configuration
+	Memory     *memorySvc.Config  // Memory service configuration
+	Retrieval  *retrievalSvc.Config // Retrieval service configuration
+	LLM        *llmSvc.Config     // LLM service configuration
 }
 
 // NewClient creates a new GoAgent client instance.
@@ -95,7 +90,7 @@ func NewClient(config *Config) (*Client, error) {
 }
 
 // Agent returns the agent service.
-// Returns the agent service or error if not configured.
+// Returns the agent service or an error if not configured.
 func (c *Client) Agent() (*agentSvc.Service, error) {
 	if c.agentService == nil {
 		return nil, ErrAgentNotConfigured
@@ -104,7 +99,7 @@ func (c *Client) Agent() (*agentSvc.Service, error) {
 }
 
 // Memory returns the memory service.
-// Returns the memory service or error if not configured.
+// Returns the memory service or an error if not configured.
 func (c *Client) Memory() (*memorySvc.Service, error) {
 	if c.memoryService == nil {
 		return nil, ErrMemoryNotConfigured
@@ -113,7 +108,7 @@ func (c *Client) Memory() (*memorySvc.Service, error) {
 }
 
 // Retrieval returns the retrieval service.
-// Returns the retrieval service or error if not configured.
+// Returns the retrieval service or an error if not configured.
 func (c *Client) Retrieval() (*retrievalSvc.Service, error) {
 	if c.retrievalService == nil {
 		return nil, ErrRetrievalNotConfigured
@@ -122,7 +117,7 @@ func (c *Client) Retrieval() (*retrievalSvc.Service, error) {
 }
 
 // LLM returns the LLM service.
-// Returns the LLM service or error if not configured.
+// Returns the LLM service or an error if not configured.
 func (c *Client) LLM() (*llmSvc.Service, error) {
 	if c.llmService == nil {
 		return nil, ErrLLMNotConfigured
@@ -131,24 +126,17 @@ func (c *Client) LLM() (*llmSvc.Service, error) {
 }
 
 // Close closes the client and cleans up resources.
-// Args:
-// ctx - operation context.
-// Returns error if cleanup fails.
 func (c *Client) Close(ctx context.Context) error {
 	return nil
 }
 
 // GetConfig returns the loaded configuration file.
-// Returns configuration file structure or nil if not available.
+// Returns the configuration file structure or nil if not available.
 func (c *Client) GetConfig() *ConfigFile {
 	return c.configFile
 }
 
 // NewClientWithConfigFile creates a new GoAgent client with both config and config file.
-// Args:
-// config - client configuration.
-// configFile - configuration file structure.
-// Returns new client instance or error.
 func NewClientWithConfigFile(config *Config, configFile *ConfigFile) (*Client, error) {
 	client, err := NewClient(config)
 	if err != nil {
@@ -159,8 +147,6 @@ func NewClientWithConfigFile(config *Config, configFile *ConfigFile) (*Client, e
 }
 
 // Ping checks if all configured services are available.
-// Args:
-// ctx - operation context.
 // Returns true if all services are available, false otherwise.
 func (c *Client) Ping(ctx context.Context) bool {
 	// Agent service is available if configured

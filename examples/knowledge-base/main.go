@@ -412,10 +412,10 @@ Answer with "YES" if this question needs knowledge base search:
 - Technical queries about code, systems, or frameworks
 
 Answer with "NO" if this is general conversation:
-- Greetings (hello, hi, 你好)
-- Personal introductions (my name is..., 我叫...)
-- General chat (how are you, 谢谢)
-- Questions about personal information (what's your name, 还记得我的名字吗)
+- Greetings (hello, hi, ni hao)
+- Personal introductions (my name is..., wo jiao...)
+- General chat (how are you, xie xie)
+- Questions about personal information (what's your name, do you remember my name)
 
 Answer (YES/NO only):`, question)
 
@@ -531,7 +531,7 @@ Assistant:`, question)
 		// Step 8: Check for distillation threshold
 		kb.messageCount++
 		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
-			log.Printf("🎯 [记忆蒸馏] 对话轮数达到阈值 (%d/%d)，触发记忆蒸馏...",
+			log.Printf("🎯 [Memory Distillation] Conversation rounds reached threshold (%d/%d), triggering memory distillation...",
 				kb.messageCount, kb.config.Memory.DistillationThreshold)
 			kb.distillMemory(ctx, tenantID)
 			kb.messageCount = 0
@@ -560,16 +560,16 @@ func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
 		return
 	}
 
-	log.Printf("🔄 [记忆蒸馏] 开始蒸馏会话: %s", kb.sessionID)
+	log.Printf("🔄 [Memory Distillation] Starting distillation for session: %s", kb.sessionID)
 
 	// Get conversation history
 	messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
 	if err != nil || len(messages) == 0 {
-		log.Printf("⚠️  [记忆蒸馏] 没有消息需要蒸馏: %v", err)
+		log.Printf("⚠️  [Memory Distillation] No messages to distill: %v", err)
 		return
 	}
 
-	log.Printf("📊 [记忆蒸馏] 找到 %d 条消息需要蒸馏", len(messages))
+	log.Printf("📊 [Memory Distillation] Found %d messages to distill", len(messages))
 
 	// Build conversation summary
 	var summary strings.Builder
@@ -580,19 +580,19 @@ func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
 
 	summaryText := summary.String()
 
-	log.Printf("📝 [记忆蒸馏] 蒸馏内容预览 (%d 字符): %s",
+	log.Printf("📝 [Memory Distillation] Distillation content preview (%d characters): %s",
 		len(summaryText), truncateString(summaryText, 100))
 
 	// Generate embedding for the distilled memory
 	embedding, err := kb.embedding.EmbedWithPrefix(ctx, summaryText, "memory:")
 	if err != nil {
-		log.Printf("❌ [记忆蒸馏] 生成嵌入失败: %v", err)
+		log.Printf("❌ [Memory Distillation] Failed to generate embedding: %v", err)
 		return
 	}
 
 	// Normalize embedding
 	embedding = postgres.NormalizeVector(embedding)
-	log.Printf("🔢 [记忆蒸馏] 嵌入向量维度: %d", len(embedding))
+	log.Printf("🔢 [Memory Distillation] Embedding vector dimensions: %d", len(embedding))
 
 	// Generate document ID
 	docID := uuid.New().String()
@@ -614,16 +614,16 @@ func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
 	}
 
 	if err := kb.repo.Create(ctx, distilledChunk); err != nil {
-		log.Printf("❌ [记忆蒸馏] 存储蒸馏记忆失败: %v", err)
+		log.Printf("❌ [Memory Distillation] Failed to store distilled memory: %v", err)
 		return
 	}
 
-	log.Printf("✅ [记忆蒸馏] 蒸馏完成！")
-	log.Printf("   📄 文档ID: %s", docID)
-	log.Printf("   📏 内容长度: %d 字符", len(summaryText))
-	log.Printf("   🧠 嵌入维度: %d", len(embedding))
-	log.Printf("   💾 存储位置: knowledge_chunks_1024")
-	log.Printf("   🔍 可通过向量检索回放记忆")
+	log.Printf("✅ [Memory Distillation] Distillation completed!")
+	log.Printf("   📄 Document ID: %s", docID)
+	log.Printf("   📏 Content length: %d characters", len(summaryText))
+	log.Printf("   🧠 Embedding dimensions: %d", len(embedding))
+	log.Printf("   💾 Storage location: knowledge_chunks_1024")
+	log.Printf("   🔍 Can be retrieved via vector search")
 }
 
 // truncateString truncate string for log output

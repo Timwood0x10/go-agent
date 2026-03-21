@@ -65,7 +65,7 @@ func main() {
 	for {
 		userInput, shouldExit := getUserInput()
 		if shouldExit {
-			slog.Info("再见！")
+			slog.Info("Goodbye!")
 			break
 		}
 
@@ -91,7 +91,7 @@ func main() {
 		}
 
 		if err := processAndSaveResults(ctx, result, parser); err != nil {
-			log.Printf("✗ 处理结果失败: %v", err)
+			log.Printf("✗ Failed to process results: %v", err)
 			continue
 		}
 
@@ -127,19 +127,19 @@ func initializeOutputDirectories() error {
 
 // displayConfiguration displays the loaded configuration.
 func displayConfiguration(config *client.ConfigFile) {
-	log.Println("\n=== 配置的 Agents ===")
+	log.Println("\n=== Configured Agents ===")
 	for _, agent := range config.Agents.Sub {
 		log.Printf("  - %s (%s): %s", agent.ID, agent.Type, agent.Name)
 	}
 
-	log.Println("\n=== 记忆功能 ===")
-	log.Printf("  会话记忆: %v", config.Memory.Enabled)
-	log.Printf("  记忆蒸馏: %v", true)
+	log.Println("\n=== Memory Features ===")
+	log.Printf("  Session memory: %v", config.Memory.Enabled)
+	log.Printf("  Memory distillation: %v", true)
 }
 
 // getUserInput reads a full line of user input from stdin.
 func getUserInput() (string, bool) {
-	fmt.Print("\n请输入开发任务（或输入 'quit' 退出）: ")
+	fmt.Print("\nEnter development task (or type 'quit' to exit): ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
 		return "", true
@@ -172,19 +172,19 @@ func createSession(ctx context.Context, memorySvc core.MemoryService, userInput 
 		return "", fmt.Errorf("add user message: %w", err)
 	}
 
-	log.Printf("✓ 创建会话: %s", sessionID)
+	log.Printf("✓ Created session: %s", sessionID)
 	return sessionID, nil
 }
 
 // processAndSaveResults processes workflow results and saves to files.
 func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, parser *output.Parser) error {
-	log.Println("\n=== Agent Team 协作完成 ===")
+	log.Println("\n=== Agent Team Collaboration Completed ===")
 	displayExecutionSummary(result)
 
 	var codeFiles, testFiles, docFiles []string
 	var codeContent, testContent, docsContent []string
 
-	// 只保存关键步骤的输出
+	// Only save output from key steps
 	stepPriority := map[string]OutputType{
 		"Generate Code":          OutputTypeCode,
 		"Generate Tests":         OutputTypeTest,
@@ -204,7 +204,7 @@ func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, p
 
 		items, err := parseStepOutput(parser, step.Name, step.Output)
 		if err != nil {
-			log.Printf("  ⚠️ 解析步骤 %s 输出失败: %v", step.Name, err)
+			log.Printf("  ⚠️ Failed to parse step %s output: %v", step.Name, err)
 			continue
 		}
 
@@ -212,17 +212,17 @@ func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, p
 			continue
 		}
 
-		// 只保存每个步骤的第一个有效项目
+		// Only save the first valid item from each step
 		mainItem := items[0]
 		filePath, err := saveOutputItem(step.Name, mainItem, 0)
 		if err != nil {
-			log.Printf("  ✗ 保存文件失败: %v", err)
+			log.Printf("  ✗ Failed to save file: %v", err)
 			continue
 		}
 
 		categorizeAndDisplay(step.Name, filePath, &codeFiles, &testFiles, &docFiles)
 
-		// 收集内容用于生成文档
+		// Collect content for documentation generation
 		switch outputType {
 		case OutputTypeCode:
 			codeContent = append(codeContent, mainItem.Content)
@@ -233,14 +233,14 @@ func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, p
 		}
 	}
 
-	// 只在有实际代码内容时生成文档
+	// Only generate documentation if there is actual code content
 	if len(codeContent) > 0 {
 		if err := generateArchitectureDocument(ctx, result, codeContent, testContent, docsContent); err != nil {
-			log.Printf("  ⚠️ 生成架构文档失败: %v", err)
+			log.Printf("  ⚠️ Failed to generate architecture document: %v", err)
 		}
 
 		if err := generateAuditDocument(ctx, result, codeContent, testContent); err != nil {
-			log.Printf("  ⚠️ 生成审计文档失败: %v", err)
+			log.Printf("  ⚠️ Failed to generate audit document: %v", err)
 		}
 	}
 
@@ -250,10 +250,10 @@ func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, p
 
 // displayExecutionSummary displays the workflow execution summary.
 func displayExecutionSummary(result *engine.WorkflowResult) {
-	log.Printf("\n执行摘要:")
-	log.Printf("  总耗时: %.1f 秒", result.Duration.Seconds())
-	log.Printf("  完成步骤: %d/%d", countCompletedSteps(result.Steps), len(result.Steps))
-	log.Printf("  执行状态: %s", result.Status)
+	log.Printf("\nExecution Summary:")
+	log.Printf("  Total duration: %.1f seconds", result.Duration.Seconds())
+	log.Printf("  Completed steps: %d/%d", countCompletedSteps(result.Steps), len(result.Steps))
+	log.Printf("  Execution status: %s", result.Status)
 }
 
 // parseStepOutput parses step output using the LLM output parser.
@@ -304,7 +304,7 @@ func extractItemsFromRawOutput(stepName, stepOutput string) []*OutputItem {
 	// Try to find code blocks in the output
 	codeBlocks := extractCodeBlocks(stepOutput)
 	if len(codeBlocks) > 0 {
-		// 如果有代码块，只取第一个作为主要内容
+		// If there are code blocks, use the first one as the main content
 		mainBlock := codeBlocks[0]
 		items = append(items, &OutputItem{
 			Name:        getDefaultFileName(outputType),
@@ -437,7 +437,7 @@ func saveOutputItem(stepName string, item *OutputItem, index int) (string, error
 	ext := getFileExtension(item.Type)
 	fileName := sanitizeFilename(item.Name)
 
-	// 如果文件名是空的或者是默认的，使用类型特定的默认文件名
+	// If the filename is empty or default, use type-specific default filename
 	if fileName == "" || fileName == "output" {
 		fileName = getDefaultFileName(item.Type)
 	}
@@ -494,26 +494,26 @@ func displaySummary(codeFiles, testFiles, docFiles []string) {
 		return
 	}
 
-	log.Println("\n=== Team 交付成果 ===")
+	log.Println("\n=== Team Deliverables ===")
 
 	if len(codeFiles) > 0 {
-		log.Printf("💻 代码文件 (%d): %v", len(codeFiles), codeFiles)
+		log.Printf("💻 Code files (%d): %v", len(codeFiles), codeFiles)
 	}
 
 	if len(testFiles) > 0 {
-		log.Printf("🧪 测试文件 (%d): %v", len(testFiles), testFiles)
+		log.Printf("🧪 Test files (%d): %v", len(testFiles), testFiles)
 	}
 
 	if len(docFiles) > 0 {
-		log.Printf("📚 文档文件 (%d): %v", len(docFiles), docFiles)
+		log.Printf("📚 Documentation files (%d): %v", len(docFiles), docFiles)
 	}
 
-	log.Println("\n💡 Agent Team 说明:")
-	log.Println("   💻 Code Agent - 负责编写核心代码")
-	log.Println("   🧪 Test Agent - 负责编写测试用例")
-	log.Println("   📚 Docs Agent - 负责编写项目文档")
-	log.Println("   🔍 Review Agent - 负责代码审查和质量保证")
-	log.Println("   ⚡ Workflow - DAG编排，支持并行执行以提高效率")
+	log.Println("\n💡 Agent Team Description:")
+	log.Println("   💻 Code Agent - Responsible for writing core code")
+	log.Println("   🧪 Test Agent - Responsible for writing test cases")
+	log.Println("   📚 Docs Agent - Responsible for writing project documentation")
+	log.Println("   🔍 Review Agent - Responsible for code review and quality assurance")
+	log.Println("   ⚡ Workflow - DAG orchestration, supports parallel execution for efficiency")
 }
 
 // saveToMemory saves the interaction to memory.
@@ -541,14 +541,14 @@ func distillTask(ctx context.Context, memorySvc core.MemoryService, userInput st
 	}
 
 	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
-	log.Printf("\n正在蒸馏任务: %s", taskID)
+	log.Printf("\nDistilling task: %s", taskID)
 
 	task, err := memorySvc.DistillTask(ctx, taskID)
 	if err != nil {
 		return fmt.Errorf("distill task: %w", err)
 	}
 
-	log.Printf("✓ 任务蒸馏完成: %s", task.TaskID)
+	log.Printf("✓ Task distillation completed: %s", task.TaskID)
 	return nil
 }
 
@@ -678,7 +678,7 @@ func generateArchitectureDocument(ctx context.Context, result *engine.WorkflowRe
 		return fmt.Errorf("write architecture document: %w", err)
 	}
 
-	log.Printf("  📐 已生成架构设计文档: %s", filePath)
+	log.Printf("  📐 Generated architecture design document: %s", filePath)
 	return nil
 }
 
@@ -770,7 +770,7 @@ func generateAuditDocument(ctx context.Context, result *engine.WorkflowResult, c
 		return fmt.Errorf("write audit document: %w", err)
 	}
 
-	log.Printf("  🔍 已生成审计文档: %s", filePath)
+	log.Printf("  🔍 Generated audit document: %s", filePath)
 	return nil
 }
 
