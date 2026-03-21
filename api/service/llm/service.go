@@ -12,9 +12,9 @@ import (
 
 // Service provides LLM operations.
 type Service struct {
-	client   *llm.Client
-	repo     core.LLMRepository
-	config   *core.BaseConfig
+	client    *llm.Client
+	repo      core.LLMRepository
+	config    *core.BaseConfig
 	llmConfig *core.LLMConfig
 }
 

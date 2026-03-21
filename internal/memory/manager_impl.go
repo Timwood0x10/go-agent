@@ -213,13 +213,13 @@ func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models
 
 	task, err := m.taskMemory.Distill(ctx, taskID)
 	if err != nil {
-		slog.Error("❌ [Memory Distillation] Failed to distill task", 
+		slog.Error("❌ [Memory Distillation] Failed to distill task",
 			"task_id", taskID, "error", err)
 		return nil, fmt.Errorf("distill task: %w", err)
 	}
 
-	slog.Info("📊 [Memory Distillation] Task distilled successfully", 
-		"task_id", taskID, 
+	slog.Info("📊 [Memory Distillation] Task distilled successfully",
+		"task_id", taskID,
 		"input_length", len(task.Payload["input"].(string)))
 	return task, nil
 }
@@ -238,15 +238,15 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 		slog.Warn("⚠️  [Memory Distillation] No input found in payload", "task_id", taskID)
 	}
 
-	slog.Info("📝 [Memory Distillation] Task details", 
-		"task_id", taskID, 
+	slog.Info("📝 [Memory Distillation] Task details",
+		"task_id", taskID,
 		"input_length", len(inputStr),
 		"vector_dimension", m.vectorDim)
 
 	// Generate local vector using simple hash-based approach
 	vector := m.generateHashVector(inputStr)
-	slog.Info("🔢 [Memory Distillation] Vector generated", 
-		"task_id", taskID, 
+	slog.Info("🔢 [Memory Distillation] Vector generated",
+		"task_id", taskID,
 		"vector_dimension", len(vector))
 
 	data := &DistilledTaskData{
@@ -260,7 +260,7 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 
 	m.distilledTasks[taskID] = data
 
-	slog.Info("✅ [Memory Distillation] Distilled task stored successfully", 
+	slog.Info("✅ [Memory Distillation] Distilled task stored successfully",
 		"task_id", taskID,
 		"total_distilled_tasks", len(m.distilledTasks))
 
@@ -310,9 +310,9 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	slog.Info("🔍 [Memory Search] Searching for similar tasks", 
-		"query", truncate(query, 50), 
-		"limit", limit, 
+	slog.Info("🔍 [Memory Search] Searching for similar tasks",
+		"query", truncate(query, 50),
+		"limit", limit,
 		"available_tasks", len(m.distilledTasks))
 
 	// Generate vector for query
@@ -343,7 +343,7 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		}
 	}
 
-	slog.Info("📊 [Memory Search] Similarity calculated", 
+	slog.Info("📊 [Memory Search] Similarity calculated",
 		"total_tasks", len(m.distilledTasks),
 		"above_threshold", len(results),
 		"threshold", 0.5)
@@ -367,8 +367,8 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		tasks = append(tasks, result.task)
 	}
 
-	slog.Info("✅ [Memory Search] Search completed", 
-		"results_count", len(tasks), 
+	slog.Info("✅ [Memory Search] Search completed",
+		"results_count", len(tasks),
 		"limit", limit)
 
 	return tasks, nil

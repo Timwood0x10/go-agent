@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"time"
 
+	"goagent/api/agent"
+	"goagent/api/memory"
+	"goagent/api/retrieval"
 	internalmemory "goagent/internal/memory"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	"goagent/internal/storage/postgres/repositories"
-	"goagent/api/agent"
-	"goagent/api/memory"
-	"goagent/api/retrieval"
 )
 
 // Client provides unified client interface for all GoAgent modules.
@@ -31,11 +31,11 @@ type Client struct {
 
 // Config configuration for GoAgent client.
 type Config struct {
-	Database   *DatabaseConfig
-	LLM        *LLMConfig
-	Embedding  *EmbeddingConfig
-	Retrieval  *RetrievalConfig
-	Memory     *MemoryConfig
+	Database  *DatabaseConfig
+	LLM       *LLMConfig
+	Embedding *EmbeddingConfig
+	Retrieval *RetrievalConfig
+	Memory    *MemoryConfig
 }
 
 // DatabaseConfig database configuration.
@@ -71,8 +71,8 @@ type RetrievalConfig struct {
 
 // MemoryConfig memory configuration.
 type MemoryConfig struct {
-	Enabled     bool
-	MaxHistory  int
+	Enabled        bool
+	MaxHistory     int
 	EnablePostgres bool
 }
 

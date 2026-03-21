@@ -92,7 +92,7 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 			},
 		},
 		"temperature": 0.7,
-		"max_tokens":  256,
+		"max_tokens":  4096, // Increased for code generation
 	}
 
 	jsonBody, err := json.Marshal(requestBody)
@@ -152,7 +152,7 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 		"stream": false,
 		"options": map[string]interface{}{
 			"temperature": 0.7,
-			"num_predict": 256,
+			"num_predict": 4096, // Increased for code generation
 		},
 	}
 

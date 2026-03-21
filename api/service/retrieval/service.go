@@ -11,8 +11,8 @@ import (
 
 // Service provides retrieval operations for knowledge base.
 type Service struct {
-	repo      core.RetrievalRepository
-	config    *core.BaseConfig
+	repo   core.RetrievalRepository
+	config *core.BaseConfig
 }
 
 // Config represents service configuration.
@@ -65,8 +65,8 @@ func (s *Service) Search(ctx context.Context, tenantID, query string) ([]*core.R
 		TenantID: tenantID,
 		Query:    query,
 		Config: &core.RetrievalConfig{
-			Mode:    core.RetrievalModeSimple,
-			TopK:    10,
+			Mode:     core.RetrievalModeSimple,
+			TopK:     10,
 			MinScore: 0.4,
 		},
 	}

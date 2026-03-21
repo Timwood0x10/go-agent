@@ -180,9 +180,9 @@ func getPayloadString(payload map[string]any, key string) string {
 
 // Message represents a conversation message.
 type Message struct {
-	Role    string    `json:"role"`
-	Content string    `json:"content"`
-	Time    string    `json:"time"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
+	Time    string `json:"time"`
 }
 
 // Task represents a distilled task with its extracted information.

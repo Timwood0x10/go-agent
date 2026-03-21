@@ -15,13 +15,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"goagent/internal/llm"
+	"goagent/internal/memory"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
 	"goagent/internal/storage/postgres/repositories"
 	"goagent/internal/storage/postgres/services"
-	"goagent/internal/llm"
-	"goagent/internal/memory"
 
 	"gopkg.in/yaml.v3"
 )
@@ -56,11 +56,11 @@ type Config struct {
 	} `yaml:"llm"`
 
 	Memory struct {
-		Enabled                 bool `yaml:"enabled"`
-		MaxHistory              int  `yaml:"max_history"`
-		MaxSessions             int  `yaml:"max_sessions"`
-		EnableDistillation      bool `yaml:"enable_distillation"`
-		DistillationThreshold   int  `yaml:"distillation_threshold"`
+		Enabled               bool `yaml:"enabled"`
+		MaxHistory            int  `yaml:"max_history"`
+		MaxSessions           int  `yaml:"max_sessions"`
+		EnableDistillation    bool `yaml:"enable_distillation"`
+		DistillationThreshold int  `yaml:"distillation_threshold"`
 	} `yaml:"memory"`
 
 	Knowledge struct {
@@ -521,7 +521,7 @@ Assistant:`, question)
 		// Step 8: Check for distillation threshold
 		kb.messageCount++
 		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
-			log.Printf("🎯 [记忆蒸馏] 对话轮数达到阈值 (%d/%d)，触发记忆蒸馏...", 
+			log.Printf("🎯 [记忆蒸馏] 对话轮数达到阈值 (%d/%d)，触发记忆蒸馏...",
 				kb.messageCount, kb.config.Memory.DistillationThreshold)
 			kb.distillMemory(ctx, tenantID)
 			kb.messageCount = 0
@@ -570,7 +570,7 @@ func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
 
 	summaryText := summary.String()
 
-	log.Printf("📝 [记忆蒸馏] 蒸馏内容预览 (%d 字符): %s", 
+	log.Printf("📝 [记忆蒸馏] 蒸馏内容预览 (%d 字符): %s",
 		len(summaryText), truncateString(summaryText, 100))
 
 	// Generate embedding for the distilled memory

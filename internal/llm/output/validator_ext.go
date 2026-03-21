@@ -22,7 +22,7 @@ const (
 	MaxArrayLength = 1000
 
 	// MaxStringLength is the maximum length for string values in JSON.
-	MaxStringLength = 10000
+	MaxStringLength = 500 * 1024 // 500KB - increased for code generation
 
 	// MaxObjectKeyLength is the maximum length for object keys in JSON.
 	MaxObjectKeyLength = 256

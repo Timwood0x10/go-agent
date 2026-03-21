@@ -8,9 +8,10 @@ import (
 
 	"goagent/api/core"
 	agentSvc "goagent/api/service/agent"
+	llmSvc "goagent/api/service/llm"
 	memorySvc "goagent/api/service/memory"
 	retrievalSvc "goagent/api/service/retrieval"
-	llmSvc "goagent/api/service/llm"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,171 +20,127 @@ import (
 // It follows the configuration structure used across all examples.
 
 type ConfigFile struct {
+	Server ServerConfig `yaml:"server"`
 
-	Server   ServerConfig   `yaml:"server"`
+	API APIConfig `yaml:"api"`
 
-	API      APIConfig      `yaml:"api"`
-
-	LLM      core.LLMConfig `yaml:"llm"`
+	LLM core.LLMConfig `yaml:"llm"`
 
 	Database DatabaseConfig `yaml:"database"`
 
-	Storage  StorageConfig  `yaml:"storage"`
+	Storage StorageConfig `yaml:"storage"`
 
-	Memory   MemoryConfig   `yaml:"memory"`
+	Memory MemoryConfig `yaml:"memory"`
 
-	Agents   AgentsConfig   `yaml:"agents"`
+	Agents AgentsConfig `yaml:"agents"`
 
-	Prompts  PromptsConfig  `yaml:"prompts"`
+	Prompts PromptsConfig `yaml:"prompts"`
 
-	Output   OutputConfig   `yaml:"output"`
-
+	Output OutputConfig `yaml:"output"`
 }
-
-
 
 // ServerConfig represents server configuration.
 
 type ServerConfig struct {
-
 	Host string `yaml:"host"`
 
-	Port int    `yaml:"port"`
-
+	Port int `yaml:"port"`
 }
-
-
 
 // APIConfig represents API configuration.
 
 type APIConfig struct {
-
 	RequestTimeout int `yaml:"request_timeout"`
 
-	MaxRetries     int `yaml:"max_retries"`
+	MaxRetries int `yaml:"max_retries"`
 
-	RetryDelay     int `yaml:"retry_delay"`
-
+	RetryDelay int `yaml:"retry_delay"`
 }
-
-
 
 // DatabaseConfig represents database configuration.
 
 type DatabaseConfig struct {
+	Enabled bool `yaml:"enabled"`
 
-	Enabled  bool   `yaml:"enabled"`
+	Type string `yaml:"type"`
 
-	Type     string `yaml:"type"`
+	Host string `yaml:"host"`
 
-	Host     string `yaml:"host"`
+	Port int `yaml:"port"`
 
-	Port     int    `yaml:"port"`
-
-	User     string `yaml:"username"`
+	User string `yaml:"username"`
 
 	Password string `yaml:"password"`
 
-	DBName   string `yaml:"database"`
+	DBName string `yaml:"database"`
 
-	SSLMode  string `yaml:"ssl_mode"`
-
+	SSLMode string `yaml:"ssl_mode"`
 }
-
-
 
 // StorageConfig represents storage configuration.
 
 type StorageConfig struct {
+	Enabled bool `yaml:"enabled"`
 
-	Enabled bool   `yaml:"enabled"`
-
-	Type    string `yaml:"type"`
-
+	Type string `yaml:"type"`
 }
-
-
 
 // MemoryConfig represents memory configuration.
 
 type MemoryConfig struct {
-
 	Enabled bool `yaml:"enabled"`
 
 	Session struct {
-
 		MaxHistory int `yaml:"max_history"`
-
 	} `yaml:"session"`
-
 }
-
-
 
 // AgentsConfig represents agent configuration.
 
 type AgentsConfig struct {
-
 	Leader LeaderAgentConfig `yaml:"leader"`
 
-	Sub    []SubAgentConfig  `yaml:"sub"`
-
+	Sub []SubAgentConfig `yaml:"sub"`
 }
-
-
 
 // LeaderAgentConfig represents leader agent configuration.
 
 type LeaderAgentConfig struct {
+	ID string `yaml:"id"`
 
-	ID              string `yaml:"id"`
+	MaxSteps int `yaml:"max_steps"`
 
-	MaxSteps        int    `yaml:"max_steps"`
-
-	MaxParallelTasks int    `yaml:"max_parallel_tasks"`
-
+	MaxParallelTasks int `yaml:"max_parallel_tasks"`
 }
-
-
 
 // SubAgentConfig represents sub-agent configuration.
 
 type SubAgentConfig struct {
+	ID string `yaml:"id"`
 
-	ID         string `yaml:"id"`
+	Type string `yaml:"type"`
 
-	Type       string `yaml:"type"`
+	Category string `yaml:"category"`
 
-	Category   string `yaml:"category"`
+	Name string `yaml:"name"`
 
-	Name       string `yaml:"name"`
+	MaxRetries int `yaml:"max_retries"`
 
-	MaxRetries int    `yaml:"max_retries"`
-
-	Timeout    int    `yaml:"timeout"`
-
+	Timeout int `yaml:"timeout"`
 }
-
-
 
 // PromptsConfig represents prompt templates configuration.
 
 type PromptsConfig struct {
+	ProfileExtraction string `yaml:"profile_extraction"`
 
-	ProfileExtraction  string `yaml:"profile_extraction"`
-
-	Recommendation     string `yaml:"recommendation"`
-
+	Recommendation string `yaml:"recommendation"`
 }
-
-
 
 // OutputConfig represents output configuration.
 
 type OutputConfig struct {
-
 	Format string `yaml:"format"`
-
 }
 
 // ConfigLoader provides configuration loading functionality with validation.
@@ -427,7 +384,7 @@ func (c *ConfigFile) validate() error {
 		core.LLMProviderOllama:     true,
 		core.LLMProviderOpenRouter: true,
 		core.LLMProviderOpenAI:     true,
-		core.LLMProviderAnthropic: true,
+		core.LLMProviderAnthropic:  true,
 	}
 	if !validProviders[c.LLM.Provider] {
 		return fmt.Errorf("invalid llm.provider: %s, must be one of ollama, openrouter, openai, anthropic", c.LLM.Provider)
@@ -481,7 +438,7 @@ func (c *ConfigFile) ToClientConfig() *Config {
 		},
 		LLM: &llmSvc.Config{
 			BaseConfig: baseConfig,
-			LLMConfig: &c.LLM,
+			LLMConfig:  &c.LLM,
 		},
 	}
 }

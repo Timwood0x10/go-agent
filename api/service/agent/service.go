@@ -221,31 +221,26 @@ func (s *Service) ListAgents(ctx context.Context, filter *core.AgentFilter) ([]*
 
 	}
 
-
-
 	// If repo is not configured, return empty list
 
 	if s.repo == nil {
 
 		pagination := &core.PaginationResponse{
 
-			Total:      0,
+			Total: 0,
 
-			Page:       1,
+			Page: 1,
 
-			PageSize:   0,
+			PageSize: 0,
 
 			TotalPages: 1,
 
-			HasMore:    false,
-
+			HasMore: false,
 		}
 
 		return []*core.Agent{}, pagination, nil
 
 	}
-
-
 
 	agents, err := s.repo.List(ctx, filter)
 
@@ -255,25 +250,20 @@ func (s *Service) ListAgents(ctx context.Context, filter *core.AgentFilter) ([]*
 
 	}
 
-
-
 	// TODO: Calculate pagination info
 
 	pagination := &core.PaginationResponse{
 
-		Total:      int64(len(agents)),
+		Total: int64(len(agents)),
 
-		Page:       1,
+		Page: 1,
 
-		PageSize:   len(agents),
+		PageSize: len(agents),
 
 		TotalPages: 1,
 
-		HasMore:    false,
-
+		HasMore: false,
 	}
-
-
 
 	return agents, pagination, nil
 

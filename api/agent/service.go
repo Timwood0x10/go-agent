@@ -71,10 +71,10 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
 
 // Agent represents an AI agent with session management.
 type Agent struct {
-	ID        string    `json:"id"`
-	SessionID string    `json:"session_id"`
-	Status    Status    `json:"status"`
-	CreatedAt int64     `json:"created_at"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	Status    Status `json:"status"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 // Status represents the current status of an agent.

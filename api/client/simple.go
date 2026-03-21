@@ -28,7 +28,7 @@ type SimpleClient struct {
 //	    log.Fatal(err)
 //	}
 //	defer client.Close()
-//	
+//
 //	// Execute a task
 //	result, err := client.Execute("user query here")
 //	if err != nil {

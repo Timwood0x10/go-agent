@@ -99,7 +99,7 @@ type components struct {
 func loadConfig() (*config.Config, error) {
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "./examples/devagent/config/server.yaml"
+		configPath = "./config/server.yaml"
 	}
 
 	cfg, err := config.Load(configPath)

@@ -13,9 +13,9 @@ import (
 
 // Service provides retrieval operations for knowledge base.
 type Service struct {
-	simpleRetrieval *services.SimpleRetrievalService
+	simpleRetrieval   *services.SimpleRetrievalService
 	advancedRetrieval *services.RetrievalService
-	pool            *postgres.Pool
+	pool              *postgres.Pool
 }
 
 // Config configuration for retrieval service.
@@ -62,9 +62,9 @@ func NewService(
 	}
 
 	return &Service{
-		simpleRetrieval:  simpleRetrieval,
+		simpleRetrieval:   simpleRetrieval,
 		advancedRetrieval: advancedRetrieval,
-		pool:            pool,
+		pool:              pool,
 	}, nil
 }
 

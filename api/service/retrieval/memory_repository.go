@@ -13,9 +13,9 @@ import (
 // MemoryRepository provides an in-memory implementation of RetrievalRepository.
 // This is useful for development and testing without a database.
 type MemoryRepository struct {
-	mu         sync.RWMutex
-	knowledge  map[string]*core.KnowledgeItem
-	idCounter  int64
+	mu        sync.RWMutex
+	knowledge map[string]*core.KnowledgeItem
+	idCounter int64
 }
 
 // NewMemoryRepository creates a new in-memory retrieval repository.

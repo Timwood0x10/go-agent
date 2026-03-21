@@ -224,14 +224,14 @@ func (s *Service) DistillTask(ctx context.Context, taskID string) (*core.Distill
 
 	// TODO: Implement task distillation logic
 	task := &core.DistilledTask{
-		TaskID:     taskID,
-		Input:      "example input",
-		Output:     "example output",
-		Context:    "example context",
-		Summary:    "example summary",
-		Tags:       []string{"example"},
-		Embedding:  make([]float32, 0),
-		CreatedAt:  time.Now(),
+		TaskID:    taskID,
+		Input:     "example input",
+		Output:    "example output",
+		Context:   "example context",
+		Summary:   "example summary",
+		Tags:      []string{"example"},
+		Embedding: make([]float32, 0),
+		CreatedAt: time.Now(),
 	}
 
 	if err := s.repo.StoreDistilledTask(ctx, task); err != nil {

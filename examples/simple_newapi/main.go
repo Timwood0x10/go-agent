@@ -42,7 +42,7 @@ func main() {
 	// Step 3: Load and execute workflow
 	log.Println("\n=== Executing Workflow ===")
 	workflowPath := "config/workflow.yaml"
-	
+
 	result, err := workflowClient.ExecuteFromFile(context.Background(), workflowPath, userQuery)
 	if err != nil {
 		log.Fatalf("Failed to execute workflow: %v", err)
@@ -71,19 +71,19 @@ func main() {
 
 		// Get emoji based on step name
 		emoji := getStepEmoji(step.Name)
-		
+
 		log.Printf("\n%s %s:", emoji, step.Name)
 
 		for i, item := range items {
 			if i >= 3 { // Only show top 3
 				break
 			}
-			
+
 			priceStr := ""
 			if item.Price > 0 {
 				priceStr = fmt.Sprintf(" - ¥%.0f", item.Price)
 			}
-			
+
 			log.Printf("  %d. %s%s", i+1, item.Name, priceStr)
 			if item.Reason != "" {
 				log.Printf("     理由：%s", item.Reason)
@@ -109,13 +109,13 @@ func parseRecommendations(output string) []RecommendationItem {
 	// Try to extract JSON from output
 	jsonStart := strings.Index(output, "{")
 	jsonEnd := strings.LastIndex(output, "}")
-	
+
 	if jsonStart == -1 || jsonEnd == -1 {
 		return []RecommendationItem{}
 	}
-	
+
 	jsonStr := output[jsonStart : jsonEnd+1]
-	
+
 	var result struct {
 		Items []struct {
 			Name   string  `json:"name"`
@@ -123,11 +123,11 @@ func parseRecommendations(output string) []RecommendationItem {
 			Reason string  `json:"reason"`
 		} `json:"items"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
 		return []RecommendationItem{}
 	}
-	
+
 	items := make([]RecommendationItem, 0, len(result.Items))
 	for _, item := range result.Items {
 		items = append(items, RecommendationItem{
@@ -136,7 +136,7 @@ func parseRecommendations(output string) []RecommendationItem {
 			Reason: item.Reason,
 		})
 	}
-	
+
 	return items
 }
 
@@ -150,7 +150,7 @@ type RecommendationItem struct {
 // getStepEmoji returns an emoji based on step name.
 func getStepEmoji(stepName string) string {
 	stepName = strings.ToLower(stepName)
-	
+
 	switch {
 	case strings.Contains(stepName, "top") || strings.Contains(stepName, "上衣"):
 		return "👕"
