@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"goagent/internal/storage/postgres"
@@ -30,11 +30,11 @@ func main() {
 	// Create pool
 	pool, err := postgres.NewPool(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create pool: %v", err)
+		slog.Error("Failed to create pool", "error", err)
 	}
 	defer func() {
 		if err := pool.Close(); err != nil {
-			log.Fatal("Failed to close pool: ", err)
+			slog.Error("Failed to close pool", "error", err)
 		}
 	}()
 
@@ -42,7 +42,7 @@ func main() {
 
 	// Run storage migrations
 	if err := postgres.MigrateStorage(ctx, pool); err != nil {
-		log.Fatalf("Failed to run storage migrations: %v", err)
+		slog.Error("Failed to run storage migrations", "error", err)
 	}
 	fmt.Println("Storage migrations completed successfully!")
 	fmt.Println("")

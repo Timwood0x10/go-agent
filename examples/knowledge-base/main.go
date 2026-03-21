@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -105,17 +106,20 @@ func main() {
 	// Load configuration
 	config, err := loadConfig(*configFlag)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Create knowledge base
 	kb, err := NewKnowledgeBase(config)
 	if err != nil {
-		log.Fatalf("Failed to create knowledge base: %v", err)
+		slog.Error("Failed to create knowledge base", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := kb.Close(); err != nil {
-			log.Fatal("Failed to close knowledge base: ", err)
+			slog.Error("Failed to close knowledge base", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -132,9 +136,11 @@ func main() {
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Fatalf("Import timeout (5 minutes exceeded)")
+				slog.Error("Import timeout (5 minutes exceeded)")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to import document: %v", err)
+			slog.Error("Failed to import document", "error", err)
+			os.Exit(1)
 		}
 		log.Printf("Document imported successfully. Document ID: %s", docID)
 
@@ -151,9 +157,11 @@ func main() {
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Fatalf("List timeout")
+				slog.Error("List timeout")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to list documents: %v", err)
+			slog.Error("Failed to list documents", "error", err)
+			os.Exit(1)
 		}
 		if len(docs) == 0 {
 			log.Println("No documents found")
@@ -171,9 +179,11 @@ func main() {
 		if err := kb.DeleteDocument(deleteCtx, *tenantFlag, *deleteFlag); err != nil {
 			cancel()
 			if err == context.DeadlineExceeded {
-				log.Fatalf("Delete timeout")
+				slog.Error("Delete timeout")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to delete document: %v", err)
+			slog.Error("Failed to delete document", "error", err)
+			os.Exit(1)
 		}
 		cancel()
 		log.Printf("Document deleted successfully")
@@ -434,7 +444,7 @@ Answer (YES/NO only):`, question)
 			// Step 3: Build context from retrieved documents
 			var contextBuilder strings.Builder
 			for i, result := range results {
-				contextBuilder.WriteString(fmt.Sprintf("[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content))
+				fmt.Fprintf(&contextBuilder, "[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content)
 			}
 
 			// Step 4: Build conversation history context
@@ -448,7 +458,7 @@ Answer (YES/NO only):`, question)
 						start = 0
 					}
 					for _, msg := range messages[start:] {
-						historyContext.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
+						fmt.Fprintf(&historyContext, "%s: %s\n", msg.Role, msg.Content)
 					}
 				}
 			}
@@ -534,9 +544,9 @@ Assistant:`, question)
 // formatRawResults formats search results for display when LLM is not available.
 func (kb *KnowledgeBase) formatRawResults(results []*SearchResult) string {
 	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Found %d relevant documents:\n\n", len(results)))
+	fmt.Fprintf(&output, "Found %d relevant documents:\n\n", len(results))
 	for i, result := range results {
-		output.WriteString(fmt.Sprintf("[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content))
+		fmt.Fprintf(&output, "[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content)
 	}
 	output.WriteString("Please configure LLM settings in config.yaml to enable natural language answers.")
 	return output.String()
@@ -565,7 +575,7 @@ func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
 	var summary strings.Builder
 	summary.WriteString("Conversation Summary:\n\n")
 	for _, msg := range messages {
-		summary.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
+		fmt.Fprintf(&summary, "%s: %s\n", msg.Role, msg.Content)
 	}
 
 	summaryText := summary.String()
@@ -644,7 +654,7 @@ func (kb *KnowledgeBase) ListDocuments(ctx context.Context, tenantID string) ([]
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Fatal("Failed to close rows", err)
+			slog.Error("Failed to close rows", "error", err)
 		}
 	}()
 

@@ -158,7 +158,7 @@ func main() {
     // 创建客户端
     client, err := client.NewClient(config)
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     defer client.Close(context.Background())
 }
@@ -170,7 +170,7 @@ func main() {
 // 获取Agent服务
 agentSvc, err := client.Agent()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 创建Agent
@@ -180,13 +180,13 @@ agent, err := agentSvc.CreateAgent(ctx, &core.AgentConfig{
     Type: "sub",
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 查询Agent
 agent, err = agentSvc.GetAgent(ctx, "agent-001")
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 列出所有Agents
@@ -194,7 +194,7 @@ agents, pagination, err := agentSvc.ListAgents(ctx, &core.AgentFilter{
     Type: "sub",
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -204,7 +204,7 @@ if err != nil {
 // 获取Memory服务
 memorySvc, err := client.Memory()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 创建会话
@@ -214,13 +214,13 @@ sessionID, err := memorySvc.CreateSession(ctx, &core.SessionConfig{
     ExpiresIn: 24 * time.Hour,
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 添加消息
 err = memorySvc.AddMessage(ctx, sessionID, core.MessageRoleUser, "Hello")
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 获取消息
@@ -229,7 +229,7 @@ messages, err := memorySvc.GetMessages(ctx, sessionID, &core.PaginationRequest{
     PageSize: 10,
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -239,13 +239,13 @@ if err != nil {
 // 获取Retrieval服务
 retrievalSvc, err := client.Retrieval()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 搜索知识
 results, err := retrievalSvc.Search(ctx, "tenant-001", "如何使用GoAgent")
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 添加知识
@@ -256,7 +256,7 @@ item, err := retrievalSvc.AddKnowledge(ctx, &core.KnowledgeItem{
     Category: "getting-started",
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -266,13 +266,13 @@ if err != nil {
 // 获取LLM服务
 llmSvc, err := client.LLM()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // 生成文本
 response, err := llmSvc.GenerateSimple(ctx, "写一首关于春天的诗")
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 println(response)
 
@@ -281,7 +281,7 @@ embeddingResp, err := llmSvc.GenerateEmbedding(ctx, &core.EmbeddingRequest{
     Input: "这是一段测试文本",
 })
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 println(embeddingResp.Embedding)
 ```
@@ -299,7 +299,7 @@ if err != nil {
         // 处理已存在错误
     } else {
         // 处理其他错误
-        log.Fatal(err)
+        slog.Error(err)
     }
 }
 ```

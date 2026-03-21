@@ -25,14 +25,14 @@ type SimpleClient struct {
 //
 //	client, err := client.NewSimpleClient("config.yaml")
 //	if err != nil {
-//	    log.Fatal(err)
+//	    slog.Error(err)
 //	}
 //	defer client.Close()
 //
 //	// Execute a task
 //	result, err := client.Execute("user query here")
 //	if err != nil {
-//	    log.Fatal(err)
+//	    slog.Error(err)
 //	}
 //	fmt.Println(result)
 func NewSimpleClient(configPath string) (*SimpleClient, error) {
@@ -66,7 +66,7 @@ func NewSimpleClient(configPath string) (*SimpleClient, error) {
 //
 //	result, err := client.Execute(ctx, "Find me some casual shirts for daily commute, budget 500-1000")
 //	if err != nil {
-//	    log.Fatal(err)
+//	    slog.Error(err)
 //	}
 //	fmt.Println(result)
 func (s *SimpleClient) Execute(ctx context.Context, query string) (string, error) {
@@ -102,7 +102,7 @@ func (s *SimpleClient) Execute(ctx context.Context, query string) (string, error
 //
 //	result, err := client.ExecuteWithAgent(ctx, "agent-top", "Recommend some casual shirts")
 //	if err != nil {
-//	    log.Fatal(err)
+//	    slog.Error(err)
 //	}
 //	fmt.Println(result)
 func (s *SimpleClient) ExecuteWithAgent(ctx context.Context, agentID, query string) (string, error) {
@@ -145,7 +145,7 @@ func (s *SimpleClient) ExecuteWithAgent(ctx context.Context, agentID, query stri
 //	}
 //	response, err := client.Chat(ctx, messages)
 //	if err != nil {
-//	    log.Fatal(err)
+//	    slog.Error(err)
 //	}
 //	fmt.Println(response)
 func (s *SimpleClient) Chat(ctx context.Context, messages []*core.Message) (string, error) {

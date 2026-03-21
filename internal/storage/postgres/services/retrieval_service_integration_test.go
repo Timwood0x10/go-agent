@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -82,7 +83,7 @@ func TestSearchKnowledgeVector_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 
@@ -184,7 +185,7 @@ func TestBm25SearchKnowledge_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 
@@ -264,7 +265,7 @@ func TestMergeAndRank_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 
@@ -363,7 +364,7 @@ func TestGetEmbedding_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 
@@ -398,7 +399,7 @@ func TestFilterByScore_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 
@@ -447,7 +448,7 @@ func TestCalculateTimeDecay_Integration(t *testing.T) {
 	db := getTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Failed to close test database: ", err)
+			slog.Error("Failed to close test database: ", "error", err)
 		}
 	}()
 

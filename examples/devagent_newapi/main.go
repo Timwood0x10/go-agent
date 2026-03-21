@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,26 +34,30 @@ func main() {
 	ctx := context.Background()
 
 	if err := initializeOutputDirectories(); err != nil {
-		log.Fatalf("Failed to initialize output directories: %v", err)
+		slog.Error("Failed to initialize output directories", "error", err)
 	}
 
 	devClient, err := client.NewClientFromDefaultPath()
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("Failed to create client", "error", err)
 	}
-	defer devClient.Close(ctx)
+	defer func() {
+		if err := devClient.Close(ctx); err != nil {
+			slog.Error("Failed to close dev client:", "error", err)
+		}
+	}()
 
 	config := devClient.GetConfig()
 	displayConfiguration(config)
 
 	workflowClient, err := client.NewWorkflowClient(devClient)
 	if err != nil {
-		log.Fatalf("Failed to create workflow client: %v", err)
+		slog.Error("Failed to create workflow client", "error", err)
 	}
 
 	memorySvc, err := devClient.Memory()
 	if err != nil {
-		log.Printf("Memory service not available: %v", err)
+		slog.Error("Memory service not available", "error", err)
 	}
 
 	parser := output.NewParser()
@@ -60,7 +65,7 @@ func main() {
 	for {
 		userInput, shouldExit := getUserInput()
 		if shouldExit {
-			log.Println("再见！")
+			slog.Info("再见！")
 			break
 		}
 
@@ -76,12 +81,12 @@ func main() {
 			}
 		}
 
-		log.Printf("\n正在处理: %s", userInput)
+		log.Printf("\n processing : %s", userInput)
 
 		workflowPath := "config/workflow.yaml"
 		result, err := workflowClient.ExecuteFromFile(ctx, workflowPath, userInput)
 		if err != nil {
-			log.Printf("✗ 执行失败: %v", err)
+			slog.Error("✗ execute failed:", "error", err)
 			continue
 		}
 
@@ -218,11 +223,12 @@ func processAndSaveResults(ctx context.Context, result *engine.WorkflowResult, p
 		categorizeAndDisplay(step.Name, filePath, &codeFiles, &testFiles, &docFiles)
 
 		// 收集内容用于生成文档
-		if outputType == OutputTypeCode {
+		switch outputType {
+		case OutputTypeCode:
 			codeContent = append(codeContent, mainItem.Content)
-		} else if outputType == OutputTypeTest {
+		case OutputTypeTest:
 			testContent = append(testContent, mainItem.Content)
-		} else if outputType == OutputTypeDocs || outputType == OutputTypeReview {
+		case OutputTypeDocs, OutputTypeReview:
 			docsContent = append(docsContent, mainItem.Content)
 		}
 	}
@@ -426,18 +432,6 @@ func detectOutputType(stepName string) OutputType {
 	}
 }
 
-// displayRawOutput displays raw output when parsing fails.
-func displayRawOutput(step *engine.StepResult) {
-	emoji := getStepEmoji(step.Name)
-	log.Printf("\n%s %s (%.1fs):", emoji, step.Name, step.Duration.Seconds())
-
-	preview := step.Output
-	if len(preview) > maxPreviewLength {
-		preview = preview[:maxPreviewLength] + "..."
-	}
-	log.Printf("  输出: %s", preview)
-}
-
 // saveOutputItem saves an output item to a file.
 func saveOutputItem(stepName string, item *OutputItem, index int) (string, error) {
 	ext := getFileExtension(item.Type)
@@ -628,8 +622,8 @@ func generateArchitectureDocument(ctx context.Context, result *engine.WorkflowRe
 
 	docBuilder := strings.Builder{}
 	docBuilder.WriteString("# Architecture Design Document\n\n")
-	docBuilder.WriteString(fmt.Sprintf("**Generated:** %s\n", timestamp))
-	docBuilder.WriteString(fmt.Sprintf("**Execution ID:** %s\n\n", executionID))
+	fmt.Fprintf(&docBuilder, "**Generated:** %s\n", timestamp)
+	fmt.Fprintf(&docBuilder, "**Execution ID:** %s\n\n", executionID)
 
 	docBuilder.WriteString("## Overview\n\n")
 	docBuilder.WriteString("This document describes the architecture and design of the generated solution.\n\n")
@@ -638,7 +632,7 @@ func generateArchitectureDocument(ctx context.Context, result *engine.WorkflowRe
 
 	docBuilder.WriteString("### Code Components\n\n")
 	for i, content := range codeContent {
-		docBuilder.WriteString(fmt.Sprintf("#### Component %d\n\n", i+1))
+		fmt.Fprintf(&docBuilder, "#### Component %d\n\n", i+1)
 		docBuilder.WriteString("```go\n")
 		docBuilder.WriteString(content)
 		docBuilder.WriteString("\n```\n\n")
@@ -646,7 +640,7 @@ func generateArchitectureDocument(ctx context.Context, result *engine.WorkflowRe
 
 	docBuilder.WriteString("### Test Components\n\n")
 	for i, content := range testContent {
-		docBuilder.WriteString(fmt.Sprintf("#### Test Suite %d\n\n", i+1))
+		fmt.Fprintf(&docBuilder, "#### Test Suite %d\n\n", i+1)
 		docBuilder.WriteString("```go\n")
 		docBuilder.WriteString(content)
 		docBuilder.WriteString("\n```\n\n")
@@ -654,20 +648,20 @@ func generateArchitectureDocument(ctx context.Context, result *engine.WorkflowRe
 
 	docBuilder.WriteString("## Documentation\n\n")
 	for i, content := range docsContent {
-		docBuilder.WriteString(fmt.Sprintf("### Documentation Section %d\n\n", i+1))
+		fmt.Fprintf(&docBuilder, "### Documentation Section %d\n\n", i+1)
 		docBuilder.WriteString(content)
 		docBuilder.WriteString("\n\n")
 	}
 
 	docBuilder.WriteString("## Workflow Execution Details\n\n")
-	docBuilder.WriteString(fmt.Sprintf("- **Total Duration:** %.2f seconds\n", result.Duration.Seconds()))
-	docBuilder.WriteString(fmt.Sprintf("- **Total Steps:** %d\n", len(result.Steps)))
-	docBuilder.WriteString(fmt.Sprintf("- **Completed Steps:** %d\n", countCompletedSteps(result.Steps)))
-	docBuilder.WriteString(fmt.Sprintf("- **Status:** %s\n\n", result.Status))
+	fmt.Fprintf(&docBuilder, "- **Total Duration:** %.2f seconds\n", result.Duration.Seconds())
+	fmt.Fprintf(&docBuilder, "- **Total Steps:** %d\n", len(result.Steps))
+	fmt.Fprintf(&docBuilder, "- **Completed Steps:** %d\n", countCompletedSteps(result.Steps))
+	fmt.Fprintf(&docBuilder, "- **Status:** %s\n\n", result.Status)
 
 	docBuilder.WriteString("### Step Details\n\n")
 	for _, step := range result.Steps {
-		docBuilder.WriteString(fmt.Sprintf("- **%s:** %s (%.2fs)\n", step.Name, step.Status, step.Duration.Seconds()))
+		fmt.Fprintf(&docBuilder, "- **%s:** %s (%.2fs)\n", step.Name, step.Status, step.Duration.Seconds())
 	}
 
 	docBuilder.WriteString("\n## Design Principles\n\n")
@@ -695,11 +689,11 @@ func generateAuditDocument(ctx context.Context, result *engine.WorkflowResult, c
 
 	docBuilder := strings.Builder{}
 	docBuilder.WriteString("# Code Audit Report\n\n")
-	docBuilder.WriteString(fmt.Sprintf("**Generated:** %s\n", timestamp))
-	docBuilder.WriteString(fmt.Sprintf("**Execution ID:** %s\n\n", executionID))
+	fmt.Fprintf(&docBuilder, "**Generated:** %s\n", timestamp)
+	fmt.Fprintf(&docBuilder, "**Execution ID:** %s\n\n", executionID)
 
 	docBuilder.WriteString("## Executive Summary\n\n")
-	docBuilder.WriteString(fmt.Sprintf("This audit report evaluates the code generated by DevAgent (Execution ID: %s).\n\n", executionID))
+	fmt.Fprintf(&docBuilder, "This audit report evaluates the code generated by DevAgent (Execution ID: %s).\n\n", executionID)
 
 	docBuilder.WriteString("## Audit Findings\n\n")
 
@@ -714,11 +708,11 @@ func generateAuditDocument(ctx context.Context, result *engine.WorkflowResult, c
 		totalTestLines += len(strings.Split(content, "\n"))
 	}
 
-	docBuilder.WriteString(fmt.Sprintf("- **Total Code Lines:** %d\n", totalCodeLines))
-	docBuilder.WriteString(fmt.Sprintf("- **Total Test Lines:** %d\n", totalTestLines))
+	fmt.Fprintf(&docBuilder, "- **Total Code Lines:** %d\n", totalCodeLines)
+	fmt.Fprintf(&docBuilder, "- **Total Test Lines:** %d\n", totalTestLines)
 	if totalCodeLines > 0 {
 		coverage := float64(totalTestLines) / float64(totalCodeLines) * 100
-		docBuilder.WriteString(fmt.Sprintf("- **Test Coverage Estimate:** %.2f%%\n", coverage))
+		fmt.Fprintf(&docBuilder, "- **Test Coverage Estimate:** %.2f%%\n", coverage)
 	}
 	docBuilder.WriteString("\n")
 
@@ -742,8 +736,8 @@ func generateAuditDocument(ctx context.Context, result *engine.WorkflowResult, c
 
 	docBuilder.WriteString("### Performance Assessment\n\n")
 	docBuilder.WriteString("#### Workflow Performance\n\n")
-	docBuilder.WriteString(fmt.Sprintf("- **Total Execution Time:** %.2f seconds\n", result.Duration.Seconds()))
-	docBuilder.WriteString(fmt.Sprintf("- **Average Step Duration:** %.2f seconds\n", result.Duration.Seconds()/float64(len(result.Steps))))
+	fmt.Fprintf(&docBuilder, "- **Total Execution Time:** %.2f seconds\n", result.Duration.Seconds())
+	fmt.Fprintf(&docBuilder, "- **Average Step Duration:** %.2f seconds\n", result.Duration.Seconds()/float64(len(result.Steps)))
 	docBuilder.WriteString("\n")
 
 	docBuilder.WriteString("### Recommendations\n\n")
@@ -755,11 +749,11 @@ func generateAuditDocument(ctx context.Context, result *engine.WorkflowResult, c
 
 	docBuilder.WriteString("## Step-by-Step Analysis\n\n")
 	for _, step := range result.Steps {
-		docBuilder.WriteString(fmt.Sprintf("### %s\n\n", step.Name))
-		docBuilder.WriteString(fmt.Sprintf("- **Status:** %s\n", step.Status))
-		docBuilder.WriteString(fmt.Sprintf("- **Duration:** %.2f seconds\n", step.Duration.Seconds()))
+		fmt.Fprintf(&docBuilder, "### %s\n\n", step.Name)
+		fmt.Fprintf(&docBuilder, "- **Status:** %s\n", step.Status)
+		fmt.Fprintf(&docBuilder, "- **Duration:** %.2f seconds\n", step.Duration.Seconds())
 		if step.Error != "" {
-			docBuilder.WriteString(fmt.Sprintf("- **Error:** %s\n", step.Error))
+			fmt.Fprintf(&docBuilder, "- **Error:** %s\n", step.Error)
 		}
 		docBuilder.WriteString("\n")
 	}

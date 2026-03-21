@@ -90,7 +90,7 @@ func (w *WorkflowClient) registerAgents(ctx context.Context) {
 	// Register each sub-agent
 	for _, agentConfig := range w.client.configFile.Agents.Sub {
 		agentType := agentConfig.Type
-		w.registry.Register(agentType, func(ctx context.Context, config interface{}) (base.Agent, error) {
+		if err := w.registry.Register(agentType, func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return &WorkflowAgentExecutor{
 				agentID:    agentConfig.ID,
 				agentName:  agentConfig.Name,
@@ -101,7 +101,9 @@ func (w *WorkflowClient) registerAgents(ctx context.Context) {
 				timeout:    time.Duration(agentConfig.Timeout) * time.Second,
 				maxRetries: agentConfig.MaxRetries,
 			}, nil
-		})
+		}); err != nil {
+			continue
+		}
 	}
 }
 

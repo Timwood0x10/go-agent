@@ -4,6 +4,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"goagent/api/core"
@@ -109,7 +110,7 @@ func (s *Service) Generate(ctx context.Context, request *core.GenerateRequest) (
 	if s.repo != nil {
 		if err := s.repo.LogGeneration(ctx, request, response); err != nil {
 			// Log error but don't fail the request
-			fmt.Printf("warning: failed to log generation: %v\n", err)
+			slog.Warn("failed to log generation", "error", err)
 		}
 	}
 

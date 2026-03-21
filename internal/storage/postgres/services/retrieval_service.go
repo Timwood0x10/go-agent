@@ -424,7 +424,7 @@ func (s *RetrievalService) searchVector(ctx context.Context, req *SearchRequest)
 	s.logger.Debug("Running vector search", "query", req.Query)
 
 	embedding := s.getEmbedding(ctx, req.Query)
-	if embedding == nil || len(embedding) == 0 {
+	if len(embedding) == 0 {
 		s.logger.Warn("No embedding available for vector search")
 		return []*SearchResult{}, nil
 	}

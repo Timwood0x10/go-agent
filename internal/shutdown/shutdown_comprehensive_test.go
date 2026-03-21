@@ -323,10 +323,10 @@ func TestManager_Wait(t *testing.T) {
 	manager := NewManager(10 * time.Second)
 	manager.RegisterPhase(PhaseGraceful, 2*time.Second)
 
-	executed := false
+	var executed atomic.Int64
 	if err := manager.AddCallback(PhaseGraceful, func(ctx context.Context) error {
 		time.Sleep(500 * time.Millisecond)
-		executed = true
+		executed.Store(1)
 		return nil
 	}); err != nil {
 		t.Fatalf("Failed to add callback: %v", err)
@@ -345,7 +345,7 @@ func TestManager_Wait(t *testing.T) {
 	// Give a small buffer for the callback to complete
 	time.Sleep(600 * time.Millisecond)
 
-	if !executed {
+	if executed.Load() == 0 {
 		t.Errorf("expected callback to be executed")
 	}
 }

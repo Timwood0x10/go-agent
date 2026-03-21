@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"goagent/internal/storage/postgres"
@@ -30,11 +30,11 @@ func main() {
 	// Create pool
 	pool, err := postgres.NewPool(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create pool: %v", err)
+		slog.Error("Failed to create pool", "error", err)
 	}
 	defer func() {
 		if err := pool.Close(); err != nil {
-			log.Fatal("Failed to close pool: ", err)
+			slog.Error("Failed to close pool", "error", err)
 		}
 	}()
 
@@ -43,13 +43,13 @@ func main() {
 	// Enable pgvector extension
 	_, err = pool.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector")
 	if err != nil {
-		log.Fatalf("Failed to create vector extension: %v", err)
+		slog.Error("Failed to create vector extension", "error", err)
 	}
 	fmt.Println("Enabled pgvector extension")
 
 	// Run migrations
 	if err := postgres.MigrateStorage(ctx, pool); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("Failed to run migrations", "error", err)
 	}
 	fmt.Println("Migrations completed successfully")
 }

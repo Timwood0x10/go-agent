@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -116,7 +116,7 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Fatal("failed to close response body: ", err)
+			slog.Error("failed to close response body: ", "error", err)
 		}
 	}()
 
@@ -179,7 +179,7 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Fatal("failed to close response body: ", err)
+			slog.Error("failed to close response body: ", "error", err)
 		}
 	}()
 

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
+	"os"
 	"strings"
 
 	"goagent/api/client"
@@ -17,9 +19,14 @@ func main() {
 	// Step 1: Load config and create client
 	goagentClient, err := client.NewClientFromDefaultPath()
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("Failed to create client", "error", err)
+		os.Exit(1)
 	}
-	defer goagentClient.Close(context.Background())
+	defer func() {
+		if err := goagentClient.Close(context.Background()); err != nil {
+			slog.Error("Failed to close GOAGENT CLient", "error", err)
+		}
+	}()
 
 	config := goagentClient.GetConfig()
 
@@ -36,7 +43,8 @@ func main() {
 	// Step 2: Create workflow client
 	workflowClient, err := client.NewWorkflowClient(goagentClient)
 	if err != nil {
-		log.Fatalf("Failed to create workflow client: %v", err)
+		slog.Error("Failed to create workflow client", "error", err)
+		os.Exit(1)
 	}
 
 	// Step 3: Load and execute workflow
@@ -45,7 +53,8 @@ func main() {
 
 	result, err := workflowClient.ExecuteFromFile(context.Background(), workflowPath, userQuery)
 	if err != nil {
-		log.Fatalf("Failed to execute workflow: %v", err)
+		slog.Error("Failed to execute workflow", "error", err)
+		os.Exit(1)
 	}
 
 	// Step 4: Display results
@@ -95,13 +104,6 @@ func main() {
 	log.Printf("\n✓ 为您生成了 %d 类推荐，耗时 %.1f 秒", countCompletedSteps(result.Steps), result.Duration.Seconds())
 
 	log.Println("\n=== Done! ===")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // parseRecommendations parses JSON output and extracts recommendation items.

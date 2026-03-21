@@ -1,4 +1,4 @@
-// Package client provides unified client interface for GoAgent API.
+// Package client provides client interface for GoAgent API.
 package client
 
 import (
@@ -13,7 +13,7 @@ import (
 	retrievalSvc "goagent/api/service/retrieval"
 )
 
-// Client provides unified client interface for all GoAgent modules.
+// Client provides client interface for all GoAgent modules.
 type Client struct {
 	agentService     *agentSvc.Service
 	memoryService    *memorySvc.Service
@@ -163,17 +163,25 @@ func NewClientWithConfigFile(config *Config, configFile *ConfigFile) (*Client, e
 // ctx - operation context.
 // Returns true if all services are available, false otherwise.
 func (c *Client) Ping(ctx context.Context) bool {
-	if c.agentService != nil {
-		// TODO: Ping agent service
+	// Agent service is available if configured
+	if c.agentService == nil {
+		return false
 	}
-	if c.memoryService != nil {
-		// TODO: Ping memory service
+
+	// Memory service is available if configured
+	if c.memoryService == nil {
+		return false
 	}
-	if c.retrievalService != nil {
-		// TODO: Ping retrieval service
+
+	// Retrieval service is available if configured
+	if c.retrievalService == nil {
+		return false
 	}
-	if c.llmService != nil {
-		return c.llmService.IsEnabled()
+
+	// LLM service checks if it's enabled
+	if c.llmService != nil && !c.llmService.IsEnabled() {
+		return false
 	}
+
 	return true
 }

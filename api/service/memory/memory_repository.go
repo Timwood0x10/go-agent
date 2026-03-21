@@ -12,11 +12,10 @@ import (
 // MemoryRepository provides an in-memory implementation of MemoryRepository.
 // This is useful for development and testing without a database.
 type MemoryRepository struct {
-	mu        sync.RWMutex
-	sessions  map[string]*core.Session
-	messages  map[string][]*core.Message
-	tasks     map[string]*core.DistilledTask
-	taskCount int64
+	mu       sync.RWMutex
+	sessions map[string]*core.Session
+	messages map[string][]*core.Message
+	tasks    map[string]*core.DistilledTask
 }
 
 // NewMemoryRepository creates a new in-memory memory repository.

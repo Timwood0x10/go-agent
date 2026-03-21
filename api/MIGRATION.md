@@ -63,7 +63,7 @@ config := &api.Config{
 
 client, err := api.NewClient(config)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 defer client.Close(context.Background())
 ```
@@ -97,7 +97,7 @@ config := &client.Config{
 
 client, err := client.NewClient(config)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 defer client.Close(context.Background())
 ```
@@ -115,17 +115,17 @@ retrievalSvc := client.Retrieval()
 ```go
 agentSvc, err := client.Agent()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 memorySvc, err := client.Memory()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 retrievalSvc, err := client.Retrieval()
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -154,7 +154,7 @@ if err != nil {
     if err == agent.ErrInvalidAgentID {
         // 处理错误
     }
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -167,7 +167,7 @@ if err != nil {
     if errors.Is(err, agent.ErrInvalidAgentID) {
         // 处理错误
     }
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -248,26 +248,26 @@ func main() {
     
     client, err := api.NewClient(config)
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     defer client.Close(context.Background())
     
     // Create agent
     agent, err := client.Agent().CreateAgent(context.Background(), "agent-001")
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Create session
     sessionID, err := client.Memory().CreateSession(context.Background(), "user-001")
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Add message
     err = client.Memory().AddMessage(context.Background(), sessionID, "user", "Hello")
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
 }
 ```
@@ -305,14 +305,14 @@ func main() {
     
     client, err := client.NewClient(config)
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     defer client.Close(context.Background())
     
     // Get agent service
     agentSvc, err := client.Agent()
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Create agent
@@ -322,13 +322,13 @@ func main() {
         Type: "sub",
     })
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Get memory service
     memorySvc, err := client.Memory()
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Create session
@@ -337,13 +337,13 @@ func main() {
         TenantID: "tenant-001",
     })
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
     
     // Add message
     err = memorySvc.AddMessage(context.Background(), sessionID, core.MessageRoleUser, "Hello")
     if err != nil {
-        log.Fatal(err)
+        slog.Error(err)
     }
 }
 ```

@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"goagent/api/core"
@@ -190,11 +191,6 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
 		return ErrAgentNotFound
 	}
 
-	// Delete session if exists
-	if agent.SessionID != "" && s.memoryMgr != nil {
-		// TODO: Implement session deletion
-	}
-
 	// Delete agent
 	if err := s.repo.Delete(ctx, agentID); err != nil {
 		return fmt.Errorf("delete agent: %w", err)
@@ -315,7 +311,7 @@ func (s *Service) ExecuteTask(ctx context.Context, task *core.Task) (*core.TaskR
 	agent.UpdatedAt = time.Now().Unix()
 	if err := s.repo.Update(ctx, agent); err != nil {
 		// Log error but don't fail the task
-		fmt.Printf("warning: failed to update agent status: %v\n", err)
+		slog.Warn("failed to update agent status", "error", err)
 	}
 
 	return result, nil

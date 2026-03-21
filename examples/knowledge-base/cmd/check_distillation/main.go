@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"os"
 
 	_ "github.com/lib/pq"
 )
@@ -14,7 +15,8 @@ func main() {
 	connStr := "host=localhost port=5433 user=postgres password=postgres dbname=goagent sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		slog.Error("Failed to connect to database:", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
@@ -24,7 +26,8 @@ func main() {
 
 	// test database connection
 	if err := db.Ping(); err != nil {
-		log.Fatal("Failed to ping database:", err)
+		slog.Error("Failed to ping database:", "error", err)
+		os.Exit(1)
 	}
 
 	slog.Info("✅ Connected to database successfully\n")
@@ -39,9 +42,14 @@ func main() {
 		LIMIT 10
 	`)
 	if err != nil {
-		log.Fatal("Failed to query distilled memory:", err)
+		slog.Error("Failed to query distilled memory:", "error", err)
+		os.Exit(1)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows: ", "error", err)
+		}
+	}()
 
 	count := 0
 	for rows.Next() {
@@ -74,11 +82,12 @@ func main() {
 		ORDER BY count DESC
 	`)
 	if err != nil {
-		log.Fatal("Failed to query statistics:", err)
+		slog.Error("Failed to query statistics:", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := statsRows.Close(); err != nil {
-			log.Fatal("Failed to close stats rows ", err)
+			slog.Error("Failed to close stats rows", "error", err)
 		}
 	}()
 

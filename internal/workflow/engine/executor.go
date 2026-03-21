@@ -354,11 +354,9 @@ func (e *Executor) replaceTemplateVariables(input, initialInput string, complete
 	replacements := make(map[string]string)
 
 	// Collect outputs from completed steps
-	if completed != nil {
-		for stepID := range completed {
-			if output, exists := e.outputStore.Get(stepID); exists {
-				replacements[fmt.Sprintf("{{.%s}}", stepID)] = output.Output
-			}
+	for stepID := range completed {
+		if output, exists := e.outputStore.Get(stepID); exists {
+			replacements[fmt.Sprintf("{{.%s}}", stepID)] = output.Output
 		}
 	}
 
