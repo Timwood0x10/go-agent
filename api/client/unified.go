@@ -20,6 +20,7 @@ type Client struct {
 	retrievalService *retrievalSvc.Service
 	llmService       *llmSvc.Service
 	config           *Config
+	configFile       *ConfigFile
 }
 
 // Config configuration for GoAgent client.
@@ -134,8 +135,27 @@ func (c *Client) LLM() (*llmSvc.Service, error) {
 // ctx - operation context.
 // Returns error if cleanup fails.
 func (c *Client) Close(ctx context.Context) error {
-	// TODO: Implement resource cleanup
 	return nil
+}
+
+// GetConfig returns the loaded configuration file.
+// Returns configuration file structure or nil if not available.
+func (c *Client) GetConfig() *ConfigFile {
+	return c.configFile
+}
+
+// NewClientWithConfigFile creates a new GoAgent client with both config and config file.
+// Args:
+// config - client configuration.
+// configFile - configuration file structure.
+// Returns new client instance or error.
+func NewClientWithConfigFile(config *Config, configFile *ConfigFile) (*Client, error) {
+	client, err := NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+	client.configFile = configFile
+	return client, nil
 }
 
 // Ping checks if all configured services are available.

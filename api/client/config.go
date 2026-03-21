@@ -15,53 +15,175 @@ import (
 )
 
 // ConfigFile represents the structure of the configuration file.
+
 // It follows the configuration structure used across all examples.
+
 type ConfigFile struct {
+
 	Server   ServerConfig   `yaml:"server"`
+
 	API      APIConfig      `yaml:"api"`
+
 	LLM      core.LLMConfig `yaml:"llm"`
+
 	Database DatabaseConfig `yaml:"database"`
+
 	Storage  StorageConfig  `yaml:"storage"`
+
 	Memory   MemoryConfig   `yaml:"memory"`
+
+	Agents   AgentsConfig   `yaml:"agents"`
+
+	Prompts  PromptsConfig  `yaml:"prompts"`
+
+	Output   OutputConfig   `yaml:"output"`
+
 }
+
+
 
 // ServerConfig represents server configuration.
+
 type ServerConfig struct {
+
 	Host string `yaml:"host"`
+
 	Port int    `yaml:"port"`
+
 }
+
+
 
 // APIConfig represents API configuration.
+
 type APIConfig struct {
+
 	RequestTimeout int `yaml:"request_timeout"`
+
 	MaxRetries     int `yaml:"max_retries"`
+
 	RetryDelay     int `yaml:"retry_delay"`
+
 }
+
+
 
 // DatabaseConfig represents database configuration.
+
 type DatabaseConfig struct {
+
 	Enabled  bool   `yaml:"enabled"`
+
 	Type     string `yaml:"type"`
+
 	Host     string `yaml:"host"`
+
 	Port     int    `yaml:"port"`
+
 	User     string `yaml:"username"`
+
 	Password string `yaml:"password"`
+
 	DBName   string `yaml:"database"`
+
 	SSLMode  string `yaml:"ssl_mode"`
+
 }
+
+
 
 // StorageConfig represents storage configuration.
+
 type StorageConfig struct {
+
 	Enabled bool   `yaml:"enabled"`
+
 	Type    string `yaml:"type"`
+
 }
 
+
+
 // MemoryConfig represents memory configuration.
+
 type MemoryConfig struct {
+
 	Enabled bool `yaml:"enabled"`
+
 	Session struct {
+
 		MaxHistory int `yaml:"max_history"`
+
 	} `yaml:"session"`
+
+}
+
+
+
+// AgentsConfig represents agent configuration.
+
+type AgentsConfig struct {
+
+	Leader LeaderAgentConfig `yaml:"leader"`
+
+	Sub    []SubAgentConfig  `yaml:"sub"`
+
+}
+
+
+
+// LeaderAgentConfig represents leader agent configuration.
+
+type LeaderAgentConfig struct {
+
+	ID              string `yaml:"id"`
+
+	MaxSteps        int    `yaml:"max_steps"`
+
+	MaxParallelTasks int    `yaml:"max_parallel_tasks"`
+
+}
+
+
+
+// SubAgentConfig represents sub-agent configuration.
+
+type SubAgentConfig struct {
+
+	ID         string `yaml:"id"`
+
+	Type       string `yaml:"type"`
+
+	Category   string `yaml:"category"`
+
+	Name       string `yaml:"name"`
+
+	MaxRetries int    `yaml:"max_retries"`
+
+	Timeout    int    `yaml:"timeout"`
+
+}
+
+
+
+// PromptsConfig represents prompt templates configuration.
+
+type PromptsConfig struct {
+
+	ProfileExtraction  string `yaml:"profile_extraction"`
+
+	Recommendation     string `yaml:"recommendation"`
+
+}
+
+
+
+// OutputConfig represents output configuration.
+
+type OutputConfig struct {
+
+	Format string `yaml:"format"`
+
 }
 
 // ConfigLoader provides configuration loading functionality with validation.
@@ -402,7 +524,7 @@ func NewClientFromConfigPath(configPath string) (*Client, error) {
 	clientConfig := cfg.ToClientConfig()
 
 	// Create client
-	return NewClient(clientConfig)
+	return NewClientWithConfigFile(clientConfig, cfg)
 }
 
 // NewClientFromDefaultPath creates a new GoAgent client from default configuration paths.

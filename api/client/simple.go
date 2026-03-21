@@ -44,7 +44,7 @@ func NewSimpleClient(configPath string) (*SimpleClient, error) {
 	}
 
 	// Create underlying client
-	underlyingClient, err := NewClientFromConfig(config)
+	underlyingClient, err := NewClientFromConfigPath(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("create client: %w", err)
 	}
