@@ -21,6 +21,10 @@ type MemoryManager interface {
 	// GetMessages retrieves all messages from the session.
 	GetMessages(ctx context.Context, sessionID string) ([]Message, error)
 
+	// DeleteSession deletes a session and all its messages immediately.
+	// This is different from TTL-based cleanup, which waits for expiration.
+	DeleteSession(ctx context.Context, sessionID string) error
+
 	// BuildContext builds input with conversation history context.
 	BuildContext(ctx context.Context, input string, sessionID string) (string, error)
 

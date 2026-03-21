@@ -4,6 +4,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"goagent/internal/memory"
 )
@@ -104,7 +105,16 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 		return ErrInvalidSessionID
 	}
 
-	// TODO: Implement session deletion logic
+	if s.memoryMgr == nil {
+		return fmt.Errorf("memory manager not configured")
+	}
+
+	// Delete session and all associated messages
+	if err := s.memoryMgr.DeleteSession(ctx, sessionID); err != nil {
+		return fmt.Errorf("delete session: %w", err)
+	}
+
+	slog.Info("Session deleted successfully", "session_id", sessionID)
 	return nil
 }
 

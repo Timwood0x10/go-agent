@@ -279,10 +279,25 @@ func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, rol
 
 	// Create conversation record (NO vector embedding per design standard)
 	// conversations table: NO vector + expires_at + tenant_id
+
+	// Get user ID from session cache
+	userID := ""
+	m.mu.RLock()
+	if sessionData, exists := m.sessionCache[sessionID]; exists {
+		userID = sessionData.UserID
+	}
+	m.mu.RUnlock()
+
+	// If user ID not found in cache, use a default value
+	// In production, you might want to extract this from context or other sources
+	if userID == "" {
+		userID = "anonymous"
+	}
+
 	conv := &storage_models.Conversation{
 		SessionID: sessionID,
 		TenantID:  tenantID,
-		UserID:    "", // TODO: get from session cache
+		UserID:    userID,
 		AgentID:   "style-agent",
 		Role:      role,
 		Content:   content,
@@ -338,6 +353,37 @@ func (m *ProductionMemoryManager) GetMessages(ctx context.Context, sessionID str
 	}
 
 	return messages, nil
+}
+
+// DeleteSession deletes a session and all its messages immediately.
+// Args:
+// ctx - database operation context.
+// sessionID - session identifier.
+// Returns error if deletion fails.
+func (m *ProductionMemoryManager) DeleteSession(ctx context.Context, sessionID string) error {
+	if sessionID == "" {
+		return fmt.Errorf("session ID cannot be empty")
+	}
+
+	// Set tenant context (MUST be called for every tenant-specific operation)
+	tenantID := m.getCurrentTenantID()
+	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Delete all conversations for this session
+	deletedCount, err := m.conversationRepository.DeleteBySession(ctx, sessionID, tenantID)
+	if err != nil {
+		return fmt.Errorf("delete conversations: %w", err)
+	}
+
+	// Remove from cache
+	m.mu.Lock()
+	delete(m.sessionCache, sessionID)
+	m.mu.Unlock()
+
+	slog.Debug("Session deleted", "session_id", sessionID, "tenant_id", tenantID, "deleted_messages", deletedCount)
+	return nil
 }
 
 // BuildContext builds input with conversation history context.

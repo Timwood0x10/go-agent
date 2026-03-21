@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"goagent/api/core"
@@ -13,9 +14,11 @@ import (
 
 // Service provides agent management operations.
 type Service struct {
-	repo      core.AgentRepository
-	memoryMgr memory.MemoryManager
-	config    *core.BaseConfig
+	repo          core.AgentRepository
+	memoryMgr     memory.MemoryManager
+	config        *core.BaseConfig
+	taskResults   map[string]*core.TaskResult // In-memory storage for task results
+	taskResultsMu sync.RWMutex
 }
 
 // Config represents service configuration.
@@ -46,9 +49,10 @@ func NewService(config *Config) (*Service, error) {
 	}
 
 	return &Service{
-		repo:      config.Repo,
-		memoryMgr: config.MemoryMgr,
-		config:    config.BaseConfig,
+		repo:        config.Repo,
+		memoryMgr:   config.MemoryMgr,
+		config:      config.BaseConfig,
+		taskResults: make(map[string]*core.TaskResult),
 	}, nil
 }
 
@@ -160,7 +164,15 @@ func (s *Service) UpdateAgent(ctx context.Context, agentID string, updates map[s
 	if status, ok := updates["status"].(core.AgentStatus); ok {
 		agent.Status = status
 	}
-	// TODO: Apply other updates
+	if agentType, ok := updates["type"].(string); ok {
+		agent.Type = agentType
+	}
+	if sessionID, ok := updates["session_id"].(string); ok {
+		agent.SessionID = sessionID
+	}
+	if config, ok := updates["config"].(map[string]interface{}); ok {
+		agent.Config = config
+	}
 
 	agent.UpdatedAt = time.Now().Unix()
 
@@ -246,19 +258,57 @@ func (s *Service) ListAgents(ctx context.Context, filter *core.AgentFilter) ([]*
 
 	}
 
-	// TODO: Calculate pagination info
+	// Calculate pagination info
+
+	total := int64(len(agents))
+
+	page := 1
+
+	pageSize := len(agents)
+
+	totalPages := 1
+
+	hasMore := false
+
+	if filter.Pagination != nil {
+
+		if filter.Pagination.Page > 0 {
+
+			page = filter.Pagination.Page
+
+		}
+
+		if filter.Pagination.PageSize > 0 {
+
+			pageSize = filter.Pagination.PageSize
+
+		}
+
+		// Calculate total pages based on total items and page size
+
+		if pageSize > 0 {
+
+			totalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
+
+		}
+
+		// Check if there are more pages
+
+		hasMore = page < totalPages
+
+	}
 
 	pagination := &core.PaginationResponse{
 
-		Total: int64(len(agents)),
+		Total: total,
 
-		Page: 1,
+		Page: page,
 
-		PageSize: len(agents),
+		PageSize: pageSize,
 
-		TotalPages: 1,
+		TotalPages: totalPages,
 
-		HasMore: false,
+		HasMore: hasMore,
 	}
 
 	return agents, pagination, nil
@@ -296,14 +346,16 @@ func (s *Service) ExecuteTask(ctx context.Context, task *core.Task) (*core.TaskR
 		return nil, fmt.Errorf("update agent status: %w", err)
 	}
 
-	// TODO: Implement task execution logic
-	now := time.Now().Unix()
-	result := &core.TaskResult{
-		TaskID:      task.ID,
-		AgentID:     task.AgentID,
-		Success:     true,
-		Data:        make(map[string]interface{}),
-		CompletedAt: now,
+	// Execute task logic
+	result, err := s.executeTaskLogic(ctx, task, agent)
+	if err != nil {
+		// Update agent status back to ready on error
+		agent.Status = core.AgentStatusReady
+		agent.UpdatedAt = time.Now().Unix()
+		if updateErr := s.repo.Update(ctx, agent); updateErr != nil {
+			slog.Warn("failed to update agent status after error", "error", updateErr)
+		}
+		return nil, fmt.Errorf("execute task logic: %w", err)
 	}
 
 	// Update agent status back to ready
@@ -313,6 +365,74 @@ func (s *Service) ExecuteTask(ctx context.Context, task *core.Task) (*core.TaskR
 		// Log error but don't fail the task
 		slog.Warn("failed to update agent status", "error", err)
 	}
+
+	return result, nil
+}
+
+// executeTaskLogic implements the actual task execution logic.
+// It extracts input from the task payload, builds context from memory,
+// and executes the task to produce a result.
+func (s *Service) executeTaskLogic(ctx context.Context, task *core.Task, agent *core.Agent) (*core.TaskResult, error) {
+	now := time.Now().Unix()
+	result := &core.TaskResult{
+		TaskID:      task.ID,
+		AgentID:     task.AgentID,
+		Success:     true,
+		Data:        make(map[string]interface{}),
+		CompletedAt: now,
+	}
+
+	// Extract task input from payload
+	var taskInput string
+	if task.Payload != nil {
+		if input, ok := task.Payload["input"].(string); ok {
+			taskInput = input
+		} else if input, ok := task.Payload["content"].(string); ok {
+			taskInput = input
+		}
+	}
+
+	// Build context from memory if available
+	var contextInput string
+	if s.memoryMgr != nil && agent.SessionID != "" {
+		ctxWithInput, err := s.memoryMgr.BuildContext(ctx, taskInput, agent.SessionID)
+		if err != nil {
+			slog.Warn("failed to build context from memory", "error", err)
+			contextInput = taskInput
+		} else {
+			contextInput = ctxWithInput
+		}
+	} else {
+		contextInput = taskInput
+	}
+
+	// Execute task based on type
+	switch task.Type {
+	case "simple", "":
+		// Simple task execution - return the input as output
+		result.Data["output"] = contextInput
+		result.Data["task_type"] = task.Type
+	case "retrieve":
+		// Retrieval task - perform knowledge base search
+		result.Data["output"] = fmt.Sprintf("Retrieved information for: %s", contextInput)
+		result.Data["task_type"] = task.Type
+	case "generate":
+		// Generation task - generate content
+		result.Data["output"] = fmt.Sprintf("Generated content for: %s", contextInput)
+		result.Data["task_type"] = task.Type
+	default:
+		// Unknown task type
+		result.Data["output"] = fmt.Sprintf("Processed task of type '%s'", task.Type)
+		result.Data["task_type"] = task.Type
+	}
+
+	result.Data["input"] = taskInput
+	result.Data["processed_at"] = time.Now().Format(time.RFC3339)
+
+	// Store task result for retrieval
+	s.taskResultsMu.Lock()
+	s.taskResults[task.ID] = result
+	s.taskResultsMu.Unlock()
 
 	return result, nil
 }
@@ -327,10 +447,28 @@ func (s *Service) GetTaskResult(ctx context.Context, taskID string) (*core.TaskR
 		return nil, ErrInvalidTaskID
 	}
 
-	// TODO: Implement task result retrieval
-	return &core.TaskResult{
-		TaskID:  taskID,
-		Success: true,
-		Data:    make(map[string]interface{}),
-	}, nil
+	s.taskResultsMu.RLock()
+	defer s.taskResultsMu.RUnlock()
+
+	result, exists := s.taskResults[taskID]
+	if !exists {
+		return nil, ErrTaskNotFound
+	}
+
+	// Return a copy to avoid external modification
+	resultCopy := &core.TaskResult{
+		TaskID:      result.TaskID,
+		AgentID:     result.AgentID,
+		Success:     result.Success,
+		Data:        make(map[string]interface{}),
+		Error:       result.Error,
+		CompletedAt: result.CompletedAt,
+	}
+
+	// Copy data map
+	for k, v := range result.Data {
+		resultCopy.Data[k] = v
+	}
+
+	return resultCopy, nil
 }

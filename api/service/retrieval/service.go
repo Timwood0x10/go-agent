@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"goagent/api/core"
 )
 
@@ -273,13 +275,34 @@ func (s *Service) ListKnowledge(ctx context.Context, tenantID string, filter *co
 		return nil, nil, fmt.Errorf("list knowledge: %w", err)
 	}
 
-	// TODO: Calculate pagination info
+	// Calculate pagination info
+	total := int64(len(items))
+	page := 1
+	pageSize := len(items)
+	totalPages := 1
+	hasMore := false
+
+	if filter.Pagination != nil {
+		if filter.Pagination.Page > 0 {
+			page = filter.Pagination.Page
+		}
+		if filter.Pagination.PageSize > 0 {
+			pageSize = filter.Pagination.PageSize
+		}
+		// Calculate total pages based on total items and page size
+		if pageSize > 0 {
+			totalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
+		}
+		// Check if there are more pages
+		hasMore = page < totalPages
+	}
+
 	pagination := &core.PaginationResponse{
-		Total:      int64(len(items)),
-		Page:       1,
-		PageSize:   len(items),
-		TotalPages: 1,
-		HasMore:    false,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+		HasMore:    hasMore,
 	}
 
 	return items, pagination, nil
@@ -287,6 +310,5 @@ func (s *Service) ListKnowledge(ctx context.Context, tenantID string, filter *co
 
 // generateKnowledgeID generates a unique knowledge item ID.
 func generateKnowledgeID() string {
-	// TODO: Implement proper ID generation
-	return fmt.Sprintf("kb_%d", time.Now().UnixNano())
+	return "kb_" + uuid.New().String()
 }

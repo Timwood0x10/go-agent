@@ -112,8 +112,52 @@ func (s *Service) Search(ctx context.Context, tenantID, query string) ([]*Result
 // config - custom search configuration.
 // Returns search results or error if search fails.
 func (s *Service) SearchWithConfig(ctx context.Context, tenantID, query string, config *Config) ([]*Result, error) {
-	// TODO: Implement custom search configuration
-	return s.Search(ctx, tenantID, query)
+	if tenantID == "" {
+		return nil, ErrInvalidTenantID
+	}
+	if query == "" {
+		return nil, ErrInvalidQuery
+	}
+
+	// If config is nil, use default search
+	if config == nil {
+		return s.Search(ctx, tenantID, query)
+	}
+
+	// If simple retrieval is configured, use it with custom parameters
+	if s.simpleRetrieval != nil {
+		// Create a new retrieval service with custom config
+		// Note: This is a simplified implementation. In production, you might want
+		// to update the existing service's config or use a more sophisticated approach
+		simpleResults, err := s.simpleRetrieval.Search(ctx, tenantID, query)
+		if err != nil {
+			return nil, fmt.Errorf("simple retrieval search with config: %w", err)
+		}
+
+		// Convert internal results to API results
+		apiResults := make([]*Result, 0, len(simpleResults))
+		for _, res := range simpleResults {
+			// Filter results based on min score if specified
+			if config.MinScore > 0 && res.Score < config.MinScore {
+				continue
+			}
+			apiResults = append(apiResults, &Result{
+				Content:   res.Content,
+				Source:    res.Source,
+				Score:     res.Score,
+				SubSource: "simple",
+			})
+		}
+
+		// Limit results based on TopK if specified
+		if config.TopK > 0 && len(apiResults) > config.TopK {
+			apiResults = apiResults[:config.TopK]
+		}
+
+		return apiResults, nil
+	}
+
+	return nil, ErrNoRetrievalService
 }
 
 // Result represents a single retrieval result.

@@ -25,11 +25,11 @@ type Client struct {
 
 // Config holds configuration for the GoAgent client.
 type Config struct {
-	BaseConfig *core.BaseConfig   // Base configuration
-	Agent      *agentSvc.Config   // Agent service configuration
-	Memory     *memorySvc.Config  // Memory service configuration
+	BaseConfig *core.BaseConfig     // Base configuration
+	Agent      *agentSvc.Config     // Agent service configuration
+	Memory     *memorySvc.Config    // Memory service configuration
 	Retrieval  *retrievalSvc.Config // Retrieval service configuration
-	LLM        *llmSvc.Config     // LLM service configuration
+	LLM        *llmSvc.Config       // LLM service configuration
 }
 
 // NewClient creates a new GoAgent client instance.

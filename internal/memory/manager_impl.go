@@ -151,6 +151,16 @@ func (m *memoryManager) GetMessages(ctx context.Context, sessionID string) ([]Me
 	return messages, nil
 }
 
+// DeleteSession deletes a session and all its messages immediately.
+func (m *memoryManager) DeleteSession(ctx context.Context, sessionID string) error {
+	if err := m.sessionMemory.Delete(ctx, sessionID); err != nil {
+		return fmt.Errorf("delete session: %w", err)
+	}
+
+	slog.Debug("Session deleted", "session_id", sessionID)
+	return nil
+}
+
 // BuildContext builds input with conversation history context.
 func (m *memoryManager) BuildContext(ctx context.Context, input string, sessionID string) (string, error) {
 	messages, err := m.GetMessages(ctx, sessionID)

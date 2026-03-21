@@ -3,6 +3,9 @@ package agent
 
 import (
 	"context"
+	"log/slog"
+	"sync"
+	"time"
 
 	"goagent/internal/memory"
 )
@@ -10,6 +13,8 @@ import (
 // Service provides agent management operations.
 type Service struct {
 	memoryMgr memory.MemoryManager
+	agents    map[string]*Agent
+	agentsMu  sync.RWMutex
 }
 
 // NewService creates a new agent service instance.
@@ -19,6 +24,7 @@ type Service struct {
 func NewService(memoryMgr memory.MemoryManager) *Service {
 	return &Service{
 		memoryMgr: memoryMgr,
+		agents:    make(map[string]*Agent),
 	}
 }
 
@@ -38,12 +44,19 @@ func (s *Service) CreateAgent(ctx context.Context, agentID string) (*Agent, erro
 		return nil, err
 	}
 
-	return &Agent{
+	agent := &Agent{
 		ID:        agentID,
 		SessionID: sessionID,
 		Status:    StatusReady,
 		CreatedAt: getCurrentTimestamp(),
-	}, nil
+	}
+
+	// Store agent in map
+	s.agentsMu.Lock()
+	s.agents[agentID] = agent
+	s.agentsMu.Unlock()
+
+	return agent, nil
 }
 
 // GetAgent retrieves an agent by ID.
@@ -52,10 +65,24 @@ func (s *Service) CreateAgent(ctx context.Context, agentID string) (*Agent, erro
 // agentID - agent identifier.
 // Returns agent instance or error if not found.
 func (s *Service) GetAgent(ctx context.Context, agentID string) (*Agent, error) {
-	// TODO: Implement agent retrieval logic
+	if agentID == "" {
+		return nil, ErrInvalidAgentID
+	}
+
+	s.agentsMu.RLock()
+	defer s.agentsMu.RUnlock()
+
+	agent, exists := s.agents[agentID]
+	if !exists {
+		return nil, ErrAgentNotFound
+	}
+
+	// Return a copy to avoid external modification
 	return &Agent{
-		ID:     agentID,
-		Status: StatusReady,
+		ID:        agent.ID,
+		SessionID: agent.SessionID,
+		Status:    agent.Status,
+		CreatedAt: agent.CreatedAt,
 	}, nil
 }
 
@@ -65,7 +92,30 @@ func (s *Service) GetAgent(ctx context.Context, agentID string) (*Agent, error) 
 // agentID - agent identifier.
 // Returns error if deletion fails.
 func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
-	// TODO: Implement agent deletion logic
+	if agentID == "" {
+		return ErrInvalidAgentID
+	}
+
+	s.agentsMu.Lock()
+	defer s.agentsMu.Unlock()
+
+	agent, exists := s.agents[agentID]
+	if !exists {
+		return ErrAgentNotFound
+	}
+
+	// Delete associated session if memory manager is available
+	if s.memoryMgr != nil && agent.SessionID != "" {
+		if err := s.memoryMgr.DeleteSession(ctx, agent.SessionID); err != nil {
+			// Log error but don't fail the agent deletion
+			// The session will eventually be cleaned up by TTL
+			slog.Warn("Failed to delete associated session", "session_id", agent.SessionID, "error", err)
+		}
+	}
+
+	// Remove agent from map
+	delete(s.agents, agentID)
+
 	return nil
 }
 
@@ -89,5 +139,5 @@ const (
 
 // getCurrentTimestamp returns the current Unix timestamp in seconds.
 func getCurrentTimestamp() int64 {
-	return 0 // TODO: Implement actual timestamp
+	return time.Now().Unix()
 }

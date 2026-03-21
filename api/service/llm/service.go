@@ -13,10 +13,11 @@ import (
 
 // Service provides LLM operations.
 type Service struct {
-	client    *llm.Client
-	repo      core.LLMRepository
-	config    *core.BaseConfig
-	llmConfig *core.LLMConfig
+	client          *llm.Client
+	repo            core.LLMRepository
+	config          *core.BaseConfig
+	llmConfig       *core.LLMConfig
+	embeddingClient any // Can be *embedding.EmbeddingClient or nil
 }
 
 // Config represents service configuration.
@@ -27,6 +28,8 @@ type Config struct {
 	LLMConfig *core.LLMConfig
 	// Repo is the LLM repository (optional, for logging/audit).
 	Repo core.LLMRepository
+	// EmbeddingClient is the embedding service client (optional).
+	EmbeddingClient any
 }
 
 // NewService creates a new LLM service instance.
@@ -65,10 +68,11 @@ func NewService(config *Config) (*Service, error) {
 	}
 
 	return &Service{
-		client:    client,
-		repo:      config.Repo,
-		config:    config.BaseConfig,
-		llmConfig: config.LLMConfig,
+		client:          client,
+		repo:            config.Repo,
+		config:          config.BaseConfig,
+		llmConfig:       config.LLMConfig,
+		embeddingClient: config.EmbeddingClient,
 	}, nil
 }
 
@@ -99,12 +103,14 @@ func (s *Service) Generate(ctx context.Context, request *core.GenerateRequest) (
 		Content:      content,
 		FinishReason: "stop",
 		Usage: core.TokenUsage{
-			PromptTokens:     0, // TODO: Calculate actual tokens
-			CompletionTokens: 0,
-			TotalTokens:      0,
+			PromptTokens:     s.calculateTokens(prompt),
+			CompletionTokens: s.calculateTokens(content),
+			TotalTokens:      0, // Will be calculated below
 		},
 		Model: s.getModel(),
 	}
+
+	response.Usage.TotalTokens = response.Usage.PromptTokens + response.Usage.CompletionTokens
 
 	// Log generation if repository is available
 	if s.repo != nil {
@@ -149,16 +155,48 @@ func (s *Service) GenerateEmbedding(ctx context.Context, request *core.Embedding
 		return nil, ErrInvalidInput
 	}
 
-	// TODO: Implement embedding generation
-	// This requires calling the embedding service
-	embedding := make([]float32, 0) // Placeholder
+	// Try to use embedding client if available
+	var embedding []float32
+	var embeddingModel string
+
+	if s.embeddingClient != nil {
+		// Use type assertion to check if it's an embedding client
+		if embedder, ok := s.embeddingClient.(interface {
+			Embed(ctx context.Context, text string) ([]float64, error)
+		}); ok {
+			// Generate embedding using the embedding service
+			embeddingFloat64, err := embedder.Embed(ctx, request.Input)
+			if err != nil {
+				return nil, fmt.Errorf("generate embedding: %w", err)
+			}
+
+			// Convert float64 to float32
+			embedding = make([]float32, len(embeddingFloat64))
+			for i, v := range embeddingFloat64 {
+				embedding[i] = float32(v)
+			}
+
+			// Get model name from embedding client if available
+			if modelGetter, ok := s.embeddingClient.(interface {
+				GetModel() string
+			}); ok {
+				embeddingModel = modelGetter.GetModel()
+			}
+		} else {
+			// Embedding client type not recognized, return error
+			return nil, fmt.Errorf("embedding client type not supported")
+		}
+	} else {
+		// No embedding client available, return error
+		return nil, fmt.Errorf("embedding service not configured")
+	}
 
 	response := &core.EmbeddingResponse{
 		Embedding: embedding,
-		Model:     s.getModel(),
+		Model:     embeddingModel,
 		Usage: core.TokenUsage{
-			PromptTokens: 0,
-			TotalTokens:  0,
+			PromptTokens: s.calculateTokens(request.Input),
+			TotalTokens:  s.calculateTokens(request.Input),
 		},
 	}
 
@@ -210,4 +248,27 @@ func (s *Service) getModel() string {
 		return s.llmConfig.Model
 	}
 	return "default"
+}
+
+// calculateTokens estimates the number of tokens in a text string.
+// Uses a simple heuristic: approximately 4 characters per token for English text.
+// This is a rough estimate; actual tokenization depends on the model's tokenizer.
+func (s *Service) calculateTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+
+	// Count runes (Unicode code points) instead of bytes for better accuracy
+	runeCount := len([]rune(text))
+
+	// Heuristic: ~4 characters per token for average text
+	// Adjust based on content type
+	estimatedTokens := runeCount / 4
+
+	// Ensure at least 1 token if there's content
+	if estimatedTokens == 0 && runeCount > 0 {
+		estimatedTokens = 1
+	}
+
+	return estimatedTokens
 }
