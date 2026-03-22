@@ -23,6 +23,27 @@ type ParameterSchema struct {
 	Required   []string              `json:"required"`
 }
 
+// GetType returns the parameter type.
+func (p *ParameterSchema) GetType() string {
+	return p.Type
+}
+
+// GetProperties returns the parameter properties.
+func (p *ParameterSchema) GetProperties() map[string]*Parameter {
+	if p == nil {
+		return nil
+	}
+	return p.Properties
+}
+
+// GetRequired returns the required parameters.
+func (p *ParameterSchema) GetRequired() []string {
+	if p == nil {
+		return nil
+	}
+	return p.Required
+}
+
 // Parameter defines a single parameter.
 type Parameter struct {
 	Type        string        `json:"type"`
