@@ -32,10 +32,9 @@ func NewCalculator() *Calculator {
 		Required: []string{"operation", "operands"},
 	}
 
-	calc := &Calculator{}
-	calc.BaseTool = NewBaseTool("calculator", "Perform mathematical calculations", params)
-
-	return calc
+	return &Calculator{
+		BaseTool: NewBaseToolWithCategory("calculator", "Perform mathematical calculations", CategoryCore, params),
+	}
 }
 
 // Execute performs the calculation.
@@ -180,10 +179,9 @@ func NewDateTime() *DateTime {
 		Required: []string{"operation"},
 	}
 
-	dt := &DateTime{}
-	dt.BaseTool = NewBaseTool("datetime", "Get current time and perform date/time operations", params)
-
-	return dt
+	return &DateTime{
+		BaseTool: NewBaseToolWithCategory("datetime", "Get current time and perform date/time operations", CategoryCore, params),
+	}
 }
 
 // Execute performs the date/time operation.
@@ -349,10 +347,9 @@ func NewTextProcessor() *TextProcessor {
 		Required: []string{"operation", "text"},
 	}
 
-	tp := &TextProcessor{}
-	tp.BaseTool = NewBaseTool("text_processor", "Perform text processing operations", params)
-
-	return tp
+	return &TextProcessor{
+		BaseTool: NewBaseToolWithCategory("text_processor", "Perform text processing operations", CategoryCore, params),
+	}
 }
 
 // Execute performs the text processing operation.

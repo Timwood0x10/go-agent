@@ -50,14 +50,12 @@ func NewHTTPRequest() *HTTPRequest {
 		Required: []string{"url"},
 	}
 
-	hr := &HTTPRequest{
+	return &HTTPRequest{
+		BaseTool: NewBaseToolWithCategory("http_request", "Perform HTTP requests to external APIs", CategoryCore, params),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
-	hr.BaseTool = NewBaseTool("http_request", "Perform HTTP requests to external APIs", params)
-
-	return hr
 }
 
 // Execute performs the HTTP request.

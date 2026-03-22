@@ -63,7 +63,21 @@ func NewClient(config *Config) (*Client, error) {
 // prompt - the prompt text.
 // Returns generated text or error.
 func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
+	// Validate prompt input
 	if prompt == "" {
+		return "", errors.ErrInvalidArgument
+	}
+
+	// Check if prompt is too long (max 10,000 characters)
+	const maxPromptLength = 8192
+	if len(prompt) > maxPromptLength {
+		return "", fmt.Errorf("prompt exceeds maximum length of %d characters", maxPromptLength)
+	}
+
+	// Check if prompt contains only whitespace
+	trimmed := []byte(prompt)
+	trimmed = bytes.TrimSpace(trimmed)
+	if len(trimmed) == 0 {
 		return "", errors.ErrInvalidArgument
 	}
 
@@ -107,8 +121,9 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-	req.Header.Set("HTTP-Referer", "https://github.com/your-repo")
-	req.Header.Set("X-Title", "GoAgent Framework")
+	// Privacy: Use generic referer to avoid exposing repository details
+	req.Header.Set("HTTP-Referer", "https://example.com")
+	req.Header.Set("X-Title", "LLM Client")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

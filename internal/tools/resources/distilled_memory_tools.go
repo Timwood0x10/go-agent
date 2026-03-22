@@ -65,21 +65,21 @@ func (t *DistilledMemorySearch) Execute(ctx context.Context, params map[string]i
 		items := make([]map[string]interface{}, len(memories))
 		for i, mem := range memories {
 			items[i] = map[string]interface{}{
-				"id":            mem.ID,
-				"user_id":       mem.UserID,
-				"session_id":    mem.SessionID,
-				"content":       mem.Content,
-				"memory_type":    mem.MemoryType,
-				"importance":     mem.Importance,
-				"created_at":     mem.CreatedAt,
-				"expires_at":     mem.ExpiresAt,
+				"id":          mem.ID,
+				"user_id":     mem.UserID,
+				"session_id":  mem.SessionID,
+				"content":     mem.Content,
+				"memory_type": mem.MemoryType,
+				"importance":  mem.Importance,
+				"created_at":  mem.CreatedAt,
+				"expires_at":  mem.ExpiresAt,
 			}
 		}
 
 		return NewResult(true, map[string]interface{}{
-			"user_id":    userID,
-			"memories":   items,
-			"total":      len(items),
+			"user_id":  userID,
+			"memories": items,
+			"total":    len(items),
 		}), nil
 	}
 

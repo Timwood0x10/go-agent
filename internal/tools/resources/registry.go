@@ -99,6 +99,88 @@ func (r *Registry) Clear() {
 	r.tools = make(map[string]Tool)
 }
 
+// Filter returns tools that match the given filter criteria.
+func (r *Registry) Filter(filter *ToolFilter) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	filtered := NewRegistry()
+
+	for name, tool := range r.tools {
+		// Check if tool is in enabled list
+		if len(filter.Enabled) > 0 && !containsString(filter.Enabled, name) {
+			continue
+		}
+
+		// Check if tool is in disabled list
+		if len(filter.Disabled) > 0 && !containsString(filter.Disabled, name) {
+			continue
+		}
+
+		// Check category filter
+		if len(filter.Categories) > 0 && !containsCategory(filter.Categories, tool.Category()) {
+			continue
+		}
+
+		// Register tool in filtered registry
+		filtered.tools[name] = tool
+	}
+
+	return filtered
+}
+
+// FilterByCategory returns tools of a specific category.
+func (r *Registry) FilterByCategory(category ToolCategory) *Registry {
+	return r.Filter(&ToolFilter{
+		Categories: []ToolCategory{category},
+	})
+}
+
+// GetSchemas returns schema information for all tools in the registry.
+func (r *Registry) GetSchemas() []ToolSchema {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	schemas := make([]ToolSchema, 0, len(r.tools))
+	for _, tool := range r.tools {
+		schemas = append(schemas, ToolSchema{
+			Name:        tool.Name(),
+			Description: tool.Description(),
+			Category:    tool.Category(),
+			Parameters:  tool.Parameters(),
+		})
+	}
+
+	return schemas
+}
+
+// ToolFilter defines filter criteria for tools.
+type ToolFilter struct {
+	Enabled    []string       // List of enabled tool names (if not empty, only these tools are included)
+	Disabled   []string       // List of disabled tool names (these tools are excluded)
+	Categories []ToolCategory // List of allowed categories (if not empty, only these categories are included)
+}
+
+// containsString checks if a string is in a slice.
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// containsCategory checks if a category is in a slice.
+func containsCategory(slice []ToolCategory, item ToolCategory) bool {
+	for _, c := range slice {
+		if c == item {
+			return true
+		}
+	}
+	return false
+}
+
 // Registry errors.
 var (
 	ErrNilTool               = errors.New("tool is nil")

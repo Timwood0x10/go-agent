@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	"goagent/internal/storage/postgres"
@@ -27,7 +28,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create database pool: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		if err := pool.Close(); err != nil {
+			slog.Error("Warning: Failed to close database pool:", "error", err)
+		}
+	}()
 
 	ctx := context.Background()
 

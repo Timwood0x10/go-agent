@@ -108,7 +108,7 @@ func (t *MemorySearch) Execute(ctx context.Context, params map[string]interface{
 // UserProfile retrieves user profile and preferences from memory.
 type UserProfile struct {
 	*BaseTool
-	memoryMgr    memory.MemoryManager
+	memoryMgr     memory.MemoryManager
 	distilledRepo *repositories.DistilledMemoryRepository
 }
 
@@ -134,7 +134,7 @@ func NewUserProfile(memoryMgr memory.MemoryManager, distilledRepo *repositories.
 	}
 
 	up := &UserProfile{
-		memoryMgr:    memoryMgr,
+		memoryMgr:     memoryMgr,
 		distilledRepo: distilledRepo,
 	}
 	up.BaseTool = NewBaseTool("user_profile", "Retrieve user profile and preferences from memory", params)
@@ -171,11 +171,11 @@ func (t *UserProfile) Execute(ctx context.Context, params map[string]interface{}
 			// Parse distilled memories to extract user profile
 			for _, mem := range memories {
 				memInfo := map[string]interface{}{
-					"id":            mem.ID,
-					"content":       mem.Content,
-					"memory_type":    mem.MemoryType,
-					"importance":     mem.Importance,
-					"created_at":     mem.CreatedAt,
+					"id":          mem.ID,
+					"content":     mem.Content,
+					"memory_type": mem.MemoryType,
+					"importance":  mem.Importance,
+					"created_at":  mem.CreatedAt,
 				}
 				profile["memories"] = append(profile["memories"].([]map[string]interface{}), memInfo)
 

@@ -17,6 +17,10 @@ func RegisterBuiltinTools() error {
 	slog.Info("  - calculator: Mathematical calculations")
 	slog.Info("  - datetime: Date and time operations")
 	slog.Info("  - text_processor: Text processing operations")
+	slog.Info("  - data_validation: Validate JSON, email, URL, or schema")
+	slog.Info("  - id_generator: Generate unique identifiers (UUID or short ID)")
+	slog.Info("  - json_tools: Parse, extract, merge, and pretty-print JSON")
+	slog.Info("  - file_tools: Read, write, and list files and directories")
 	slog.Info("  - knowledge_search: Search knowledge base (requires service)")
 	slog.Info("  - knowledge_add: Add knowledge (requires service)")
 	slog.Info("  - knowledge_update: Update knowledge (requires service)")
@@ -52,6 +56,30 @@ func RegisterGeneralTools() error {
 	tpTool := NewTextProcessor()
 	if err := Register(tpTool); err != nil {
 		return fmt.Errorf("failed to register text_processor: %w", err)
+	}
+
+	// Register data validation tool
+	dvTool := NewDataValidation()
+	if err := Register(dvTool); err != nil {
+		return fmt.Errorf("failed to register data_validation: %w", err)
+	}
+
+	// Register ID generator tool
+	idTool := NewIDGenerator()
+	if err := Register(idTool); err != nil {
+		return fmt.Errorf("failed to register id_generator: %w", err)
+	}
+
+	// Register JSON tools
+	jsonTool := NewJSONTools()
+	if err := Register(jsonTool); err != nil {
+		return fmt.Errorf("failed to register json_tools: %w", err)
+	}
+
+	// Register file tools
+	fileTool := NewFileTools()
+	if err := Register(fileTool); err != nil {
+		return fmt.Errorf("failed to register file_tools: %w", err)
 	}
 
 	slog.Info("General purpose tools registered successfully")

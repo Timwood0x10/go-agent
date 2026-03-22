@@ -4,12 +4,40 @@ import (
 	"context"
 )
 
+// ToolCategory represents the category of a tool.
+type ToolCategory string
+
+const (
+	// CategorySystem represents system-level tools (file operations, ID generation, etc.)
+	CategorySystem ToolCategory = "system"
+	// CategoryCore represents core general-purpose tools (http, calculator, datetime, etc.)
+	CategoryCore ToolCategory = "core"
+	// CategoryData represents data processing tools (JSON, validation, etc.)
+	CategoryData ToolCategory = "data"
+	// CategoryKnowledge represents knowledge base tools
+	CategoryKnowledge ToolCategory = "knowledge"
+	// CategoryMemory represents memory-related tools
+	CategoryMemory ToolCategory = "memory"
+	// CategoryDomain represents domain-specific tools (fashion, weather, etc.)
+	CategoryDomain ToolCategory = "domain"
+)
+
+// ToolSchema represents the schema of a tool for capability export.
+type ToolSchema struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Category    ToolCategory     `json:"category"`
+	Parameters  *ParameterSchema `json:"parameters"`
+}
+
 // Tool represents an executable tool.
 type Tool interface {
 	// Name returns the tool name.
 	Name() string
 	// Description returns the tool description.
 	Description() string
+	// Category returns the tool category.
+	Category() ToolCategory
 	// Execute executes the tool with given parameters.
 	Execute(ctx context.Context, params map[string]interface{}) (Result, error)
 	// Parameters returns the parameter schema.
@@ -58,7 +86,9 @@ type Parameter struct {
 type BaseTool struct {
 	name        string
 	description string
+	category    ToolCategory
 	parameters  *ParameterSchema
+	metadata    *ToolMetadata
 }
 
 // NewBaseTool creates a new BaseTool.
@@ -66,7 +96,20 @@ func NewBaseTool(name, description string, params *ParameterSchema) *BaseTool {
 	return &BaseTool{
 		name:        name,
 		description: description,
+		category:    CategoryCore, // Default category
 		parameters:  params,
+		metadata:    nil,
+	}
+}
+
+// NewBaseToolWithCategory creates a new BaseTool with a specific category.
+func NewBaseToolWithCategory(name, description string, category ToolCategory, params *ParameterSchema) *BaseTool {
+	return &BaseTool{
+		name:        name,
+		description: description,
+		category:    category,
+		parameters:  params,
+		metadata:    nil,
 	}
 }
 
@@ -80,9 +123,19 @@ func (t *BaseTool) Description() string {
 	return t.description
 }
 
+// Category returns the tool category.
+func (t *BaseTool) Category() ToolCategory {
+	return t.category
+}
+
 // Parameters returns the parameter schema.
 func (t *BaseTool) Parameters() *ParameterSchema {
 	return t.parameters
+}
+
+// Metadata returns the tool metadata.
+func (t *BaseTool) Metadata() *ToolMetadata {
+	return t.metadata
 }
 
 // ToolFunc is a function-based tool.
