@@ -1,360 +1,116 @@
- go run main.go --chat
-2026/03/22 10:47:34 INFO General purpose tools registered successfully
-2026/03/22 10:47:34 Chat mode with tool calling enabled. Enter your questions (type 'exit' to quit):
-2026/03/22 10:47:34 You can ask me to:
-2026/03/22 10:47:34   - Search knowledge base: '搜索关于...'
-2026/03/22 10:47:34   - Correct knowledge: '这个知识有错误，帮我纠正'
-2026/03/22 10:47:34   - Add knowledge: '添加新的知识...'
-2026/03/22 10:47:34   - Delete knowledge: '删除过时的知识...'
-2026/03/22 10:47:34 LLM enabled - Using RAG (Retrieval + Generation) mode with tool calling
-2026/03/22 10:47:34 Available tools:
-2026/03/22 10:47:34   - memory_search: Search distilled memories and user preferences
-2026/03/22 10:47:34   - distilled_memory_search: Search distilled memories and user preferences from database
-2026/03/22 10:47:34   - calculator: Perform mathematical calculations
-2026/03/22 10:47:34   - text_processor: Perform text processing operations
-2026/03/22 10:47:34   - knowledge_search: Search knowledge base for relevant information
-2026/03/22 10:47:34   - correct_knowledge: Correct knowledge base content
-2026/03/22 10:47:34   - user_profile: Retrieve user profile and preferences from memory
-2026/03/22 10:47:34   - http_request: Perform HTTP requests to external APIs
-2026/03/22 10:47:34   - datetime: Get current time and perform date/time operations
-2026/03/22 10:47:34 Knowledge management tools (CRUD) are enabled via knowledge_manager
-2026/03/22 10:47:34 Memory enabled - Conversation history and distillation supported
-2026/03/22 10:47:34 INFO Memory manager started
-2026/03/22 10:47:34 Session created: session_default_1774147654459898000
+go run main.go --chat
+2026/03/22 11:15:34 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/22 11:15:34 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/22 11:15:34 Memory enabled - Conversation history and distillation supported
+2026/03/22 11:15:34 INFO Memory manager started
+2026/03/22 11:15:34 Session created: session_default_1774149334921880000
 
-You: 我是小明，喜欢编程，精通rust和golang，不熟悉前端开发，也不喜欢前端开发
-2026/03/22 10:48:11 RAG check: 我是小明，喜欢编程，精通rust和golang前端开发，也不喜欢前端开发 -> needs RAG: true
-2026/03/22 10:48:14 LLM Response: I'm ready to assist you. Please go ahead and ask your questions, and I'll use the appropriate tools to find relevant information in the knowledge base. Remember, I must always use "knowledge_search" first to find relevant content before answering.
-
-Also, please note that when a user introduces themselves or asks about their preferences, tech stack, or personal information, I should immediately call "user_profile" with the corresponding parameters.
-
-What's your question?
+You: 我叫小刚，我 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
+2026/03/22 11:16:20 RAG check: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 -> needs RAG: true
+2026/03/22 11:16:20 Searching for: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 (tenant: default)
+2026/03/22 11:16:20 INFO SimpleRetrievalService.Search tenant_id=default query=是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 top_k=10 min_score=0.4
+2026/03/22 11:16:20 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:16:20 INFO Vector search query vector_length=9746 vector_preview=[0.041211,-0.051733,-0.014097,-0.100258,0.043133,0.017655,0.000738,-0.015183,-0.087653,-0.002459,0.0
+2026/03/22 11:16:20 INFO Vector search query succeeded
+2026/03/22 11:16:20 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:16:20 INFO Search completed results_count=5 min_score=0.4
+2026/03/22 11:16:20 Search returned 5 results
 
 Assistant:
-I'm ready to assist you. Please go ahead and ask your questions, and I'll use the appropriate tools to find relevant information in the knowledge base. Remember, I must always use "knowledge_search" first to find relevant content before answering.
+根据提供的知识基因和对话记录，前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发。
 
-Also, please note that when a user introduces themselves or asks about their preferences, tech stack, or personal information, I should immediately call "user_profile" with the corresponding parameters.
-
-What's your question?
-
-You: what's the go-agent project
-2026/03/22 10:48:29 RAG check: what's the go-agent project -> needs RAG: true
-2026/03/22 10:48:32 LLM Response: I'm ready to assist you. Please go ahead and ask your questions, and I'll use the appropriate tools to find relevant information in the knowledge base. Remember, I must always use "knowledge_search" first to find relevant content before answering.
-
-Also, please note that when a user introduces themselves or asks about their preferences, tech stack, or personal information, I should immediately call "user_profile" with the corresponding parameters.
-
-What's your question?
+You: go-agent 是什么呢？
+2026/03/22 11:16:35 RAG check: go-agent 是什么呢？ -> needs RAG: true
+2026/03/22 11:16:35 Searching for: go-agent 是什么呢？ (tenant: default)
+2026/03/22 11:16:35 INFO SimpleRetrievalService.Search tenant_id=default query="go-agent 是什么呢？" top_k=10 min_score=0.4
+2026/03/22 11:16:35 INFO Using precision mode query="go-agent 是什么呢？"
+2026/03/22 11:16:35 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/22 11:16:35 INFO Vector search query vector_length=9742 vector_preview=[0.042752,-0.041852,-0.010353,-0.080358,0.008310,-0.054529,-0.026539,0.074596,-0.048974,0.031618,-0.
+2026/03/22 11:16:35 INFO Vector search query succeeded
+2026/03/22 11:16:35 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/22 11:16:35 Search returned 10 results
 
 Assistant:
-I'm ready to assist you. Please go ahead and ask your questions, and I'll use the appropriate tools to find relevant information in the knowledge base. Remember, I must always use "knowledge_search" first to find relevant content before answering.
+根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
 
-Also, please note that when a user introduces themselves or asks about their preferences, tech stack, or personal information, I should immediately call "user_profile" with the corresponding parameters.
+You: 如纠正      
 
-What's your question?
+You: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置多种LLM tools,提供了知识库等多个例子,对开发者很友好.
+2026/03/22 11:17:38 🔧 Detected correction request
+2026/03/22 11:17:38 Searching for: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好. (tenant: default)
+2026/03/22 11:17:38 INFO SimpleRetrievalService.Search tenant_id=default query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好." top_k=10 min_score=0.4
+2026/03/22 11:17:38 INFO Using precision mode query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好."
+2026/03/22 11:17:38 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/22 11:17:38 INFO Vector search query vector_length=9712 vector_preview=[0.014754,-0.012315,-0.009119,-0.072667,-0.015210,-0.007071,-0.053259,0.074977,-0.020428,0.047134,-0
+2026/03/22 11:17:38 INFO Vector search query succeeded
+2026/03/22 11:17:38 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/22 11:17:38 Search returned 10 results
+2026/03/22 11:17:38 📝 Found 10 chunks for correction
 
-You: go-agent 是个啥
-2026/03/22 10:48:44 RAG check: go-agent 是个啥 -> needs RAG: true
-2026/03/22 10:48:46 LLM Response: TOOL_CALL: {"name": "knowledge_search", "params": {"tenant_id": "default", "query": "go-agent"}}
-2026/03/22 10:48:46 Detected 1 tool call(s)
-2026/03/22 10:48:46 Tool call 0: name=knowledge_search, params=map[query:go-agent tenant_id:default]
-2026/03/22 10:48:46 Executing tool 1/1: knowledge_search
-2026/03/22 10:48:46 INFO SimpleRetrievalService.Search tenant_id=default query=go-agent top_k=10 min_score=0.4
-2026/03/22 10:48:46 INFO Using precision mode query=go-agent
-2026/03/22 10:48:47 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
-2026/03/22 10:48:47 INFO Vector search query vector_length=9736 vector_preview=[0.037662,-0.021130,-0.012308,-0.065846,0.019068,-0.052267,0.008458,0.054997,-0.049198,0.028784,-0.0
-2026/03/22 10:48:47 INFO Vector search query succeeded
-2026/03/22 10:48:47 INFO Vector search completed rows_scanned=10 chunks_returned=10
-2026/03/22 10:48:47 Tool knowledge_search executed successfully, success=true
-2026/03/22 10:48:47 Tool knowledge_search result: map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
+Assistant:
+我检测到你想要纠正知识。搜索到了 10 个相关结果。纠正功能已记录，请继续对话。
 
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现...
-2026/03/22 10:48:47 Tool results for second LLM pass: Tool knowledge_search: Success - map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
-
-- **高维向量存储**: 支持1024维向量 id:kb_0 metadata:map[] score:0.7077068136375082 source:./example.md] map[content:**: 每个用户/项目使用独立租户
-- **验证访问**: 验证所有跨租户操作
-- **定期清理**: 清理不活跃租户数据
-
-## 总结
-
-GoAgent Storage模块提供了：
-
-✅ 高性能的向量存储和检索
-✅ 严格的多租户隔离
-✅ 智能的混合检索
-✅ 完善的缓存机制
-✅ 强大的安全...
-2026/03/22 10:48:52 🎯 [Memory Distillation] Conversation rounds reached threshold (3/3), triggering memory distillation...
-2026/03/22 10:48:52 🔄 [Memory Distillation] Starting distillation for session: session_default_1774147654459898000
-2026/03/22 10:48:52 📊 [Memory Distillation] Found 7 messages to distill
-2026/03/22 10:48:52 📝 [Memory Distillation] Distillation content preview (2630 characters): Conversation Summary:
+You: go我想学习golang,但是不知道go有什么编码贵发
+2026/03/22 11:18:04 RAG check: 我想学习golang,但是不知道go有什么编码贵发 -> needs RAG: true
+2026/03/22 11:18:04 Searching for: 我想学习golang,但是不知道go有什么编码贵发 (tenant: default)
+2026/03/22 11:18:04 INFO SimpleRetrievalService.Search tenant_id=default query=我想学习golang,但是不知道go有什么编码贵发 top_k=10 min_score=0.4
+2026/03/22 11:18:04 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:18:04 INFO Vector search query vector_length=9734 vector_preview=[0.001097,-0.053108,-0.009837,-0.059723,0.031265,-0.045062,-0.049547,0.025612,-0.095053,0.037275,-0.
+2026/03/22 11:18:04 INFO Vector search query succeeded
+2026/03/22 11:18:04 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:18:04 INFO Search completed results_count=10 min_score=0.4
+2026/03/22 11:18:04 Search returned 10 results
+2026/03/22 11:18:09 🎯 [Memory Distillation] Conversation rounds reached threshold (3/3), triggering memory distillation...
+2026/03/22 11:18:09 🔄 [Memory Distillation] Starting distillation for session: session_default_1774149334921880000
+2026/03/22 11:18:09 📊 [Memory Distillation] Found 8 messages to distill
+2026/03/22 11:18:09 📝 [Memory Distillation] Distillation content preview (1770 characters): Conversation Summary:
 
 system: New session started
-user: 我是小明，喜欢编程，精通rust和golang前端开发，也不喜欢前端开发
-assist...
-2026/03/22 10:48:52 🔢 [Memory Distillation] Embedding vector dimensions: 1024
-2026/03/22 10:48:52 ✅ [Memory Distillation] Distillation completed!
-2026/03/22 10:48:52    📄 Memory ID: c2e8f2f6-0a5f-45e6-893e-3f95d9977418
-2026/03/22 10:48:52    👤 User ID: 小明
-2026/03/22 10:48:52    📏 Content length: 2630 characters
-2026/03/22 10:48:52    🧠 Embedding dimensions: 1024
-2026/03/22 10:48:52    💾 Storage location: distilled_memories
-2026/03/22 10:48:52    🔍 Can be retrieved via vector search or user_id
+user: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
+assistant: 根据...
+2026/03/22 11:18:09 🔢 [Memory Distillation] Embedding vector dimensions: 1024
+2026/03/22 11:18:09 ✅ [Memory Distillation] Distillation completed!
+2026/03/22 11:18:09    📄 Document ID: 39bfa17e-1e88-4cce-a116-675ec6b46fac
+2026/03/22 11:18:09    📏 Content length: 1770 characters
+2026/03/22 11:18:09    🧠 Embedding dimensions: 1024
+2026/03/22 11:18:09    💾 Storage location: knowledge_chunks_1024
+2026/03/22 11:18:09    🔍 Can be retrieved via vector search
 
 Assistant:
-Based on the provided tool execution results, I'll explain what happened.
+根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
 
-The tool `knowledge_search` was executed with success, and it returned a map containing information about the "GoAgent Storage模块" (GoAgent Storage module).
+为了解决您的问题，“go有什么编码贵发”，请注意，在Go的编程实践中，优先考虑的是可维护性、可靠性和性能，而不是仅仅优化性能。所有代码必须通过 `go vet`、`staticcheck` 和 `golangci-lint` 进行验证，并且测试覆盖率是指引，但不是目标。
 
-Here is a summary of the GoAgent Storage module:
+Go 语言的标准和最佳实践强调使用 `gofmt` 和 `goimports` 对代码进行 formatting 和自动化管理，以确保代码质量和一致性。
 
-**Overview**
+如果您想在AI应用中构建向量存储和检索系统，可以考虑使用GoAgent Storage模块，它支持高维向量存储、时间衰减等功能。或者，您可以 exploring Rust的库和框架来实现类似的功能。
 
-* The GoAgent Storage module is a high-performance vector storage and retrieval system based on PostgreSQL + pgvector.
-* It provides robust data persistence capabilities for AI applications.
+但是，如果您不喜欢Python，Rust可能是一个更好的选择，因为它提供了一个不同的编程范式和强大的多任务能力。
 
-**Core Functions**
+因此，Go Agent 的重点在于使用 YML 运行，它提供了一种通用的、易于维护的 AIAgent 开发框架。
 
-1. **Vector Storage and Retrieval**: The module uses pgvector to implement efficient vector similarity searches. It supports:
-        + High-dimensional vector storage
-        + Validation of cross-tenant operations
-        + Periodic cleaning of inactive tenant data
-2. **Semantic Search**: The module adds intelligent semantic search capabilities, allowing applications to query vectors using natural language queries.
-3. **Recommendation System**: The module implements a recommendation system based on vector similarity searches.
+You:
 
-**Error Handling and Debugging**
 
-The tool results also mention some potential pitfalls for developers, including:
 
-* Avoiding LLM self-certification loops
-* Ensuring accurate source_id binding
-* Monitoring Agent lightweightization
-
-These points are essential to keep in mind when developing the GoAgent Storage module.
-
-Let me know if you have any further questions or if there's anything else I can help you with!
-
-You: 不对，go-agent是一个通用ai agent开发框架。
-2026/03/22 10:49:15 RAG check: 不对，go-agent是一个通用ai agent开发框架。 -> needs RAG: true
-2026/03/22 10:49:17 LLM Response: TOOL_CALL: {"name": "knowledge_search", "params": {"tenant_id": "default", "query": "go-agent"}}
-2026/03/22 10:49:17 Detected 1 tool call(s)
-2026/03/22 10:49:17 Tool call 0: name=knowledge_search, params=map[query:go-agent tenant_id:default]
-2026/03/22 10:49:17 Executing tool 1/1: knowledge_search
-2026/03/22 10:49:17 INFO SimpleRetrievalService.Search tenant_id=default query=go-agent top_k=10 min_score=0.4
-2026/03/22 10:49:17 INFO Using precision mode query=go-agent
-2026/03/22 10:49:17 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
-2026/03/22 10:49:17 INFO Vector search query vector_length=9736 vector_preview=[0.037662,-0.021130,-0.012308,-0.065846,0.019068,-0.052267,0.008458,0.054997,-0.049198,0.028784,-0.0
-2026/03/22 10:49:17 INFO Vector search query succeeded
-2026/03/22 10:49:17 INFO Vector search completed rows_scanned=10 chunks_returned=10
-2026/03/22 10:49:17 Tool knowledge_search executed successfully, success=true
-2026/03/22 10:49:17 Tool knowledge_search result: map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现...
-2026/03/22 10:49:17 Tool results for second LLM pass: Tool knowledge_search: Success - map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
-
-- **高维向量存储**: 支持1024维向量 id:kb_0 metadata:map[] score:0.7077068136375082 source:./example.md] map[content:**: 每个用户/项目使用独立租户
-- **验证访问**: 验证所有跨租户操作
-- **定期清理**: 清理不活跃租户数据
-
-## 总结
-
-GoAgent Storage模块提供了：
-
-✅ 高性能的向量存储和检索
-✅ 严格的多租户隔离
-✅ 智能的混合检索
-✅ 完善的缓存机制
-✅ 强大的安全...
-
-Assistant:
-Based on the provided tool execution results, I'd like to summarize the output for your reference.
-
-The GoAgent Storage module is a high-performance vector storage and retrieval system designed for AI applications. It utilizes PostgreSQL + pgvector to achieve efficient vector similarity searches.
-
-The core functionalities of the GoAgent Storage module include:
-
-1. Vector storage and retrieval: Supports up to 1024-dimensional vectors, with features like high-performance search capabilities, strict multi-tenancy, intelligent mixed retrieval, robust caching mechanisms, and strong encryption.
-2. Semantic search: Enables intelligent semantic search capabilities for applications.
-3. Recommendation system: Incorporates a recommendation system based on vector similarity searches.
-
-The module also covers various aspects to avoid common pitfalls:
-
-* Avoiding LLM self-certification loops
-* Ensuring accurate source ID bindings
-* Monitoring Agent lightweightization
-
-Additionally, the module emphasizes the importance of logical closure by implementing a layered validation approach that includes:
-
-1. Basic validation
-2. Core grounding
-3. High-level auditing
-
-Finally, the module provides a comprehensive solution for common problems in AI applications, covering four primary scenarios: detecting hallucinations, handling user feedback, optimizing performance, and controlling resource usage.
-
-Please feel free to ask if you have any further questions or need additional clarification on any of these points!
-
-You: 纠正一下，go-agent是通用ai agent开发框架，用go实现
-2026/03/22 10:49:39 RAG check: 纠正一下，go-agent是通用ai agent开发框架，用go实现 -> needs RAG: true
-2026/03/22 10:49:41 LLM Response: TOOL_CALL: {"name": "knowledge_search", "params": {"tenant_id": "default", "query": "go-agent"}}
-2026/03/22 10:49:41 Detected 1 tool call(s)
-2026/03/22 10:49:41 Tool call 0: name=knowledge_search, params=map[query:go-agent tenant_id:default]
-2026/03/22 10:49:41 Executing tool 1/1: knowledge_search
-2026/03/22 10:49:41 INFO SimpleRetrievalService.Search tenant_id=default query=go-agent top_k=10 min_score=0.4
-2026/03/22 10:49:41 INFO Using precision mode query=go-agent
-2026/03/22 10:49:41 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
-2026/03/22 10:49:41 INFO Vector search query vector_length=9736 vector_preview=[0.037662,-0.021130,-0.012308,-0.065846,0.019068,-0.052267,0.008458,0.054997,-0.049198,0.028784,-0.0
-2026/03/22 10:49:41 INFO Vector search query succeeded
-2026/03/22 10:49:41 INFO Vector search completed rows_scanned=10 chunks_returned=10
-2026/03/22 10:49:41 Tool knowledge_search executed successfully, success=true
-2026/03/22 10:49:41 Tool knowledge_search result: map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现...
-2026/03/22 10:49:41 Tool results for second LLM pass: Tool knowledge_search: Success - map[query:go-agent results:[map[content:# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
-
-- **高维向量存储**: 支持1024维向量 id:kb_0 metadata:map[] score:0.7077068136375082 source:./example.md] map[content:**: 每个用户/项目使用独立租户
-- **验证访问**: 验证所有跨租户操作
-- **定期清理**: 清理不活跃租户数据
-
-## 总结
-
-GoAgent Storage模块提供了：
-
-✅ 高性能的向量存储和检索
-✅ 严格的多租户隔离
-✅ 智能的混合检索
-✅ 完善的缓存机制
-✅ 强大的安全...
-
-Assistant:
-Based on the tool execution results, I will provide a clear and helpful response to your question about Go-agent.
-
-The output of the knowledge search shows that you are interested in Go-agent, which is a general-purpose AI agent development framework written in Go.
-
-From the documentation provided, it appears that Go-agent includes a Storage module that uses PostgreSQL + pgvector for high-performance vector storage and retrieval. This module seems to be designed for AI applications, providing strong data persistence capabilities.
-
-The output also mentions several core features of the Storage module, including:
-
-* High-dimensional vector storage
-* Validation access control
-* Regular cleaning of inactive tenant data
-
-Additionally, there are notes on avoiding common pitfalls, such as LLM self-verification loops and ensuring accurate source ID binding.
-
-Finally, the output provides a high-level overview of Go-agent's architecture and design principles, covering topics like logic closure, problem-solving, and face-to-face interaction.
-
-Please let me know if you have any further questions or if there is anything else I can help with!
-
-You: 
-
----- 
-
-new chat 
-
+---new chat session ----
 go run main.go --chat
-2026/03/22 10:50:20 INFO General purpose tools registered successfully
-2026/03/22 10:50:20 Chat mode with tool calling enabled. Enter your questions (type 'exit' to quit):
-2026/03/22 10:50:20 You can ask me to:
-2026/03/22 10:50:20   - Search knowledge base: '搜索关于...'
-2026/03/22 10:50:20   - Correct knowledge: '这个知识有错误，帮我纠正'
-2026/03/22 10:50:20   - Add knowledge: '添加新的知识...'
-2026/03/22 10:50:20   - Delete knowledge: '删除过时的知识...'
-2026/03/22 10:50:20 LLM enabled - Using RAG (Retrieval + Generation) mode with tool calling
-2026/03/22 10:50:20 Available tools:
-2026/03/22 10:50:20   - http_request: Perform HTTP requests to external APIs
-2026/03/22 10:50:20   - calculator: Perform mathematical calculations
-2026/03/22 10:50:20   - datetime: Get current time and perform date/time operations
-2026/03/22 10:50:20   - text_processor: Perform text processing operations
-2026/03/22 10:50:20   - memory_search: Search distilled memories and user preferences
-2026/03/22 10:50:20   - distilled_memory_search: Search distilled memories and user preferences from database
-2026/03/22 10:50:20   - knowledge_search: Search knowledge base for relevant information
-2026/03/22 10:50:20   - correct_knowledge: Correct knowledge base content
-2026/03/22 10:50:20   - user_profile: Retrieve user profile and preferences from memory
-2026/03/22 10:50:20 Knowledge management tools (CRUD) are enabled via knowledge_manager
-2026/03/22 10:50:20 Memory enabled - Conversation history and distillation supported
-2026/03/22 10:50:20 INFO Memory manager started
-2026/03/22 10:50:20 Session created: session_default_1774147820284007000
+2026/03/22 11:21:22 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/22 11:21:22 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/22 11:21:22 Memory enabled - Conversation history and distillation supported
+2026/03/22 11:21:22 INFO Memory manager started
+2026/03/22 11:21:22 Session created: session_default_1774149682903988000
 
-You: 我是小明，我的技术栈是是吗呢？  
-2026/03/22 10:50:37 RAG check: 我是小明，我的是？ -> needs RAG: true
-2026/03/22 10:50:40 LLM Response: I'm ready to assist you. I will follow the critical rules and tool usage guidelines to provide accurate and helpful responses.
-
-To confirm, when a user introduces themselves, I should immediately call "user_profile" with the user_id and tenant_id parameters to retrieve their profile. Additionally, if a user asks about their preferences, tech stack, or personal information, I should use "user_profile" tool.
-
-Please go ahead and ask your first question. I will respond accordingly using the correct...
+You: 小刚是谁，有什么爱好，职业是什么
+2026/03/22 11:21:43 RAG check: 小刚是谁，有什么爱好，职业是什么 -> needs RAG: true
+2026/03/22 11:21:43 Searching for: 小刚是谁，有什么爱好，职业是什么 (tenant: default)
+2026/03/22 11:21:43 INFO SimpleRetrievalService.Search tenant_id=default query=小刚是谁，有什么爱好，职业是什么 top_k=10 min_score=0.4
+2026/03/22 11:21:43 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:21:43 INFO Vector search query vector_length=9738 vector_preview=[0.003788,-0.078203,-0.006410,0.016892,-0.005063,-0.023641,-0.026315,0.001353,-0.016892,0.077993,0.0
+2026/03/22 11:21:43 INFO Vector search query succeeded
+2026/03/22 11:21:43 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:21:43 INFO Search completed results_count=1 min_score=0.4
+2026/03/22 11:21:43 Search returned 1 results
 
 Assistant:
-I'm ready to assist you. I will follow the critical rules and tool usage guidelines to provide accurate and helpful responses.
-
-To confirm, when a user introduces themselves, I should immediately call "user_profile" with the user_id and tenant_id parameters to retrieve their profile. Additionally, if a user asks about their preferences, tech stack, or personal information, I should use "user_profile" tool.
-
-Please go ahead and ask your first question. I will respond accordingly using the correct tools and following the guidelines.
-
-You: 我的技术栈是什么呢？
-2026/03/22 10:50:50 RAG check: 我的技术栈是什么呢？ -> needs RAG: true
-2026/03/22 10:50:53 LLM Response: I'm ready to assist you. I will follow the critical rules and tool usage guidelines to provide accurate and helpful responses.
-
-To confirm, when a user introduces themselves, I should immediately call "user_profile" with the user_id and tenant_id parameters to retrieve their profile. Additionally, if a user asks about their preferences, tech stack, or personal information, I should use "user_profile" tool.
-
-Please go ahead and ask your first question. I will respond accordingly using the correct...
-
-Assistant:
-I'm ready to assist you. I will follow the critical rules and tool usage guidelines to provide accurate and helpful responses.
-
-To confirm, when a user introduces themselves, I should immediately call "user_profile" with the user_id and tenant_id parameters to retrieve their profile. Additionally, if a user asks about their preferences, tech stack, or personal information, I should use "user_profile" tool.
-
-Please go ahead and ask your first question. I will respond accordingly using the correct tools and following the guidelines.
-
-You: 
+小刚的职业信息没有在提供的知识基因中明确记录。但是，我们可以从之前的小talk中知道，小刚的技术栈是JS，TS，VUE。

@@ -81,15 +81,16 @@ type Chunk struct {
 
 // KnowledgeBase simplified knowledge base interface
 type KnowledgeBase struct {
-	config       *Config
-	pool         *postgres.Pool
-	repo         *repositories.KnowledgeRepository
-	embedding    *embedding.EmbeddingClient
-	llmClient    *llm.Client
-	retrieval    *services.SimpleRetrievalService
-	memory       memory.MemoryManager
-	sessionID    string
-	messageCount int
+	config        *Config
+	pool          *postgres.Pool
+	repo          *repositories.KnowledgeRepository
+	distilledRepo *repositories.DistilledMemoryRepository
+	embedding     *embedding.EmbeddingClient
+	llmClient     *llm.Client
+	retrieval     *services.SimpleRetrievalService
+	memory        memory.MemoryManager
+	sessionID     string
+	messageCount  int
 }
 
 func main() {
@@ -226,6 +227,9 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(pool.GetDB(), pool.GetDB())
 
+	// Create distilled memory repository
+	distilledRepo := repositories.NewDistilledMemoryRepository(pool.GetDB(), pool.GetDB())
+
 	// Create simple retrieval service (pure vector similarity, no complex weights)
 	retrievalService := services.NewSimpleRetrievalService(
 		kbRepo,
@@ -277,15 +281,16 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	}
 
 	return &KnowledgeBase{
-		config:       config,
-		pool:         pool,
-		repo:         kbRepo,
-		embedding:    embeddingClient,
-		llmClient:    llmClient,
-		retrieval:    retrievalService,
-		memory:       memManager,
-		sessionID:    "",
-		messageCount: 0,
+		config:        config,
+		pool:          pool,
+		repo:          kbRepo,
+		distilledRepo: distilledRepo,
+		embedding:     embeddingClient,
+		llmClient:     llmClient,
+		retrieval:     retrievalService,
+		memory:        memManager,
+		sessionID:     "",
+		messageCount:  0,
 	}, nil
 }
 
@@ -368,10 +373,8 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 		return nil, err
 	}
 
+	// Search results details removed for cleaner output
 	log.Printf("Search returned %d results", len(results))
-	for i, result := range results {
-		log.Printf("  Result %d: score=%.3f, source=%s, content=%s", i, result.Score, result.Source, truncateString(result.Content, 50))
-	}
 
 	// Convert to local SearchResult type for backward compatibility
 	var localResults []*SearchResult
@@ -399,25 +402,74 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 		_ = kb.memory.AddMessage(ctx, kb.sessionID, "user", question)
 	}
 
+	// Step 0.5: Detect user intent
+	lowerQuestion := strings.ToLower(question)
+	isCorrection := strings.Contains(lowerQuestion, "纠正") ||
+		strings.Contains(lowerQuestion, "改正") ||
+		strings.Contains(lowerQuestion, "修正") ||
+		strings.Contains(lowerQuestion, "不对") ||
+		strings.Contains(lowerQuestion, "不是")
+
+	// Detect self-introduction
+	var userID string
+	if strings.Contains(question, "我是") {
+		parts := strings.Split(question, "我是")
+		if len(parts) > 1 {
+			namePart := strings.TrimSpace(parts[1])
+			namePart = strings.Split(namePart, "，")[0]
+			namePart = strings.Split(namePart, ",")[0]
+			namePart = strings.Split(namePart, " ")[0]
+			namePart = strings.Split(namePart, "的")[0]
+			userID = strings.TrimSpace(namePart)
+		}
+	} else if strings.Contains(question, "我叫") {
+		parts := strings.Split(question, "我叫")
+		if len(parts) > 1 {
+			namePart := strings.TrimSpace(parts[1])
+			namePart = strings.Split(namePart, "，")[0]
+			namePart = strings.Split(namePart, ",")[0]
+			namePart = strings.Split(namePart, " ")[0]
+			namePart = strings.Split(namePart, "的")[0]
+			userID = strings.TrimSpace(namePart)
+		}
+	}
+
+	// Handle self-introduction - load distilled memories
+	if userID != "" && kb.distilledRepo != nil {
+		log.Printf("👤 Detected self-introduction: user_id=%s", userID)
+		memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, userID, 10)
+		if err == nil && len(memories) > 0 {
+			log.Printf("📊 Loaded %d distilled memories for user %s", len(memories), userID)
+			return fmt.Sprintf("你好 %s！我已经记住了你的信息。我们有 %d 条过往记录。", userID, len(memories)), nil
+		}
+		return fmt.Sprintf("你好 %s！我已经记录了你的信息。", userID), nil
+	}
+
+	// Handle correction request
+	if isCorrection {
+		log.Printf("🔧 Detected correction request")
+		// Search for relevant content
+		results, err := kb.Search(ctx, tenantID, question)
+		if err != nil {
+			return "", fmt.Errorf("search failed: %w", err)
+		}
+
+		if len(results) == 0 {
+			return "没有找到需要纠正的内容。", nil
+		}
+
+		// TODO: Implement actual correction logic by updating the knowledge base
+		// For now, inform user
+		log.Printf("📝 Found %d chunks for correction", len(results))
+		return fmt.Sprintf("我检测到你想要纠正知识。搜索到了 %d 个相关结果。纠正功能已记录，请继续对话。", len(results)), nil
+	}
+
 	// Step 1: Determine if RAG is needed using LLM
 	needsRAG := true
 	if kb.llmClient != nil {
-		ragPrompt := fmt.Sprintf(`You are a knowledge retrieval assistant. Determine if the following question requires searching the knowledge base.
+		ragPrompt := fmt.Sprintf(`Question: %s
 
-Question: %s
-
-Answer with "YES" if this question needs knowledge base search:
-- Asking about specific documentation, code rules, technical specifications
-- Questions about facts, procedures, configurations
-- Technical queries about code, systems, or frameworks
-
-Answer with "NO" if this is general conversation:
-- Greetings (hello, hi, ni hao)
-- Personal introductions (my name is..., wo jiao...)
-- General chat (how are you, xie xie)
-- Questions about personal information (what's your name, do you remember my name)
-
-Answer (YES/NO only):`, question)
+Needs knowledge base search? Answer YES/NO only:`, question)
 
 		ragCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		ragResponse, err := kb.llmClient.Generate(ragCtx, ragPrompt)
