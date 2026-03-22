@@ -14,21 +14,21 @@ import (
 
 // DistilledMemory represents a distilled memory from conversation history.
 type DistilledMemory struct {
-	ID              string
-	TenantID        string
-	UserID          string
-	SessionID       string
-	Content         string
-	Embedding       []float64
-	EmbeddingModel  string
+	ID               string
+	TenantID         string
+	UserID           string
+	SessionID        string
+	Content          string
+	Embedding        []float64
+	EmbeddingModel   string
 	EmbeddingVersion int
-	MemoryType      string
-	Importance      float64
-	Metadata        map[string]interface{}
-	AccessCount     int
-	LastAccessedAt  *time.Time
-	ExpiresAt       time.Time
-	CreatedAt       time.Time
+	MemoryType       string
+	Importance       float64
+	Metadata         map[string]interface{}
+	AccessCount      int
+	LastAccessedAt   *time.Time
+	ExpiresAt        time.Time
+	CreatedAt        time.Time
 }
 
 // DistilledMemoryRepository provides data access for distilled memories.

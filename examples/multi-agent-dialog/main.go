@@ -97,21 +97,19 @@ func (da *DialogAgent) Process(ctx context.Context, userMessage string) (string,
 			return "", fmt.Errorf("tool execution failed: %w", err)
 		}
 
-		// Build conversation history for next round
+		// Append to conversation history
 		conversationHistory = append(conversationHistory, fmt.Sprintf("Assistant: %s", response))
 		conversationHistory = append(conversationHistory, fmt.Sprintf("Tool Result: %s", toolResponse))
 
-		// Build next prompt with conversation history (without tool list to avoid confusion)
-		currentPrompt = fmt.Sprintf("%s\n\n%s\nUser: %s\n%s\n\nTool Result: %s\n\nBased on the tool result above, please provide a direct answer to the user's question. Do not list tools or capabilities. If you need more information, you can use tools again using the format [TOOL:tool_name {\"param\": \"value\"}].",
+		// Build next prompt with conversation history (without toolPrompt to reduce confusion)
+		currentPrompt = fmt.Sprintf("%s\n\nUser: %s\n\n%s\n\nAssistant:",
 			da.systemPrompt,
-			strings.Join(conversationHistory, "\n"),
 			userMessage,
 			strings.Join(conversationHistory, "\n"),
-			toolResponse,
 		)
 	}
 
-	// If we've exceeded max rounds, ask LLM to provide final response
+	// If we've exceeded max rounds, get final response
 	response, err := da.llmClient.Generate(ctx, currentPrompt)
 	if err != nil {
 		return "", fmt.Errorf("LLM generation failed: %w", err)
@@ -162,21 +160,28 @@ func (da *DialogAgent) generateToolPrompt() string {
 		if len(schema.Parameters.GetProperties()) > 0 {
 			sb.WriteString("  Parameters:\n")
 			for paramName, param := range schema.Parameters.GetProperties() {
-				fmt.Fprintf(&sb, "    - %s (%s): %s\n",
-					paramName,
-					param.Type,
-					param.Description,
-				)
+				paramInfo := fmt.Sprintf("    - %s (%s): %s", paramName, param.Type, param.Description)
+				if len(param.Enum) > 0 {
+					paramInfo += fmt.Sprintf(" (allowed values: %v)", param.Enum)
+				}
+				sb.WriteString(paramInfo + "\n")
 			}
 		}
 	}
 
 	sb.WriteString("\nIMPORTANT: When you need to use a tool to answer a question, you MUST use this exact format:\n")
 	sb.WriteString("[TOOL:tool_name {\"param1\": \"value1\", \"param2\": 123}]\n\n")
-	sb.WriteString("For example:\n")
-	sb.WriteString("[TOOL:datetime {\"operation\": \"now\"}]\n")
-	sb.WriteString("[TOOL:calculator {\"operation\": \"add\", \"operands\": [1, 2, 3]}]\n\n")
-	sb.WriteString("Only use tools when necessary to answer the user's question.")
+	sb.WriteString("Examples:\n")
+	sb.WriteString("- Get current time: [TOOL:datetime {\"operation\": \"now\"}]\n")
+	sb.WriteString("- Add numbers: [TOOL:calculator {\"operation\": \"add\", \"operands\": [1, 2, 3]}]\n")
+	sb.WriteString("- Multiply numbers: [TOOL:calculator {\"operation\": \"multiply\", \"operands\": [5, 6]}]\n")
+	sb.WriteString("- Divide numbers: [TOOL:calculator {\"operation\": \"divide\", \"operands\": [10, 2]}]\n\n")
+	sb.WriteString("Tool Usage Guide:\n")
+	sb.WriteString("- calculator: Use mathematical formulas for large computations (e.g., sum 1..n → n*(n+1)/2). Avoid iterative calculations.\n")
+	sb.WriteString("- datetime: Use for time operations. Always specify the 'operation' parameter.\n")
+	sb.WriteString("- file_tools: Use absolute paths for file operations.\n")
+	sb.WriteString("- json_tools: Use for JSON parsing and manipulation.\n\n")
+	sb.WriteString("REMEMBER: Always check the required parameters for each tool and provide them correctly.")
 
 	return sb.String()
 }

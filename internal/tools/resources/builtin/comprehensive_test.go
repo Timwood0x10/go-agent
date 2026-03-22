@@ -1,5 +1,5 @@
 // nolint: errcheck // Test code may ignore return values
-package resources
+package builtin
 
 import (
 	"context"
@@ -9,13 +9,15 @@ import (
 	"time"
 
 	builtin_domain "goagent/internal/tools/resources/builtin/domain"
+	"goagent/internal/tools/resources/base"
+	"goagent/internal/tools/resources/core"
 	"goagent/internal/tools/resources/types"
 )
 
 // TestResultWithMetadata tests adding metadata to results.
 func TestResultWithMetadata(t *testing.T) {
 	t.Run("add single metadata", func(t *testing.T) {
-		result := NewResult(true, "test data")
+		result := core.NewResult(true, "test data")
 		result = *result.WithMetadata("key1", "value1")
 
 		if result.Metadata == nil {
@@ -27,7 +29,7 @@ func TestResultWithMetadata(t *testing.T) {
 	})
 
 	t.Run("add multiple metadata", func(t *testing.T) {
-		result := NewResult(true, "test data")
+		result := core.NewResult(true, "test data")
 		result = *result.WithMetadata("key1", "value1")
 		result = *result.WithMetadata("key2", "value2")
 
@@ -37,7 +39,7 @@ func TestResultWithMetadata(t *testing.T) {
 	})
 
 	t.Run("add metadata to existing", func(t *testing.T) {
-		result := NewResult(true, "test data")
+		result := core.NewResult(true, "test data")
 		result = *result.WithMetadata("key1", "value1")
 		result = *result.WithMetadata("key1", "value2")
 
@@ -50,7 +52,7 @@ func TestResultWithMetadata(t *testing.T) {
 // TestResultString tests result string representation.
 func TestResultString(t *testing.T) {
 	t.Run("successful result", func(t *testing.T) {
-		result := NewResult(true, "test data")
+		result := core.NewResult(true, "test data")
 		str := result.String()
 
 		if str != "Success" {
@@ -59,7 +61,7 @@ func TestResultString(t *testing.T) {
 	})
 
 	t.Run("error result", func(t *testing.T) {
-		result := NewErrorResult("test error")
+		result := core.NewErrorResult("test error")
 		str := result.String()
 
 		if str != "Error: test error" {
@@ -71,7 +73,7 @@ func TestResultString(t *testing.T) {
 // TestResultToJSON tests result JSON serialization.
 func TestResultToJSON(t *testing.T) {
 	t.Run("successful result", func(t *testing.T) {
-		result := NewResult(true, map[string]string{"key": "value"})
+		result := core.NewResult(true, map[string]string{"key": "value"})
 		json, err := result.ToJSON()
 
 		if err != nil {
@@ -83,7 +85,7 @@ func TestResultToJSON(t *testing.T) {
 	})
 
 	t.Run("error result", func(t *testing.T) {
-		result := NewErrorResult("test error")
+		result := core.NewErrorResult("test error")
 		json, err := result.ToJSON()
 
 		if err != nil {
@@ -97,10 +99,10 @@ func TestResultToJSON(t *testing.T) {
 
 // TestResultWithTiming tests adding timing information.
 func TestResultWithTiming(t *testing.T) {
-	result := NewResult(true, "test data")
+	result := core.NewResult(true, "test data")
 	duration := 100 * time.Millisecond
 
-	result = ResultWithTiming(result, duration)
+	result = core.ResultWithTiming(result, duration)
 
 	if result.Metadata == nil {
 		t.Error("metadata should not be nil")
@@ -116,10 +118,10 @@ func TestResultWithTiming(t *testing.T) {
 // TestResultList tests managing multiple results.
 func TestResultList(t *testing.T) {
 	t.Run("create result list", func(t *testing.T) {
-		list := NewResultList()
+		list := core.NewResultList()
 
 		if list == nil {
-			t.Error("NewResultList() should not return nil")
+			t.Error("core.NewResultList() should not return nil")
 			return
 		}
 		if len(list.Results) != 0 {
@@ -128,8 +130,8 @@ func TestResultList(t *testing.T) {
 	})
 
 	t.Run("add successful result", func(t *testing.T) {
-		list := NewResultList()
-		list.Add(NewResult(true, "success"))
+		list := core.NewResultList()
+		list.Add(core.NewResult(true, "success"))
 
 		if list.Total != 1 {
 			t.Errorf("total = %d, want 1", list.Total)
@@ -143,8 +145,8 @@ func TestResultList(t *testing.T) {
 	})
 
 	t.Run("add failed result", func(t *testing.T) {
-		list := NewResultList()
-		list.Add(NewErrorResult("error"))
+		list := core.NewResultList()
+		list.Add(core.NewErrorResult("error"))
 
 		if list.Total != 1 {
 			t.Errorf("total = %d, want 1", list.Total)
@@ -158,10 +160,10 @@ func TestResultList(t *testing.T) {
 	})
 
 	t.Run("add mixed results", func(t *testing.T) {
-		list := NewResultList()
-		list.Add(NewResult(true, "success1"))
-		list.Add(NewErrorResult("error1"))
-		list.Add(NewResult(true, "success2"))
+		list := core.NewResultList()
+		list.Add(core.NewResult(true, "success1"))
+		list.Add(core.NewErrorResult("error1"))
+		list.Add(core.NewResult(true, "success2"))
 
 		if list.Total != 3 {
 			t.Errorf("total = %d, want 3", list.Total)
@@ -178,7 +180,7 @@ func TestResultList(t *testing.T) {
 // TestErrorResult tests error result with code.
 func TestErrorResult(t *testing.T) {
 	t.Run("create error result", func(t *testing.T) {
-		errResult := NewErrorResultWithCode("ERR001", "Test error")
+		errResult := core.NewErrorResultWithCode("ERR001", "Test error")
 
 		if errResult.Code != "ERR001" {
 			t.Errorf("Code = %v, want ERR001", errResult.Code)
@@ -189,7 +191,7 @@ func TestErrorResult(t *testing.T) {
 	})
 
 	t.Run("error result to result", func(t *testing.T) {
-		errResult := NewErrorResultWithCode("ERR002", "Test error")
+		errResult := core.NewErrorResultWithCode("ERR002", "Test error")
 		result := errResult.ToResult()
 
 		if result.Success {
@@ -201,7 +203,7 @@ func TestErrorResult(t *testing.T) {
 	})
 
 	t.Run("error result error method", func(t *testing.T) {
-		errResult := NewErrorResultWithCode("ERR003", "Test error")
+		errResult := core.NewErrorResultWithCode("ERR003", "Test error")
 
 		if errResult.Error() != "Test error" {
 			t.Errorf("Error() = %v, want Test error", errResult.Error())
@@ -209,7 +211,7 @@ func TestErrorResult(t *testing.T) {
 	})
 
 	t.Run("error result with details", func(t *testing.T) {
-		errResult := NewErrorResultWithCode("ERR004", "Test error")
+		errResult := core.NewErrorResultWithCode("ERR004", "Test error")
 		errResult = errResult.WithDetails(map[string]interface{}{
 			"context": "test context",
 			"retry":   3,
@@ -227,7 +229,7 @@ func TestErrorResult(t *testing.T) {
 // TestValidationError tests validation error.
 func TestValidationError(t *testing.T) {
 	t.Run("create validation error", func(t *testing.T) {
-		validationErr := NewValidationError("field_name", "Field cannot be empty")
+		validationErr := core.NewValidationError("field_name", "Field cannot be empty")
 
 		if validationErr.Field != "field_name" {
 			t.Errorf("Field = %v, want field_name", validationErr.Field)
@@ -238,7 +240,7 @@ func TestValidationError(t *testing.T) {
 	})
 
 	t.Run("validation error error method", func(t *testing.T) {
-		validationErr := NewValidationError("email", "Invalid email format")
+		validationErr := core.NewValidationError("email", "Invalid email format")
 
 		if validationErr.Error() != "email: Invalid email format" {
 			t.Errorf("Error() = %v, want email: Invalid email format", validationErr.Error())
@@ -249,12 +251,12 @@ func TestValidationError(t *testing.T) {
 // TestWithMetadata tests wrapping tools with metadata.
 func TestWithMetadata(t *testing.T) {
 	t.Run("wrap tool with metadata", func(t *testing.T) {
-		baseTool := NewToolFunc("test_tool", "Test tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "result"), nil
+		baseTool := base.NewToolFunc("test_tool", "Test tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "result"), nil
 			})
 
-		metadata := ToolMetadata{
+		metadata := core.ToolMetadata{
 			Version:    "1.0",
 			Author:     "test author",
 			Tags:       []string{"tag1", "tag2"},
@@ -262,7 +264,7 @@ func TestWithMetadata(t *testing.T) {
 			Deprecated: false,
 		}
 
-		wrappedTool := WithMetadata(baseTool, metadata)
+		wrappedTool := base.WithMetadata(baseTool, metadata)
 
 		// Execute the wrapped tool
 		result, err := wrappedTool.Execute(context.Background(), map[string]interface{}{})
@@ -276,18 +278,18 @@ func TestWithMetadata(t *testing.T) {
 	})
 
 	t.Run("check deprecated status", func(t *testing.T) {
-		baseTool := NewToolFunc("old_tool", "Old tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "result"), nil
+		baseTool := base.NewToolFunc("old_tool", "Old tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "result"), nil
 			})
 
-		metadata := ToolMetadata{
+		metadata := core.ToolMetadata{
 			Version:     "0.5",
 			Deprecated:  true,
 			Deprecation: "Use new_tool instead",
 		}
 
-		wrappedTool := WithMetadata(baseTool, metadata)
+		wrappedTool := base.WithMetadata(baseTool, metadata)
 
 		// Just verify the tool can be executed
 		result, err := wrappedTool.Execute(context.Background(), map[string]interface{}{})
@@ -300,17 +302,17 @@ func TestWithMetadata(t *testing.T) {
 	})
 
 	t.Run("check non-deprecated tool", func(t *testing.T) {
-		baseTool := NewToolFunc("new_tool", "New tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "result"), nil
+		baseTool := base.NewToolFunc("new_tool", "New tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "result"), nil
 			})
 
-		metadata := ToolMetadata{
+		metadata := core.ToolMetadata{
 			Version:    "1.0",
 			Deprecated: false,
 		}
 
-		wrappedTool := WithMetadata(baseTool, metadata)
+		wrappedTool := base.WithMetadata(baseTool, metadata)
 
 		// Just verify the tool can be executed
 		result, err := wrappedTool.Execute(context.Background(), map[string]interface{}{})
@@ -894,19 +896,19 @@ func TestMockFashionSearcher(t *testing.T) {
 // TestRegistryExecute tests Registry.Execute method.
 func TestRegistryExecute(t *testing.T) {
 	t.Run("execute registered tool", func(t *testing.T) {
-		registry := NewRegistry()
-		tool := NewToolFunc(
+		registry := core.NewRegistry()
+		tool := base.NewToolFunc(
 			"test_tool",
 			"Test tool",
 			nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "executed"), nil
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "executed"), nil
 			},
 		)
 
 		err := registry.Register(tool)
 		if err != nil {
-			t.Errorf("Register() error = %v", err)
+			t.Errorf("core.Register() error = %v", err)
 		}
 
 		result, err := registry.Execute(context.Background(), "test_tool", map[string]interface{}{"key": "value"})
@@ -919,7 +921,7 @@ func TestRegistryExecute(t *testing.T) {
 	})
 
 	t.Run("execute non-existent tool", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := core.NewRegistry()
 
 		result, err := registry.Execute(context.Background(), "non_existent", map[string]interface{}{})
 		if err == nil {
@@ -931,19 +933,19 @@ func TestRegistryExecute(t *testing.T) {
 	})
 
 	t.Run("execute tool with nil parameters", func(t *testing.T) {
-		registry := NewRegistry()
-		tool := NewToolFunc(
+		registry := core.NewRegistry()
+		tool := base.NewToolFunc(
 			"nil_tool",
 			"Nil tool",
 			nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, nil), nil
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, nil), nil
 			},
 		)
 
 		err := registry.Register(tool)
 		if err != nil {
-			t.Errorf("Register() error = %v", err)
+			t.Errorf("core.Register() error = %v", err)
 		}
 
 		result, err := registry.Execute(context.Background(), "nil_tool", nil)
@@ -959,7 +961,7 @@ func TestRegistryExecute(t *testing.T) {
 // TestRegistryClear tests Registry.Clear method.
 func TestRegistryClear(t *testing.T) {
 	t.Run("clear empty registry", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := core.NewRegistry()
 		registry.Clear()
 
 		if registry.Count() != 0 {
@@ -968,12 +970,12 @@ func TestRegistryClear(t *testing.T) {
 	})
 
 	t.Run("clear registry with tools", func(t *testing.T) {
-		registry := NewRegistry()
-		registry.Register(NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry := core.NewRegistry()
+		registry.Register(base.NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
-		registry.Register(NewToolFunc("tool2", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry.Register(base.NewToolFunc("tool2", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
 
 		if registry.Count() != 2 {
@@ -988,14 +990,14 @@ func TestRegistryClear(t *testing.T) {
 	})
 
 	t.Run("clear and re-register", func(t *testing.T) {
-		registry := NewRegistry()
-		registry.Register(NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry := core.NewRegistry()
+		registry.Register(base.NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
 
 		registry.Clear()
-		registry.Register(NewToolFunc("new_tool", "new desc", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry.Register(base.NewToolFunc("new_tool", "new desc", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
 
 		if registry.Count() != 1 {
@@ -1012,21 +1014,21 @@ func TestRegistryClear(t *testing.T) {
 // TestGlobalRegistry tests global registry functions.
 func TestGlobalRegistry(t *testing.T) {
 	t.Run("register and get from global registry", func(t *testing.T) {
-		tool := NewToolFunc(
+		tool := base.NewToolFunc(
 			"global_tool",
 			"Global test tool",
 			nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "global"), nil
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "global"), nil
 			},
 		)
 
-		err := Register(tool)
+		err := core.Register(tool)
 		if err != nil {
-			t.Errorf("Register() error = %v", err)
+			t.Errorf("core.Register() error = %v", err)
 		}
 
-		retrieved, exists := Get("global_tool")
+		retrieved, exists := core.Get("global_tool")
 		if !exists {
 			t.Error("tool should exist in global registry")
 		}
@@ -1035,47 +1037,47 @@ func TestGlobalRegistry(t *testing.T) {
 		}
 
 		// Clean up
-		GlobalRegistry.Unregister("global_tool")
+		core.GlobalRegistry.Unregister("global_tool")
 	})
 
 	t.Run("list tools from global registry", func(t *testing.T) {
 		// Clear global registry first
-		GlobalRegistry.Clear()
+		core.GlobalRegistry.Clear()
 
-		Register(NewToolFunc("global1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		core.Register(base.NewToolFunc("global1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
-		Register(NewToolFunc("global2", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		core.Register(base.NewToolFunc("global2", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
 
-		tools := List()
+		tools := core.List()
 		if len(tools) != 2 {
 			t.Errorf("expected 2 tools, got %d", len(tools))
 		}
 
 		// Clean up
-		GlobalRegistry.Clear()
+		core.GlobalRegistry.Clear()
 	})
 
 	t.Run("execute from global registry", func(t *testing.T) {
-		GlobalRegistry.Clear()
+		core.GlobalRegistry.Clear()
 
-		tool := NewToolFunc(
+		tool := base.NewToolFunc(
 			"exec_tool",
 			"Executable tool",
 			nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, "executed"), nil
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, "executed"), nil
 			},
 		)
 
-		err := Register(tool)
+		err := core.Register(tool)
 		if err != nil {
-			t.Errorf("Register() error = %v", err)
+			t.Errorf("core.Register() error = %v", err)
 		}
 
-		result, err := Execute(context.Background(), "exec_tool", map[string]interface{}{})
+		result, err := core.Execute(context.Background(), "exec_tool", map[string]interface{}{})
 		if err != nil {
 			t.Errorf("Execute() error = %v", err)
 		}
@@ -1084,13 +1086,13 @@ func TestGlobalRegistry(t *testing.T) {
 		}
 
 		// Clean up
-		GlobalRegistry.Clear()
+		core.GlobalRegistry.Clear()
 	})
 
 	t.Run("execute non-existent tool from global registry", func(t *testing.T) {
-		GlobalRegistry.Clear()
+		core.GlobalRegistry.Clear()
 
-		_, err := Execute(context.Background(), "non_existent", map[string]interface{}{})
+		_, err := core.Execute(context.Background(), "non_existent", map[string]interface{}{})
 		if err == nil {
 			t.Error("Execute() should return error for non-existent tool")
 		}
@@ -1100,7 +1102,7 @@ func TestGlobalRegistry(t *testing.T) {
 // TestToolGroup tests ToolGroup functionality.
 func TestToolGroup(t *testing.T) {
 	t.Run("create tool group", func(t *testing.T) {
-		group := NewToolGroup("fashion", "Fashion-related tools")
+		group := core.NewToolGroup("fashion", "Fashion-related tools")
 
 		if group.Name() != "fashion" {
 			t.Errorf("Name() = %s, want fashion", group.Name())
@@ -1111,20 +1113,20 @@ func TestToolGroup(t *testing.T) {
 	})
 
 	t.Run("register and get tool from group", func(t *testing.T) {
-		group := NewToolGroup("weather", "Weather tools")
+		group := core.NewToolGroup("weather", "Weather tools")
 
-		tool := NewToolFunc(
+		tool := base.NewToolFunc(
 			"temperature",
 			"Get temperature",
 			nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, 25.5), nil
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, 25.5), nil
 			},
 		)
 
 		err := group.Register(tool)
 		if err != nil {
-			t.Errorf("Register() error = %v", err)
+			t.Errorf("core.Register() error = %v", err)
 		}
 
 		retrieved, exists := group.Get("temperature")
@@ -1137,13 +1139,13 @@ func TestToolGroup(t *testing.T) {
 	})
 
 	t.Run("list tools from group", func(t *testing.T) {
-		group := NewToolGroup("math", "Math tools")
+		group := core.NewToolGroup("math", "Math tools")
 
-		group.Register(NewToolFunc("add", "Add numbers", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		group.Register(base.NewToolFunc("add", "Add numbers", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
-		group.Register(NewToolFunc("subtract", "Subtract numbers", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		group.Register(base.NewToolFunc("subtract", "Subtract numbers", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		}))
 
 		tools := group.List()
@@ -1153,14 +1155,14 @@ func TestToolGroup(t *testing.T) {
 	})
 
 	t.Run("multiple independent groups", func(t *testing.T) {
-		group1 := NewToolGroup("group1", "First group")
-		group2 := NewToolGroup("group2", "Second group")
+		group1 := core.NewToolGroup("group1", "First group")
+		group2 := core.NewToolGroup("group2", "Second group")
 
-		tool1 := NewToolFunc("tool1", "Tool 1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, "group1"), nil
+		tool1 := base.NewToolFunc("tool1", "Tool 1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, "group1"), nil
 		})
-		tool2 := NewToolFunc("tool2", "Tool 2", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, "group2"), nil
+		tool2 := base.NewToolFunc("tool2", "Tool 2", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, "group2"), nil
 		})
 
 		group1.Register(tool1)
@@ -1186,26 +1188,26 @@ func TestToolGroup(t *testing.T) {
 // TestRegistryRegisterNil tests registering nil tool.
 func TestRegistryRegisterNil(t *testing.T) {
 	t.Run("register nil tool in registry", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := core.NewRegistry()
 
 		err := registry.Register(nil)
 		if err == nil {
-			t.Error("Register() should return error for nil tool")
+			t.Error("core.Register() should return error for nil tool")
 		}
-		if err != ErrNilTool {
-			t.Errorf("Register() error = %v, want ErrNilTool", err)
+		if err != core.ErrNilTool {
+			t.Errorf("core.Register() error = %v, want core.ErrNilTool", err)
 		}
 	})
 
 	t.Run("register nil tool in tool group", func(t *testing.T) {
-		group := NewToolGroup("test", "Test group")
+		group := core.NewToolGroup("test", "Test group")
 
 		err := group.Register(nil)
 		if err == nil {
-			t.Error("Register() should return error for nil tool")
+			t.Error("core.Register() should return error for nil tool")
 		}
-		if err != ErrNilTool {
-			t.Errorf("Register() error = %v, want ErrNilTool", err)
+		if err != core.ErrNilTool {
+			t.Errorf("core.Register() error = %v, want core.ErrNilTool", err)
 		}
 	})
 }
@@ -1213,7 +1215,7 @@ func TestRegistryRegisterNil(t *testing.T) {
 // TestRegistryUnregisterNonExistent tests unregistering non-existent tool.
 func TestRegistryUnregisterNonExistent(t *testing.T) {
 	t.Run("unregister non-existent tool", func(t *testing.T) {
-		registry := NewRegistry()
+		registry := core.NewRegistry()
 
 		err := registry.Unregister("non_existent")
 		if err == nil {
@@ -1222,9 +1224,9 @@ func TestRegistryUnregisterNonExistent(t *testing.T) {
 	})
 
 	t.Run("unregister tool twice", func(t *testing.T) {
-		registry := NewRegistry()
-		tool := NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry := core.NewRegistry()
+		tool := base.NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		})
 
 		registry.Register(tool)
@@ -1241,41 +1243,41 @@ func TestRegistryUnregisterNonExistent(t *testing.T) {
 }
 
 // TestRegistryDuplicateRegister tests registering duplicate tools.
-func TestRegistryDuplicateRegister(t *testing.T) {
+func TestRegistryDuplicate(t *testing.T) {
 	t.Run("register same tool twice", func(t *testing.T) {
-		registry := NewRegistry()
-		tool := NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, nil), nil
+		registry := core.NewRegistry()
+		tool := base.NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, nil), nil
 		})
 
 		err := registry.Register(tool)
 		if err != nil {
-			t.Errorf("First Register() error = %v", err)
+			t.Errorf("First core.Register() error = %v", err)
 		}
 
 		err = registry.Register(tool)
 		if err == nil {
-			t.Error("Second Register() should return error for duplicate tool")
+			t.Error("Second core.Register() should return error for duplicate tool")
 		}
 	})
 
 	t.Run("register different tools with same name", func(t *testing.T) {
-		registry := NewRegistry()
-		tool1 := NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, "tool1"), nil
+		registry := core.NewRegistry()
+		tool1 := base.NewToolFunc("tool1", "desc1", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, "tool1"), nil
 		})
-		tool2 := NewToolFunc("tool1", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (Result, error) {
-			return NewResult(true, "tool2"), nil
+		tool2 := base.NewToolFunc("tool1", "desc2", nil, func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+			return core.NewResult(true, "tool2"), nil
 		})
 
 		err := registry.Register(tool1)
 		if err != nil {
-			t.Errorf("First Register() error = %v", err)
+			t.Errorf("First core.Register() error = %v", err)
 		}
 
 		err = registry.Register(tool2)
 		if err == nil {
-			t.Error("Second Register() should return error for duplicate name")
+			t.Error("Second core.Register() should return error for duplicate name")
 		}
 	})
 }
@@ -1293,7 +1295,7 @@ func TestResultToJSONError(t *testing.T) {
 			"nil":   nil,
 		}
 
-		result := NewResult(true, complexData)
+		result := core.NewResult(true, complexData)
 		jsonStr, err := result.ToJSON()
 
 		if err != nil {
@@ -1312,7 +1314,7 @@ func TestResultToJSONError(t *testing.T) {
 		// Using a channel which cannot be marshaled
 		unserializableData := make(chan int)
 
-		result := NewResult(true, unserializableData)
+		result := core.NewResult(true, unserializableData)
 		jsonStr, err := result.ToJSON()
 
 		// json.Marshal should fail for channels
@@ -1451,7 +1453,7 @@ func TestFashionFilters(t *testing.T) {
 	})
 }
 
-// Testtypes.AgentProfile tests types.AgentProfile struct.
+// TestAgentProfile tests AgentProfile struct.
 func TestAgentProfile(t *testing.T) {
 	t.Run("minimal profile", func(t *testing.T) {
 		profile := &types.AgentProfile{
@@ -1674,11 +1676,11 @@ func TestHelperFunctions(t *testing.T) {
 	})
 }
 
-// TestParameterSchema tests ParameterSchema.
+// Testcore.ParameterSchema tests core.ParameterSchema.
 func TestParameterSchema(t *testing.T) {
-	schema := &ParameterSchema{
+	schema := &core.ParameterSchema{
 		Type: "object",
-		Properties: map[string]*Parameter{
+		Properties: map[string]*core.Parameter{
 			"name": {
 				Type:        "string",
 				Description: "Item name",
@@ -1735,9 +1737,9 @@ func float64Ptr(v float64) *float64 {
 // TestToolParameters tests tool parameter schema.
 func TestToolParameters(t *testing.T) {
 	t.Run("base tool parameters", func(t *testing.T) {
-		params := &ParameterSchema{
+		params := &core.ParameterSchema{
 			Type: "object",
-			Properties: map[string]*Parameter{
+			Properties: map[string]*core.Parameter{
 				"query": {
 					Type:        "string",
 					Description: "Search query",
@@ -1746,7 +1748,7 @@ func TestToolParameters(t *testing.T) {
 			Required: []string{"query"},
 		}
 
-		tool := NewBaseTool("test_tool", "Test tool", params)
+		tool := base.NewBaseTool("test_tool", "Test tool", params)
 
 		if tool.Parameters() == nil {
 			t.Error("Parameters() should not return nil")
@@ -1757,9 +1759,9 @@ func TestToolParameters(t *testing.T) {
 	})
 
 	t.Run("tool func parameters", func(t *testing.T) {
-		params := &ParameterSchema{
+		params := &core.ParameterSchema{
 			Type: "object",
-			Properties: map[string]*Parameter{
+			Properties: map[string]*core.Parameter{
 				"value": {
 					Type:        "number",
 					Description: "Numeric value",
@@ -1768,9 +1770,9 @@ func TestToolParameters(t *testing.T) {
 			Required: []string{"value"},
 		}
 
-		tool := NewToolFunc("calc", "Calculator", params,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(true, params["value"]), nil
+		tool := base.NewToolFunc("calc", "Calculator", params,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(true, params["value"]), nil
 			})
 
 		if tool.Parameters().Required[0] != "value" {
@@ -1782,9 +1784,9 @@ func TestToolParameters(t *testing.T) {
 // TestParameterEdgeCases tests edge cases in parameter handling.
 func TestParameterEdgeCases(t *testing.T) {
 	t.Run("empty parameter schema", func(t *testing.T) {
-		params := &ParameterSchema{
+		params := &core.ParameterSchema{
 			Type:       "object",
-			Properties: map[string]*Parameter{},
+			Properties: map[string]*core.Parameter{},
 			Required:   []string{},
 		}
 
@@ -1798,7 +1800,7 @@ func TestParameterEdgeCases(t *testing.T) {
 
 	t.Run("parameter with default value", func(t *testing.T) {
 		defaultValue := 42
-		param := &Parameter{
+		param := &core.Parameter{
 			Type:        "integer",
 			Description: "Count",
 			Default:     defaultValue,
@@ -1811,7 +1813,7 @@ func TestParameterEdgeCases(t *testing.T) {
 
 	t.Run("parameter with enum values", func(t *testing.T) {
 		enumValues := []interface{}{"small", "medium", "large"}
-		param := &Parameter{
+		param := &core.Parameter{
 			Type:        "string",
 			Description: "Size",
 			Enum:        enumValues,
@@ -1829,13 +1831,13 @@ func TestContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		tool := NewToolFunc("slow_tool", "Slow tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
+		tool := base.NewToolFunc("slow_tool", "Slow tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
 				select {
 				case <-ctx.Done():
-					return NewErrorResult("cancelled"), nil
+					return core.NewErrorResult("cancelled"), nil
 				case <-time.After(1 * time.Second):
-					return NewResult(true, "result"), nil
+					return core.NewResult(true, "result"), nil
 				}
 			})
 
@@ -1850,17 +1852,17 @@ func TestContextCancellation(t *testing.T) {
 
 // TestRegistryConcurrency tests concurrent registry operations.
 func TestRegistryConcurrency(t *testing.T) {
-	registry := NewRegistry()
+	registry := core.NewRegistry()
 
 	// Register multiple tools concurrently
 	for i := 0; i < 10; i++ {
 		go func(id int) {
-			tool := NewToolFunc(
+			tool := base.NewToolFunc(
 				"tool_"+string(rune('0'+id)),
 				"Tool "+string(rune('0'+id)),
 				nil,
-				func(ctx context.Context, params map[string]interface{}) (Result, error) {
-					return NewResult(true, "result"), nil
+				func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+					return core.NewResult(true, "result"), nil
 				},
 			)
 			registry.Register(tool)
@@ -1892,9 +1894,9 @@ func TestRegistryConcurrency(t *testing.T) {
 func TestToolErrorHandling(t *testing.T) {
 	t.Run("tool returns error", func(t *testing.T) {
 		expectedErr := errors.New("tool error")
-		tool := NewToolFunc("error_tool", "Error tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
-				return NewResult(false, nil), expectedErr
+		tool := base.NewToolFunc("error_tool", "Error tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+				return core.NewResult(false, nil), expectedErr
 			})
 
 		result, err := tool.Execute(context.Background(), map[string]interface{}{})
@@ -1908,8 +1910,8 @@ func TestToolErrorHandling(t *testing.T) {
 	})
 
 	t.Run("tool panic handling", func(t *testing.T) {
-		tool := NewToolFunc("panic_tool", "Panic tool", nil,
-			func(ctx context.Context, params map[string]interface{}) (Result, error) {
+		tool := base.NewToolFunc("panic_tool", "Panic tool", nil,
+			func(ctx context.Context, params map[string]interface{}) (core.Result, error) {
 				panic("intentional panic")
 			})
 

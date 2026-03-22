@@ -1,0 +1,125 @@
+package base
+
+import (
+	"context"
+
+	"goagent/internal/tools/resources/core"
+)
+
+// BaseTool provides common tool functionality.
+type BaseTool struct {
+	name         string
+	description  string
+	category     core.ToolCategory
+	capabilities []core.Capability
+	parameters   *core.ParameterSchema
+	metadata     *core.ToolMetadata
+}
+
+// NewBaseTool creates a new BaseTool.
+func NewBaseTool(name, description string, params *core.ParameterSchema) *BaseTool {
+	return &BaseTool{
+		name:         name,
+		description:  description,
+		category:     core.CategoryCore, // Default category
+		capabilities: []core.Capability{},
+		parameters:   params,
+		metadata:     nil,
+	}
+}
+
+// NewBaseToolWithCategory creates a new BaseTool with a specific category.
+func NewBaseToolWithCategory(name, description string, category core.ToolCategory, params *core.ParameterSchema) *BaseTool {
+	return &BaseTool{
+		name:         name,
+		description:  description,
+		category:     category,
+		capabilities: []core.Capability{},
+		parameters:   params,
+		metadata:     nil,
+	}
+}
+
+// NewBaseToolWithCapabilities creates a new BaseTool with specific capabilities.
+func NewBaseToolWithCapabilities(name, description string, category core.ToolCategory, capabilities []core.Capability, params *core.ParameterSchema) *BaseTool {
+	return &BaseTool{
+		name:         name,
+		description:  description,
+		category:     category,
+		capabilities: capabilities,
+		parameters:   params,
+		metadata:     nil,
+	}
+}
+
+// Name returns the tool name.
+func (t *BaseTool) Name() string {
+	return t.name
+}
+
+// Description returns the tool description.
+func (t *BaseTool) Description() string {
+	return t.description
+}
+
+// Category returns the tool category.
+func (t *BaseTool) Category() core.ToolCategory {
+	return t.category
+}
+
+// Capabilities returns the tool capabilities.
+func (t *BaseTool) Capabilities() []core.Capability {
+	return t.capabilities
+}
+
+// Parameters returns the parameter schema.
+func (t *BaseTool) Parameters() *core.ParameterSchema {
+	return t.parameters
+}
+
+// Metadata returns the tool metadata.
+func (t *BaseTool) Metadata() *core.ToolMetadata {
+	return t.metadata
+}
+
+// ToolFunc is a function-based tool.
+type ToolFunc struct {
+	BaseTool
+	fn func(ctx context.Context, params map[string]interface{}) (core.Result, error)
+}
+
+// NewToolFunc creates a new ToolFunc.
+func NewToolFunc(
+	name, description string,
+	params *core.ParameterSchema,
+	fn func(ctx context.Context, params map[string]interface{}) (core.Result, error),
+) *ToolFunc {
+	return &ToolFunc{
+		BaseTool: *NewBaseTool(name, description, params),
+		fn:       fn,
+	}
+}
+
+// Execute executes the tool function.
+func (t *ToolFunc) Execute(ctx context.Context, params map[string]interface{}) (core.Result, error) {
+	return t.fn(ctx, params)
+}
+
+// WithMetadata adds metadata to a tool.
+func WithMetadata(tool core.Tool, metadata core.ToolMetadata) core.Tool {
+	return &metadataTool{
+		Tool:     tool,
+		Metadata: metadata,
+	}
+}
+
+// metadataTool wraps a tool with metadata.
+type metadataTool struct {
+	core.Tool
+	Metadata core.ToolMetadata
+}
+
+// IsDeprecated returns true if tool is deprecated.
+func (m *metadataTool) IsDeprecated() bool {
+	return m.Metadata.Deprecated
+}
