@@ -440,9 +440,9 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 		memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, userID, 10)
 		if err == nil && len(memories) > 0 {
 			log.Printf("📊 Loaded %d distilled memories for user %s", len(memories), userID)
-			return fmt.Sprintf("你好 %s！我已经记住了你的信息。我们有 %d 条过往记录。", userID, len(memories)), nil
+			return fmt.Sprintf("Hello %s! I have recorded your information. We have %d records from your past conversations.", userID, len(memories)), nil
 		}
-		return fmt.Sprintf("你好 %s！我已经记录了你的信息。", userID), nil
+		return fmt.Sprintf("Hello %s! I have recorded your information.", userID), nil
 	}
 
 	// Handle correction request
@@ -455,13 +455,13 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 		}
 
 		if len(results) == 0 {
-			return "没有找到需要纠正的内容。", nil
+			return "No relevant content found for correction.", nil
 		}
 
 		// TODO: Implement actual correction logic by updating the knowledge base
 		// For now, inform user
 		log.Printf("📝 Found %d chunks for correction", len(results))
-		return fmt.Sprintf("我检测到你想要纠正知识。搜索到了 %d 个相关结果。纠正功能已记录，请继续对话。", len(results)), nil
+		return fmt.Sprintf("I detected you want to correct knowledge. Found %d relevant results. Correction request has been recorded, please continue.", len(results)), nil
 	}
 
 	// Step 1: Determine if RAG is needed using LLM

@@ -20,6 +20,9 @@ This is a local knowledge base example based on the goagent storage module. It d
 - 🔬 **Fact Checking**: Correct user misconceptions with factual information from knowledge base
 - 🎨 **Smart RAG Detection**: Automatically determine if RAG is needed for each query
 - 🏠 **Local LLM Integration**: Full local setup with Ollama (llama3.2:latest) for privacy and speed
+- 📝 **Knowledge Correction**: Detect correction requests (Chinese: "纠正", "改正", "修正") and search for relevant content to update
+- 👤 **Self-Introduction Detection**: Identify user introductions (Chinese: "我是XXX", "我叫XXX") and store user profile
+- 💭 **Cross-Session Memory**: Retrieve user preferences and profile from distilled memories in new conversations
 
 ## System Requirements
 
@@ -185,10 +188,10 @@ Then enter your questions:
 
 #### Example 1: General Conversation (No RAG)
 ```
-You: 你好
+You: Hello
 Assistant: Hello! How can I help you today?
 
-You: 我叫小明
+You: My name is Xiao Ming
 Assistant: Hello Xiao Ming! Nice to meet you.
 ```
 
@@ -222,7 +225,7 @@ This helps maintain context while ensuring precise matching. [Document 1]
 
 #### Example 4: Fact Checking
 ```
-You: Go 语言应该经常使用 panic 来处理错误，对吧？
+You: Should Go language frequently use panic to handle errors?
 
 Assistant: According to the provided knowledge base context, using panic to handle errors in 
 Go is prohibited. panic() is only allowed for fatal startup failures, not for business logic. 
@@ -232,18 +235,52 @@ panic. [Document 1]
 
 #### Example 5: Memory Distillation
 ```
-You: 你好
+You: Hello
 Assistant: Hello! How can I help you?
 
-You: 我叫小明
+You: My name is Xiao Ming
 Assistant: Hello Xiao Ming! Nice to meet you.
 
-You: 还记得我的名字吗？
-🎯 [记忆蒸馏] 对话轮数达到阈值 (3/3)，触发记忆蒸馏...
-🔄 [记忆蒸馏] 开始蒸馏会话...
-✅ [记忆蒸馏] 蒸馏完成！
+You: Do you remember my name?
+🎯 [Memory Distillation] Conversation rounds reached threshold (3/3), triggering memory distillation...
+🔄 [Memory Distillation] Starting distillation for session...
+✅ [Memory Distillation] Distillation completed!
 
 Assistant: Yes, I remember! Your name is Xiao Ming. [Based on distilled memory]
+```
+
+#### Example 6: Knowledge Correction
+```
+You: What is go-agent?
+
+Assistant: GoAgent is a high-performance vector storage and retrieval system based on PostgreSQL + pgvector...
+
+You: Correct it, go-agent is a universal AI agent development framework implemented in Go
+🔧 [Knowledge Correction] Detected correction request
+
+Assistant: I detected you want to correct knowledge. Found relevant results. Correction request recorded, please continue.
+```
+
+#### Example 7: Self-Introduction Detection
+```
+You: I am Xiao Ming, I like programming, I am good at rust and golang, I don't like python
+👤 [Self-Introduction Detection] user_id=Xiao Ming
+
+Assistant: Hello Xiao Ming! I have recorded your information.
+```
+
+#### Example 8: Cross-Session Memory Retrieval
+```
+# First conversation:
+You: I am Xiao Ming, I am good at rust and golang
+# ... distillation triggered ...
+
+# New conversation:
+You: I am Xiao Ming, what is my tech stack?
+👤 [Self-Introduction Detection] user_id=Xiao Ming
+💭 [Memory Retrieval] Loading user profile from distilled memories
+
+Assistant: Based on your history, your tech stack includes Rust and Golang.
 ```
 
 ### 5. Manage Documents
@@ -320,6 +357,13 @@ memory:
 - Auto-distill after reaching threshold
 - Store distilled memories in knowledge base
 - Enable conversation continuity across sessions
+- Detect user self-introductions and store profile
+- Retrieve user preferences from distilled memories
+
+**Intent Detection Features:**
+- Knowledge correction: Detect correction keywords (Chinese: "纠正", "改正", "修正", "不对", "不是")
+- Self-introduction: Detect introduction patterns (Chinese: "我是XXX", "我叫XXX")
+- Load user profile from distilled memories in new conversations
 
 #### Knowledge Base Configuration
 ```yaml
@@ -351,7 +395,7 @@ The system can automatically detect and correct user misconceptions:
 go run main.go --chat
 
 # Example:
-You: Go 语言应该经常使用 panic 来处理错误，对吧？
+You: Should Go language frequently use panic to handle errors?
 
 # System will:
 # 1. Detect the incorrect assumption
@@ -437,6 +481,25 @@ Conversation History → Threshold Check → Extract Key Information → Generat
 4. **Vector Generation**: Generate embedding for distilled memory
 5. **Knowledge Storage**: Store in knowledge base for future retrieval
 
+### Intent Detection Flow
+
+```
+User Input → Intent Analysis → Route to Handler → Execute Action → Return Response
+```
+
+1. **Intent Analysis**: Detect user intent types
+   - Knowledge correction: Detect correction keywords (Chinese: "纠正", "改正", "修正", "不对", "不是")
+   - Self-introduction: Detect introduction patterns (Chinese: "我是XXX", "我叫XXX")
+   - Regular question: Default handling
+
+2. **Route to Handler**:
+   - Correction: Search knowledge base → Record correction request
+   - Self-introduction: Extract user ID → Load profile from distilled memories
+   - Regular: Execute standard RAG pipeline
+
+3. **Execute Action**: Perform appropriate action based on intent
+4. **Return Response**: Provide appropriate response to user
+
 ## Advanced Usage
 
 ### Precision Mode Examples
@@ -457,7 +520,7 @@ You: a = x
 You: timeout > 0
 # → Uses Exact Match → Keyword → Vector pipeline
 
-You: Go 代码规范是什么？
+You: What are Go coding standards?
 # → Uses Recall mode with RAG
 ```
 
@@ -470,13 +533,13 @@ The system automatically distills conversation history after reaching the thresh
 go run main.go --chat
 
 # Example conversation:
-You: 你好
+You: Hello
 Assistant: Hello! How can I help you?
 
-You: 我叫小明
+You: My name is Xiao Ming
 Assistant: Hello Xiao Ming! Nice to meet you.
 
-You: 还记得我的名字吗？
+You: Do you remember my name?
 # → Triggers memory distillation (3rd message)
 # → Stores conversation summary in knowledge base
 # → Can be retrieved in future conversations
@@ -686,7 +749,7 @@ docker exec -it postgres-pgvector psql -U postgres -d goagent -c "CREATE EXTENSI
 **Solution:**
 - Check memory configuration: `memory.enable_distillation: true`
 - Check threshold value: `memory.distillation_threshold: 3`
-- Check logs for distillation trigger: look for `🎯 [记忆蒸馏]`
+- Check logs for distillation trigger: look for `🎯 [Memory Distillation]`
 - Verify conversation message count matches threshold
 
 ### Issue 10: LLM Generation Failed
