@@ -44,7 +44,7 @@ func NewDistilledMemorySearch(repo repositories.DistilledMemoryRepositoryInterfa
 	dms := &DistilledMemorySearch{
 		repo: repo,
 	}
-	dms.BaseTool = base.NewBaseTool("distilled_memory_search", "Search distilled memories and user preferences from database", params)
+	dms.BaseTool = base.NewBaseToolWithCapabilities("distilled_memory_search", "Search distilled memories and user preferences from database", core.CategoryMemory, []core.Capability{core.CapabilityMemory}, params)
 
 	return dms
 }

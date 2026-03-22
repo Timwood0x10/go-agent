@@ -3,7 +3,6 @@ package builtin
 import (
 	"fmt"
 
-	builtin_domain "goagent/internal/tools/resources/builtin/domain"
 	builtin_execution "goagent/internal/tools/resources/builtin/execution"
 	builtin_file "goagent/internal/tools/resources/builtin/file"
 	builtin_knowledge "goagent/internal/tools/resources/builtin/knowledge"
@@ -59,10 +58,7 @@ func RegisterGeneralTools() error {
 		// Planning capability
 		builtin_planning.NewTaskPlanner(nil),
 
-		// Domain capability
-		builtin_domain.NewFashionSearch(nil),
-		builtin_domain.NewAgentRecommender(nil),
-		builtin_domain.NewWeatherCheck(nil),
+		// Domain capability - removed: weather_check, style_recommend, fashion_search (not in 8 core capabilities)
 	}
 
 	for _, tool := range tools {

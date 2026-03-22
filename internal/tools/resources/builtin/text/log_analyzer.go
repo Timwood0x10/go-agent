@@ -411,5 +411,3 @@ func (t *LogAnalyzer) extractMetrics(ctx context.Context, logContent string, cus
 		"statistics": statistics,
 	}), nil
 }
-
-

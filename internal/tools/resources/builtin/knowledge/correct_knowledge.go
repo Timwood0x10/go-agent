@@ -36,7 +36,7 @@ func NewCorrectKnowledge(repo repositories.KnowledgeRepositoryInterface) *Correc
 	ck := &CorrectKnowledge{
 		repo: repo,
 	}
-	ck.BaseTool = base.NewBaseTool("correct_knowledge", "Correct knowledge base content", params)
+	ck.BaseTool = base.NewBaseToolWithCapabilities("correct_knowledge", "Correct knowledge base content", core.CategoryKnowledge, []core.Capability{core.CapabilityKnowledge}, params)
 
 	return ck
 }
