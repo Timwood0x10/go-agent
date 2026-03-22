@@ -188,7 +188,7 @@ func NewDateTime() *DateTime {
 func (t *DateTime) Execute(ctx context.Context, params map[string]interface{}) (Result, error) {
 	operation, ok := params["operation"].(string)
 	if !ok || operation == "" {
-		return NewErrorResult("operation is required"), nil
+		return NewErrorResult("operation is ·required"), nil
 	}
 
 	now := time.Now()

@@ -109,11 +109,11 @@ func (t *MemorySearch) Execute(ctx context.Context, params map[string]interface{
 type UserProfile struct {
 	*BaseTool
 	memoryMgr     memory.MemoryManager
-	distilledRepo *repositories.DistilledMemoryRepository
+	distilledRepo repositories.DistilledMemoryRepositoryInterface
 }
 
 // NewUserProfile creates a new UserProfile tool.
-func NewUserProfile(memoryMgr memory.MemoryManager, distilledRepo *repositories.DistilledMemoryRepository) *UserProfile {
+func NewUserProfile(memoryMgr memory.MemoryManager, distilledRepo repositories.DistilledMemoryRepositoryInterface) *UserProfile {
 	params := &ParameterSchema{
 		Type: "object",
 		Properties: map[string]*Parameter{

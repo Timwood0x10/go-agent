@@ -37,6 +37,9 @@ type DistilledMemoryRepository struct {
 	dbPool *sql.DB
 }
 
+// Ensure DistilledMemoryRepository implements DistilledMemoryRepositoryInterface.
+var _ DistilledMemoryRepositoryInterface = (*DistilledMemoryRepository)(nil)
+
 // NewDistilledMemoryRepository creates a new DistilledMemoryRepository.
 func NewDistilledMemoryRepository(db postgres.DBTX, dbPool *sql.DB) *DistilledMemoryRepository {
 	return &DistilledMemoryRepository{

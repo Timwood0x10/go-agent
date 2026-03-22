@@ -197,6 +197,9 @@ func (t *FileTools) writeFile(ctx context.Context, params map[string]interface{}
 		}()
 
 		_, err = file.WriteString(content)
+		if err != nil {
+			return NewErrorResult(fmt.Sprintf("failed to write to file: %v", err)), nil
+		}
 	} else {
 		// Write mode (overwrite)
 		err = os.WriteFile(filePath, []byte(content), 0644)

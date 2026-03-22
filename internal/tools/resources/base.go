@@ -145,7 +145,11 @@ type ToolFunc struct {
 }
 
 // NewToolFunc creates a new ToolFunc.
-func NewToolFunc(name, description string, params *ParameterSchema, fn func(ctx context.Context, params map[string]interface{}) (Result, error)) *ToolFunc {
+func NewToolFunc(
+	name, description string,
+	params *ParameterSchema,
+	fn func(ctx context.Context, params map[string]interface{}) (Result, error),
+) *ToolFunc {
 	return &ToolFunc{
 		BaseTool: *NewBaseTool(name, description, params),
 		fn:       fn,

@@ -10,11 +10,11 @@ import (
 // DistilledMemorySearch searches distilled memories from the database.
 type DistilledMemorySearch struct {
 	*BaseTool
-	repo *repositories.DistilledMemoryRepository
+	repo repositories.DistilledMemoryRepositoryInterface
 }
 
 // NewDistilledMemorySearch creates a new DistilledMemorySearch tool.
-func NewDistilledMemorySearch(repo *repositories.DistilledMemoryRepository) *DistilledMemorySearch {
+func NewDistilledMemorySearch(repo repositories.DistilledMemoryRepositoryInterface) *DistilledMemorySearch {
 	params := &ParameterSchema{
 		Type: "object",
 		Properties: map[string]*Parameter{

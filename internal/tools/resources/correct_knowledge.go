@@ -11,11 +11,11 @@ import (
 // CorrectKnowledge corrects knowledge base content.
 type CorrectKnowledge struct {
 	*BaseTool
-	repo *repositories.KnowledgeRepository
+	repo repositories.KnowledgeRepositoryInterface
 }
 
 // NewCorrectKnowledge creates a new CorrectKnowledge tool.
-func NewCorrectKnowledge(repo *repositories.KnowledgeRepository) *CorrectKnowledge {
+func NewCorrectKnowledge(repo repositories.KnowledgeRepositoryInterface) *CorrectKnowledge {
 	params := &ParameterSchema{
 		Type: "object",
 		Properties: map[string]*Parameter{

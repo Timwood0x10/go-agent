@@ -21,6 +21,11 @@ func RegisterBuiltinTools() error {
 	slog.Info("  - id_generator: Generate unique identifiers (UUID or short ID)")
 	slog.Info("  - json_tools: Parse, extract, merge, and pretty-print JSON")
 	slog.Info("  - file_tools: Read, write, and list files and directories")
+	slog.Info("  - log_analyzer: Parse logs, find errors, and extract metrics (Phase 2)")
+	slog.Info("  - regex_tool: Perform regex match, extract, and replace operations (Phase 2)")
+	slog.Info("  - data_transform: Transform data between CSV, JSON, and flattened formats (Phase 2)")
+	slog.Info("  - task_planner: Plan and decompose tasks into executable steps (Phase 3, requires LLM)")
+	slog.Info("  - code_runner: Execute Python and JavaScript code with sandbox constraints (Phase 3, DANGEROUS)")
 	slog.Info("  - knowledge_search: Search knowledge base (requires service)")
 	slog.Info("  - knowledge_add: Add knowledge (requires service)")
 	slog.Info("  - knowledge_update: Update knowledge (requires service)")
@@ -81,6 +86,35 @@ func RegisterGeneralTools() error {
 	if err := Register(fileTool); err != nil {
 		return fmt.Errorf("failed to register file_tools: %w", err)
 	}
+
+	// Register log analyzer tool (Phase 2)
+	logTool := NewLogAnalyzer()
+	if err := Register(logTool); err != nil {
+		return fmt.Errorf("failed to register log_analyzer: %w", err)
+	}
+
+	// Register regex tool (Phase 2)
+	regexTool := NewRegexTool()
+	if err := Register(regexTool); err != nil {
+		return fmt.Errorf("failed to register regex_tool: %w", err)
+	}
+
+	// Register data transform tool (Phase 2)
+	transformTool := NewDataTransform()
+	if err := Register(transformTool); err != nil {
+		return fmt.Errorf("failed to register data_transform: %w", err)
+	}
+
+	// Register code runner tool (Phase 3) - Python enabled by default, JS disabled
+	// Note: This tool is potentially dangerous and should be used with caution
+	// Applications can customize the sandbox constraints using NewCodeRunnerWithOptions()
+	codeRunner := NewCodeRunner()
+	if err := Register(codeRunner); err != nil {
+		return fmt.Errorf("failed to register code_runner: %w", err)
+	}
+
+	// NOTE: task_planner tool (Phase 3) requires an LLM client and should be registered manually
+	// by the application using: taskPlanner := NewTaskPlanner(llmClient); Register(taskPlanner)
 
 	slog.Info("General purpose tools registered successfully")
 	return nil

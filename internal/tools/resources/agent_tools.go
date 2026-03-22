@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // AgentToolConfig defines tool configuration for an agent.
@@ -57,9 +58,36 @@ func NewAgentTools(config *AgentToolConfig) *AgentTools {
 	}
 }
 
-// Execute executes a tool by name.
+// Execute executes a tool by name with logging and result formatting.
 func (at *AgentTools) Execute(ctx context.Context, name string, params map[string]interface{}) (Result, error) {
-	return at.registry.Execute(ctx, name, params)
+	// Log tool execution start
+	slog.Info("🔧 Tool execution started", "tool", name, "params", params)
+
+	startTime := time.Now()
+	result, err := at.registry.Execute(ctx, name, params)
+	duration := time.Since(startTime)
+
+	if err != nil {
+		slog.Error("❌ Tool execution failed", "tool", name, "error", err, "duration", duration)
+		return result, err
+	}
+
+	// Format result in user-friendly way and log
+	formatter := NewResultFormatter()
+	formattedResult := formatter.Format(name, params, result, duration)
+
+	// Store formatted result in metadata for access by caller
+	if result.Metadata == nil {
+		result.Metadata = make(map[string]interface{})
+	}
+	result.Metadata["formatted"] = formattedResult
+
+	slog.Info("✅ Tool executed successfully",
+		"tool", name,
+		"duration", duration,
+		"result_summary", formattedResult)
+
+	return result, nil
 }
 
 // GetTool retrieves a tool by name.
