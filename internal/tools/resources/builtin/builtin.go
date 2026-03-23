@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"fmt"
+	"time"
 
 	builtin_execution "goagent/internal/tools/resources/builtin/execution"
 	builtin_file "goagent/internal/tools/resources/builtin/file"
@@ -25,8 +26,8 @@ func RegisterGeneralTools() error {
 		builtin_math.NewTextProcessor(),
 
 		// Network capability
-		builtin_network.NewHTTPRequest(),
-
+			builtin_network.NewHTTPRequest(),
+			builtin_network.NewWebScraper(builtin_network.NewWebFetcher(builtin_network.NewDefaultHTTPClient(30*time.Second))),
 		// File capability
 		builtin_file.NewFileTools(),
 

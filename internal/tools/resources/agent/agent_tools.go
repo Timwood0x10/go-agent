@@ -69,32 +69,27 @@ func NewAgentTools(config *AgentToolConfig) *AgentTools {
 
 // Execute executes a tool by name with logging and result formatting.
 func (at *AgentTools) Execute(ctx context.Context, name string, params map[string]interface{}) (core.Result, error) {
-	// Log tool execution start
-	slog.Info("🔧 Tool execution started", "tool", name, "params", params)
+	slog.Debug("Tool executing", "tool", name)
 
 	startTime := time.Now()
 	result, err := at.registry.Execute(ctx, name, params)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		slog.Error("❌ Tool execution failed", "tool", name, "error", err, "duration", duration)
+		slog.Error("Tool failed", "tool", name, "error", err, "duration", duration)
 		return result, err
 	}
 
-	// Format result in user-friendly way and log
+	// Format result
 	resultFormatter := formatter.NewResultFormatter()
 	formattedResult := resultFormatter.Format(name, params, result, duration)
 
-	// Store formatted result in metadata for access by caller
 	if result.Metadata == nil {
 		result.Metadata = make(map[string]interface{})
 	}
 	result.Metadata["formatted"] = formattedResult
 
-	slog.Info("✅ Tool executed successfully",
-		"tool", name,
-		"duration", duration,
-		"result_summary", formattedResult)
+	slog.Debug("Tool done", "tool", name, "duration", duration)
 
 	return result, nil
 }

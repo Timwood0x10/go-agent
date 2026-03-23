@@ -1,8 +1,10 @@
 package formatter
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"goagent/internal/tools/resources/core"
@@ -112,24 +114,71 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 
 	switch operation {
 	case "read":
+		filePath, _ := params["file_path"].(string)
 		if content, exists := dataMap["content"]; exists {
 			if contentStr, ok := content.(string); ok {
-				if len(contentStr) > 200 {
-					return fmt.Sprintf("文件内容（前200字符）:\n%s...", contentStr[:200])
+				lineCount, _ := dataMap["line_count"].(int)
+				totalLines, _ := dataMap["total_lines"].(int)
+				
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "文件: %s\n", filePath)
+				fmt.Fprintf(&sb, "行数: %d/%d\n", lineCount, totalLines)
+				sb.WriteString("\n内容:\n")
+				sb.WriteString(contentStr)
+				
+				if totalLines > lineCount {
+					sb.WriteString(fmt.Sprintf("\n\n... (显示 %d 行，共 %d 行)", lineCount, totalLines))
 				}
-				return fmt.Sprintf("文件内容:\n%s", contentStr)
+				
+				return sb.String()
 			}
 		}
-		return "文件读取完成"
+		return fmt.Sprintf("文件 %s 读取完成", filePath)
 	case "write":
-		return "文件写入完成"
+		bytesWritten, _ := dataMap["bytes_written"].(int)
+		return fmt.Sprintf("文件写入完成，写入了 %d 字节", bytesWritten)
 	case "list":
-		if files, exists := dataMap["files"]; exists {
-			if fileList, ok := files.([]interface{}); ok {
-				return fmt.Sprintf("找到 %d 个文件", len(fileList))
+		directory, _ := params["directory_path"].(string)
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "目录: %s\n", directory)
+
+		// List directories - use flexible type handling
+		if dirs, exists := dataMap["directories"]; exists {
+			dirList := convertToMapSlice(dirs)
+			if len(dirList) > 0 {
+				sb.WriteString("\n目录:\n")
+				for _, dir := range dirList {
+					name, _ := dir["name"].(string)
+					sb.WriteString(fmt.Sprintf("  📁 %s\n", name))
+				}
 			}
 		}
-		return "文件列表获取完成"
+
+		// List files - use flexible type handling
+		if files, exists := dataMap["files"]; exists {
+			fileList := convertToMapSlice(files)
+			if len(fileList) > 0 {
+				sb.WriteString("\n文件:\n")
+				for _, file := range fileList {
+					name, _ := file["name"].(string)
+					size, _ := file["size"].(int64)
+					sb.WriteString(fmt.Sprintf("  📄 %s (%d bytes)\n", name, size))
+				}
+			}
+		}
+
+		// Add summary
+		if totals, exists := dataMap["totals"]; exists {
+			if totalsMap, ok := totals.(map[string]interface{}); ok {
+				if dirCount, ok := totalsMap["directories"].(int); ok {
+					if fileCount, ok := totalsMap["files"].(int); ok {
+						sb.WriteString(fmt.Sprintf("\n总计: %d 个目录, %d 个文件", dirCount, fileCount))
+					}
+				}
+			}
+		}
+
+		return sb.String()
 	default:
 		return fmt.Sprintf("文件操作 (%s) 执行完成", operation)
 	}
@@ -298,4 +347,36 @@ func (rf *ResultFormatter) formatCodeRunner(params map[string]interface{}, data 
 // formatDefault formats result in default way.
 func (rf *ResultFormatter) formatDefault(toolName string, params map[string]interface{}, data interface{}) string {
 	return fmt.Sprintf("工具 %s 执行完成", toolName)
+}
+
+// convertToMapSlice converts any slice type to []map[string]interface{}.
+func convertToMapSlice(data interface{}) []map[string]interface{} {
+	// Try direct conversion
+	if slice, ok := data.([]map[string]interface{}); ok {
+		return slice
+	}
+
+	// Try []interface{} conversion
+	if slice, ok := data.([]interface{}); ok {
+		result := make([]map[string]interface{}, 0, len(slice))
+		for _, item := range slice {
+			if m, ok := item.(map[string]interface{}); ok {
+				result = append(result, m)
+			}
+		}
+		return result
+	}
+
+	// Try JSON marshaling/unmarshaling
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+
+	var result []map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &result); err != nil {
+		return nil
+	}
+
+	return result
 }

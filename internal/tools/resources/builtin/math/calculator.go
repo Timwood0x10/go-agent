@@ -31,7 +31,7 @@ func NewCalculator() *Calculator {
 
 	return &Calculator{
 		BaseTool: base.NewBaseToolWithCapabilities("calculator",
-			"Evaluate mathematical expressions.\n\nUse this tool when you need to compute numbers or evaluate formulas.\n\nInput: expression (a mathematical expression string)\n\nExamples:\n- 1+2\n- 100*(100+1)/2\n- 1000000*(1000000+1)/2\n- sqrt(16) → 4\n- 5*6/2",
+			"Evaluate mathematical expressions using standard arithmetic operations.\n\nIMPORTANT FORMULAS:\n- Sum from 1 to n: n*(n+1)/2\n- Sum from a to b: (b-a+1)*(a+b)/2\n\nSUPPORTED OPERATIONS:\n- Addition: +\n- Subtraction: -\n- Multiplication: *\n- Division: /\n- Parentheses: ()\n\nUSAGE RULES:\n- Always use mathematical expressions, not natural language\n- For '1 to 100 sum', use: 100*(100+1)/2\n- For '1 to 1000000 sum', use: 1000000*(1000000+1)/2\n\nExamples:\n- 1+2 → 1+2\n- 10*20 → 10*20\n- Sum 1 to 100 → 100*(100+1)/2\n- Sum 1 to 100000 → 100000*(100000+1)/2",
 			core.CategoryCore, []core.Capability{core.CapabilityMath}, params),
 	}
 }

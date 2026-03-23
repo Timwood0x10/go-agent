@@ -77,7 +77,8 @@ func (a *DialogAgent) Process(ctx context.Context, userMsg string) (string, erro
 }
 
 func (a *DialogAgent) isCapabilityQuestion(msg string) bool {
-	keywords := []string{"你会什么", "你能做", "what can you do", "capabilities", "tools"}
+	// Only explicitly ask about capabilities
+	keywords := []string{"你会什么", "你能做什么", "what can you do", "capabilities", "有哪些工具", "工具列表"}
 	lower := strings.ToLower(msg)
 	for _, k := range keywords {
 		if strings.Contains(lower, k) {
@@ -115,10 +116,11 @@ func (a *DialogAgent) generateToolPrompt(userMsg string) string {
 		}
 	}
 
-	sb.WriteString("\nUse format: [TOOL:tool_name {\"param\": \"value\"}]\n")
+	sb.WriteString("\nUse: [TOOL:tool_name {\"param\": \"value\"}]\n")
 	sb.WriteString("Examples:\n")
 	sb.WriteString("- [TOOL:datetime {\"operation\": \"now\"}]\n")
 	sb.WriteString("- [TOOL:calculator {\"operation\": \"add\", \"operands\": [1, 2]}]\n")
+	sb.WriteString("- [TOOL:file_tools {\"operation\": \"read\", \"file_path\": \"/path/to/file\"}]\n")
 	return sb.String()
 }
 

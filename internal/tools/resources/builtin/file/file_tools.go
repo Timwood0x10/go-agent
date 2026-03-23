@@ -103,13 +103,26 @@ func (t *FileTools) readFile(ctx context.Context, params map[string]interface{})
 		return core.NewErrorResult("file_path is required for read operation"), nil
 	}
 
-	// Validate file path
+	// Convert relative path to absolute path
 	if !filepath.IsAbs(filePath) {
-		return core.NewErrorResult("file_path must be absolute"), nil
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve absolute path: %v", err)), nil
+		}
+		filePath = absPath
 	}
 
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Try to find similar files in the same directory
+		dir := filepath.Dir(filePath)
+		baseName := filepath.Base(filePath)
+		suggestions := findSimilarFiles(dir, baseName)
+		
+		if len(suggestions) > 0 {
+			return core.NewErrorResult(fmt.Sprintf("file not found: %s\n\nDid you mean:\n  - %s", filePath, strings.Join(suggestions, "\n  - "))), nil
+		}
+		
 		return core.NewErrorResult(fmt.Sprintf("file not found: %s", filePath)), nil
 	}
 
@@ -170,9 +183,13 @@ func (t *FileTools) writeFile(ctx context.Context, params map[string]interface{}
 		return core.NewErrorResult("content is required for write operation"), nil
 	}
 
-	// Validate file path
+	// Convert relative path to absolute path
 	if !filepath.IsAbs(filePath) {
-		return core.NewErrorResult("file_path must be absolute"), nil
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve absolute path: %v", err)), nil
+		}
+		filePath = absPath
 	}
 
 	// Get write mode
@@ -229,9 +246,13 @@ func (t *FileTools) listFiles(ctx context.Context, params map[string]interface{}
 		return core.NewErrorResult("directory_path is required for list operation"), nil
 	}
 
-	// Validate path
+	// Convert relative path to absolute path
 	if !filepath.IsAbs(dirPath) {
-		return core.NewErrorResult("directory_path must be absolute"), nil
+		absPath, err := filepath.Abs(dirPath)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve absolute path: %v", err)), nil
+		}
+		dirPath = absPath
 	}
 
 	// Check if directory exists
@@ -409,4 +430,32 @@ func getInt(params map[string]interface{}, key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+// findSimilarFiles finds files with similar names in the same directory.
+func findSimilarFiles(dir, baseName string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	// Extract base name without extension
+	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
+	
+	var suggestions []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		
+		entryName := entry.Name()
+		entryWithoutExt := strings.TrimSuffix(entryName, filepath.Ext(entryName))
+		
+		// Check if base name matches (case insensitive)
+		if strings.EqualFold(nameWithoutExt, entryWithoutExt) {
+			suggestions = append(suggestions, filepath.Join(dir, entryName))
+		}
+	}
+	
+	return suggestions
 }

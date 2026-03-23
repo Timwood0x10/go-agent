@@ -32,34 +32,52 @@ var capabilityKeywords = map[Capability][]string{
 	CapabilityMath: {
 		"calculate", "sum", "multiply", "divide", "number", "compute",
 		"add", "subtract", "math", "calculation", "formula",
+		// Chinese keywords
+		"计算", "求和", "乘", "除", "加", "减", "数字", "公式", "数学",
 	},
 	CapabilityKnowledge: {
 		"what", "who", "explain", "information", "search", "find",
 		"retrieve", "lookup", "query", "knowledge", "answer",
+		// Chinese keywords
+		"什么", "谁", "解释", "信息", "搜索", "查找", "查询", "知识",
 	},
 	CapabilityMemory: {
 		"remember", "store", "recall", "profile", "history", "context",
 		"memory", "previous", "past", "save",
+		// Chinese keywords
+		"记住", "存储", "回忆", "历史", "记忆", "保存",
 	},
 	CapabilityText: {
 		"parse", "format", "validate", "transform", "text", "string",
 		"extract", "analyze", "process", "convert",
+		// Chinese keywords
+		"解析", "格式", "验证", "转换", "文本", "提取", "分析", "处理",
 	},
 	CapabilityNetwork: {
 		"api", "request", "fetch", "download", "http", "url",
 		"network", "web", "endpoint", "curl",
+		// Chinese keywords
+		"请求", "获取", "下载", "网络", "网页", "网址",
 	},
 	CapabilityTime: {
 		"time", "date", "schedule", "deadline", "timestamp", "calendar",
 		"duration", "when", "until", "after", "before",
+		// Chinese keywords
+		"时间", "日期", "时刻", "时间戳", "日历", "持续", "何时",
+		"几点", "现在", "当前", "今天", "昨天", "明天",
 	},
 	CapabilityFile: {
 		"file", "directory", "read", "write", "delete", "list",
 		"save", "load", "path", "folder",
+		// Chinese keywords
+		"文件", "目录", "读取", "写入", "删除", "列出",
+		"保存", "加载", "路径", "文件夹",
 	},
 	CapabilityExternal: {
 		"external", "system", "execute", "run", "command", "script",
 		"integration", "service",
+		// Chinese keywords
+		"外部", "系统", "执行", "运行", "命令", "脚本",
 	},
 }
 
