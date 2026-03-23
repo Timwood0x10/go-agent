@@ -1,116 +1,154 @@
 go run main.go --chat
-2026/03/22 11:15:34 Chat mode. Enter your questions (type 'exit' to quit):
-2026/03/22 11:15:34 LLM enabled - Using RAG (Retrieval + Generation) mode
-2026/03/22 11:15:34 Memory enabled - Conversation history and distillation supported
-2026/03/22 11:15:34 INFO Memory manager started
-2026/03/22 11:15:34 Session created: session_default_1774149334921880000
+2026/03/23 18:56:51 INFO Memory manager created successfully
+2026/03/23 18:56:51 INFO Distillation service created successfully
+2026/03/23 18:56:51 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/23 18:56:51 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/23 18:56:51 Memory enabled - Conversation history and distillation supported
+2026/03/23 18:56:51 INFO Memory manager started
+2026/03/23 18:56:51 Session created: session_default_1774263411019327000
 
-You: 我叫小刚，我 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
-2026/03/22 11:16:20 RAG check: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 -> needs RAG: true
-2026/03/22 11:16:20 Searching for: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 (tenant: default)
-2026/03/22 11:16:20 INFO SimpleRetrievalService.Search tenant_id=default query=是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 top_k=10 min_score=0.4
-2026/03/22 11:16:20 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/22 11:16:20 INFO Vector search query vector_length=9746 vector_preview=[0.041211,-0.051733,-0.014097,-0.100258,0.043133,0.017655,0.000738,-0.015183,-0.087653,-0.002459,0.0
-2026/03/22 11:16:20 INFO Vector search query succeeded
-2026/03/22 11:16:20 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/22 11:16:20 INFO Search completed results_count=5 min_score=0.4
-2026/03/22 11:16:20 Search returned 5 results
-
-Assistant:
-根据提供的知识基因和对话记录，前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发。
-
-You: go-agent 是什么呢？
-2026/03/22 11:16:35 RAG check: go-agent 是什么呢？ -> needs RAG: true
-2026/03/22 11:16:35 Searching for: go-agent 是什么呢？ (tenant: default)
-2026/03/22 11:16:35 INFO SimpleRetrievalService.Search tenant_id=default query="go-agent 是什么呢？" top_k=10 min_score=0.4
-2026/03/22 11:16:35 INFO Using precision mode query="go-agent 是什么呢？"
-2026/03/22 11:16:35 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
-2026/03/22 11:16:35 INFO Vector search query vector_length=9742 vector_preview=[0.042752,-0.041852,-0.010353,-0.080358,0.008310,-0.054529,-0.026539,0.074596,-0.048974,0.031618,-0.
-2026/03/22 11:16:35 INFO Vector search query succeeded
-2026/03/22 11:16:35 INFO Vector search completed rows_scanned=10 chunks_returned=10
-2026/03/22 11:16:35 Search returned 10 results
+You: hello I'm Ken font-end programmer , like JS,TS,VUE,nice to met you
+2026/03/23 18:56:56 🔍 User ID detection: extracted_user_id='ken' (from: 'hello I'm Ken font-end programmer , like JS,TS,VUE,nice to met you')
+2026/03/23 18:56:56 👤 Detected self-introduction: user_id=ken
+2026/03/23 18:56:56 INFO 🔍 [Storage] Starting GetByUserID query tenant_id=default user_id=ken limit=10
+2026/03/23 18:56:56 INFO ✅ [Storage] Tenant context set in GetByUserID tenant_id=default
+2026/03/23 18:56:56 INFO ✅ [Storage] GetByUserID query completed tenant_id=default user_id=ken memories_found=10
+2026/03/23 18:56:56 📊 Loaded 10 distilled memories for user ken
+2026/03/23 18:56:56 💾 Injecting user memory context into conversation (10 memories)
 
 Assistant:
-根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
+Hello ken! Welcome back! 👋
 
-You: 如纠正      
+Based on our previous conversations, I can recall that you're a frontend engineer with JavaScript and TypeScript skills, and you're learning Go. Your technology stack includes Vue.js framework.
 
-You: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置多种LLM tools,提供了知识库等多个例子,对开发者很友好.
-2026/03/22 11:17:38 🔧 Detected correction request
-2026/03/22 11:17:38 Searching for: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好. (tenant: default)
-2026/03/22 11:17:38 INFO SimpleRetrievalService.Search tenant_id=default query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好." top_k=10 min_score=0.4
-2026/03/22 11:17:38 INFO Using precision mode query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好."
-2026/03/22 11:17:38 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
-2026/03/22 11:17:38 INFO Vector search query vector_length=9712 vector_preview=[0.014754,-0.012315,-0.009119,-0.072667,-0.015210,-0.007071,-0.053259,0.074977,-0.020428,0.047134,-0
-2026/03/22 11:17:38 INFO Vector search query succeeded
-2026/03/22 11:17:38 INFO Vector search completed rows_scanned=10 chunks_returned=10
-2026/03/22 11:17:38 Search returned 10 results
-2026/03/22 11:17:38 📝 Found 10 chunks for correction
+How can I help you today?
 
-Assistant:
-我检测到你想要纠正知识。搜索到了 10 个相关结果。纠正功能已记录，请继续对话。
-
-You: go我想学习golang,但是不知道go有什么编码贵发
-2026/03/22 11:18:04 RAG check: 我想学习golang,但是不知道go有什么编码贵发 -> needs RAG: true
-2026/03/22 11:18:04 Searching for: 我想学习golang,但是不知道go有什么编码贵发 (tenant: default)
-2026/03/22 11:18:04 INFO SimpleRetrievalService.Search tenant_id=default query=我想学习golang,但是不知道go有什么编码贵发 top_k=10 min_score=0.4
-2026/03/22 11:18:04 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/22 11:18:04 INFO Vector search query vector_length=9734 vector_preview=[0.001097,-0.053108,-0.009837,-0.059723,0.031265,-0.045062,-0.049547,0.025612,-0.095053,0.037275,-0.
-2026/03/22 11:18:04 INFO Vector search query succeeded
-2026/03/22 11:18:04 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/22 11:18:04 INFO Search completed results_count=10 min_score=0.4
-2026/03/22 11:18:04 Search returned 10 results
-2026/03/22 11:18:09 🎯 [Memory Distillation] Conversation rounds reached threshold (3/3), triggering memory distillation...
-2026/03/22 11:18:09 🔄 [Memory Distillation] Starting distillation for session: session_default_1774149334921880000
-2026/03/22 11:18:09 📊 [Memory Distillation] Found 8 messages to distill
-2026/03/22 11:18:09 📝 [Memory Distillation] Distillation content preview (1770 characters): Conversation Summary:
-
-system: New session started
-user: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
-assistant: 根据...
-2026/03/22 11:18:09 🔢 [Memory Distillation] Embedding vector dimensions: 1024
-2026/03/22 11:18:09 ✅ [Memory Distillation] Distillation completed!
-2026/03/22 11:18:09    📄 Document ID: 39bfa17e-1e88-4cce-a116-675ec6b46fac
-2026/03/22 11:18:09    📏 Content length: 1770 characters
-2026/03/22 11:18:09    🧠 Embedding dimensions: 1024
-2026/03/22 11:18:09    💾 Storage location: knowledge_chunks_1024
-2026/03/22 11:18:09    🔍 Can be retrieved via vector search
+You: what's the go-agent
+2026/03/23 18:57:02 🔍 User ID detection: extracted_user_id='' (from: 'what's the go-agent')
+2026/03/23 18:57:04 RAG check: what's the go-agent -> needs RAG: true
+2026/03/23 18:57:04 Searching for: what's the go-agent (tenant: default)
+2026/03/23 18:57:04 INFO SimpleRetrievalService.Search tenant_id=default query="what's the go-agent" top_k=10 min_score=0.4
+2026/03/23 18:57:04 INFO Using precision mode query="what's the go-agent"
+2026/03/23 18:57:05 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/23 18:57:05 INFO Vector search query vector_length=9736 vector_preview=[0.037177,-0.049698,-0.011183,-0.073830,0.010982,-0.071117,-0.008474,0.046499,-0.043969,0.037216,-0.
+2026/03/23 18:57:05 INFO Vector search query succeeded
+2026/03/23 18:57:05 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/23 18:57:05 Search returned 10 results
 
 Assistant:
-根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
+go-agent是一个通用AI agent开发框架，用Go语言实现。
 
-为了解决您的问题，“go有什么编码贵发”，请注意，在Go的编程实践中，优先考虑的是可维护性、可靠性和性能，而不是仅仅优化性能。所有代码必须通过 `go vet`、`staticcheck` 和 `golangci-lint` 进行验证，并且测试覆盖率是指引，但不是目标。
-
-Go 语言的标准和最佳实践强调使用 `gofmt` 和 `goimports` 对代码进行 formatting 和自动化管理，以确保代码质量和一致性。
-
-如果您想在AI应用中构建向量存储和检索系统，可以考虑使用GoAgent Storage模块，它支持高维向量存储、时间衰减等功能。或者，您可以 exploring Rust的库和框架来实现类似的功能。
-
-但是，如果您不喜欢Python，Rust可能是一个更好的选择，因为它提供了一个不同的编程范式和强大的多任务能力。
-
-因此，Go Agent 的重点在于使用 YML 运行，它提供了一种通用的、易于维护的 AIAgent 开发框架。
-
-You:
-
-
-
----new chat session ----
-go run main.go --chat
-2026/03/22 11:21:22 Chat mode. Enter your questions (type 'exit' to quit):
-2026/03/22 11:21:22 LLM enabled - Using RAG (Retrieval + Generation) mode
-2026/03/22 11:21:22 Memory enabled - Conversation history and distillation supported
-2026/03/22 11:21:22 INFO Memory manager started
-2026/03/22 11:21:22 Session created: session_default_1774149682903988000
-
-You: 小刚是谁，有什么爱好，职业是什么
-2026/03/22 11:21:43 RAG check: 小刚是谁，有什么爱好，职业是什么 -> needs RAG: true
-2026/03/22 11:21:43 Searching for: 小刚是谁，有什么爱好，职业是什么 (tenant: default)
-2026/03/22 11:21:43 INFO SimpleRetrievalService.Search tenant_id=default query=小刚是谁，有什么爱好，职业是什么 top_k=10 min_score=0.4
-2026/03/22 11:21:43 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
-2026/03/22 11:21:43 INFO Vector search query vector_length=9738 vector_preview=[0.003788,-0.078203,-0.006410,0.016892,-0.005063,-0.023641,-0.026315,0.001353,-0.016892,0.077993,0.0
-2026/03/22 11:21:43 INFO Vector search query succeeded
-2026/03/22 11:21:43 INFO Vector search completed rows_scanned=50 chunks_returned=50
-2026/03/22 11:21:43 INFO Search completed results_count=1 min_score=0.4
-2026/03/22 11:21:43 Search returned 1 results
+You: what's coding standards with golang
+2026/03/23 18:57:08 🔍 User ID detection: extracted_user_id='' (from: 'what's coding standards with golang')
+2026/03/23 18:57:09 RAG check: what's coding standards with golang -> needs RAG: true
+2026/03/23 18:57:09 Searching for: what's coding standards with golang (tenant: default)
+2026/03/23 18:57:09 INFO SimpleRetrievalService.Search tenant_id=default query="what's coding standards with golang" top_k=10 min_score=0.4
+2026/03/23 18:57:09 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/23 18:57:09 INFO Vector search query vector_length=9709 vector_preview=[-0.011979,-0.074151,-0.008696,-0.052525,0.011870,-0.035141,-0.036579,-0.001876,-0.086143,-0.013287,
+2026/03/23 18:57:09 INFO Vector search query succeeded
+2026/03/23 18:57:09 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/23 18:57:09 INFO Search completed results_count=10 min_score=0.4
+2026/03/23 18:57:09 Search returned 10 results
 
 Assistant:
-小刚的职业信息没有在提供的知识基因中明确记录。但是，我们可以从之前的小talk中知道，小刚的技术栈是JS，TS，VUE。
+Based on the knowledge base context, I can tell you that Go coding standards are centered around several key principles:
+
+1. **Strict Coding Standard**: The core goal is to achieve clear semantics and consistent style through strict adherence to official Go standards, such as [Effective Go](https://go.dev/doc/effective_go) and [Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments).
+
+2. Prioritize readability and maintainability over premature optimization.
+
+3. All code MUST pass `go vet`, `staticcheck`, and `golangci-lint` without warnings or errors.
+
+4. Test coverage is a guideline, not a goal. Tests MUST validate behavior, edge cases, 
+
+5. Use `gofmt` / `goimports` exclusively.
+
+6. Naming conventions:
+
+   - Package names: lowercase, short, no underscores, no camelCase.
+   
+7. Tooling & CI:
+
+   - All developers MUST run before commit:
+     ```bash
+     goimports -w .
+     go vet ./...
+     staticcheck ./...
+     golangci-lint run
+     go test -race -cover ./...
+     ```
+
+   - CI must be meaningful, not just perfunctory assertions; they should test as many methods in the module as possible.
+
+   - No unformatted or manually styled code. Use `gofmt` / `goimports` exclusively.
+
+8. Error handling and concurrency are critical focus areas — never ignore errors or leak goroutines.
+
+9. All code must pass toolchain checks before submission to ensure quality and maintainability.
+
+10. Disable unnecessary flags when running tools like `golangci-lint`.
+
+You: cool thanks
+2026/03/23 18:57:15 🔍 User ID detection: extracted_user_id='' (from: 'cool thanks')
+2026/03/23 18:57:16 RAG check: cool thanks -> needs RAG: true
+2026/03/23 18:57:16 Searching for: cool thanks (tenant: default)
+2026/03/23 18:57:16 INFO SimpleRetrievalService.Search tenant_id=default query="cool thanks" top_k=10 min_score=0.4
+2026/03/23 18:57:16 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/23 18:57:16 INFO Vector search query vector_length=9734 vector_preview=[-0.017780,-0.002570,-0.009681,-0.056844,0.039286,-0.003964,-0.010206,0.021013,-0.073355,0.061712,-0
+2026/03/23 18:57:16 INFO Vector search query succeeded
+2026/03/23 18:57:16 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/23 18:57:16 INFO Search completed results_count=10 min_score=0.4
+2026/03/23 18:57:16 Search returned 10 results
+2026/03/23 18:57:18 🎯 [Memory Distillation] Conversation rounds reached threshold multiple (3/3), triggering memory distillation...
+2026/03/23 18:57:18 INFO Starting memory distillation session_id=session_default_1774263411019327000
+2026/03/23 18:57:18 INFO Found messages to distill count=9 session_id=session_default_1774263411019327000
+2026/03/23 18:57:18 INFO Using new distillation service API session_id=session_default_1774263411019327000
+2026/03/23 18:57:18 INFO Extracted user ID from conversation user_id=ken
+2026/03/23 18:57:18 INFO Starting memory distillation conversation_id=session_default_1774263411019327000 tenant_id=default user_id=ken message_count=9
+2026/03/23 18:57:18 INFO 🔄 [Memory Distillation] Starting distillation process conversation_id=session_default_1774263411019327000 tenant_id=default user_id=ken message_count=9 timestamp=2026-03-23T18:57:18+08:00
+2026/03/23 18:57:18 INFO ✅ [Memory Distillation] Experiences extracted conversation_id=session_default_1774263411019327000 experience_count=1
+2026/03/23 18:57:18 INFO 📊 [Memory Distillation] Memory candidates created conversation_id=session_default_1774263411019327000 candidate_count=1 filtered_count=0
+2026/03/23 18:57:18 INFO 🧠 [Memory Distillation] Generating embeddings and detecting conflicts conversation_id=session_default_1774263411019327000 memory_count=1
+2026/03/23 18:57:18 INFO ✅ [Memory Distillation] Embedding generated successfully conversation_id=session_default_1774263411019327000 memory_index=0 memory_type=rule vector_dimensions=1024 importance_score=0.65
+2026/03/23 18:57:18 INFO ✅ [Memory Distillation] Distillation completed successfully conversation_id=session_default_1774263411019327000 tenant_id=default user_id=ken final_memory_count=1 importance_scores=[[0.65]] memory_types=[profile] metrics="attempts=1,success=1,filtered_noise=0,filtered_security=0,conflicts_resolved=0,memories_created=1" duration_ms=0
+2026/03/23 18:57:18 INFO Memory distillation completed conversation_id=session_default_1774263411019327000 memories_created=1
+2026/03/23 18:57:18 INFO New distillation completed memories_created=1 session_id=session_default_1774263411019327000
+2026/03/23 18:57:18 INFO Storing distilled memory index=1 type=profile importance=0.65 content_preview="User profile information → Name: Ken font-end programmer , like JS,TS,VUE,nice to met you | Professi..."
+2026/03/23 18:57:18 INFO Generated embedding for memory index=1 dimensions=1024
+2026/03/23 18:57:18 INFO 📝 [Storage] Starting distilled memory storage memory_id=b399a854-0b5d-459d-bb22-8febabaa48ad tenant_id=default user_id=ken session_id=session_default_1774263411019327000 memory_type=profile importance=0.65 content_preview="User profile information → Name: Ken font-end prog..."
+2026/03/23 18:57:18 INFO ✅ [Storage] Tenant context set successfully tenant_id=default
+2026/03/23 18:57:18 INFO 🔍 [Storage] Executing INSERT with parameters memory_id=b399a854-0b5d-459d-bb22-8febabaa48ad tenant_id=default user_id="'ken' (length: 3)" session_id=session_default_1774263411019327000 content_length=116 embedding_dims=1024
+2026/03/23 18:57:18 INFO ✅ [Storage] Successfully stored distilled memory memory_id=b399a854-0b5d-459d-bb22-8febabaa48ad user_id=ken tenant_id=default
+2026/03/23 18:57:18 INFO Successfully stored distilled memory memory_id=b399a854-0b5d-459d-bb22-8febabaa48ad user_id=ken
+2026/03/23 18:57:18 INFO Distillation metrics total_attempts=1 total_success=1 total_memories=1
+
+Assistant:
+I'd be happy to help! However, I notice that you didn't ask a specific question. Could you please provide more context or clarify what you're trying to ask? I'll do my best to assist you based on the knowledge base and conversation history.
+
+You: exit
+2026/03/23 18:57:21 Goodbye!
+2026/03/23 18:57:21 ℹ️ [Memory Distillation] Skipping exit distillation - conversation already distilled at round 3
+2026/03/23 18:57:21 INFO Memory manager stopped
+/go/src/goagent/examples/knowledge-base » go run main.go --chat
+2026/03/23 18:57:25 INFO Memory manager created successfully
+2026/03/23 18:57:25 INFO Distillation service created successfully
+2026/03/23 18:57:25 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/23 18:57:25 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/23 18:57:25 Memory enabled - Conversation history and distillation supported
+2026/03/23 18:57:25 INFO Memory manager started
+2026/03/23 18:57:25 Session created: session_default_1774263445058570000
+
+You: hey guys Introduce ken
+2026/03/23 19:11:33 🔍 User ID detection: extracted_user_id='' (from: 'hey guys Introduce ken')
+2026/03/23 19:11:33 RAG check: hey guys Introduce ken -> needs RAG: true
+2026/03/23 19:11:33 Searching for: hey guys Introduce ken (tenant: default)
+2026/03/23 19:11:33 INFO SimpleRetrievalService.Search tenant_id=default query="hey guys Introduce ken" top_k=10 min_score=0.4
+2026/03/23 19:11:34 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/23 19:11:34 INFO Vector search query vector_length=9737 vector_preview=[0.075274,-0.049089,-0.005506,0.018809,-0.043683,-0.051270,-0.052407,-0.008966,-0.069141,0.010682,0.
+2026/03/23 19:11:34 INFO Vector search query succeeded
+2026/03/23 19:11:34 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/23 19:11:34 INFO Search completed results_count=10 min_score=0.4
+2026/03/23 19:11:34 Search returned 10 results
+
+Assistant:
+Nice to meet you! I'm Ken, a frontend programmer who enjoys working with JavaScript, TypeScript, and Vue.js. What would you like to chat about?
