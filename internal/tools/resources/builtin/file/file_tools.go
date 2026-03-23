@@ -118,11 +118,11 @@ func (t *FileTools) readFile(ctx context.Context, params map[string]interface{})
 		dir := filepath.Dir(filePath)
 		baseName := filepath.Base(filePath)
 		suggestions := findSimilarFiles(dir, baseName)
-		
+
 		if len(suggestions) > 0 {
 			return core.NewErrorResult(fmt.Sprintf("file not found: %s\n\nDid you mean:\n  - %s", filePath, strings.Join(suggestions, "\n  - "))), nil
 		}
-		
+
 		return core.NewErrorResult(fmt.Sprintf("file not found: %s", filePath)), nil
 	}
 
@@ -441,21 +441,21 @@ func findSimilarFiles(dir, baseName string) []string {
 
 	// Extract base name without extension
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
-	
+
 	var suggestions []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		
+
 		entryName := entry.Name()
 		entryWithoutExt := strings.TrimSuffix(entryName, filepath.Ext(entryName))
-		
+
 		// Check if base name matches (case insensitive)
 		if strings.EqualFold(nameWithoutExt, entryWithoutExt) {
 			suggestions = append(suggestions, filepath.Join(dir, entryName))
 		}
 	}
-	
+
 	return suggestions
 }

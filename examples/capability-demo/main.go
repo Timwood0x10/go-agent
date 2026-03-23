@@ -116,13 +116,13 @@ func (a *CapabilityDemoAgent) generateToolPrompt(userMsg string) string {
 		// Fallback to essential tools if no match (avoid prompt overflow)
 		essentialTools := []string{"calculator", "datetime", "file_tools", "http_request"}
 		schemas = a.tools.GetSchemas()
-		
+
 		// Filter to only essential tools
 		essentialSet := make(map[string]bool)
 		for _, tool := range essentialTools {
 			essentialSet[tool] = true
 		}
-		
+
 		filtered := make([]core.ToolSchema, 0)
 		for _, schema := range schemas {
 			if essentialSet[schema.Name] {
@@ -130,7 +130,7 @@ func (a *CapabilityDemoAgent) generateToolPrompt(userMsg string) string {
 			}
 		}
 		schemas = filtered
-		
+
 		slog.Warn("ACE: No tools matched, using essential tools", "tools", essentialTools)
 	}
 
@@ -225,38 +225,38 @@ func (a *CapabilityDemoAgent) listCapabilities() string {
 func (a *CapabilityDemoAgent) showACEWorkflow(query string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("=== ACE Workflow Analysis ===\n"))
-	sb.WriteString(fmt.Sprintf("Query: %s\n\n", query))
+	sb.WriteString("=== ACE Workflow Analysis ===\n")
+	fmt.Fprintf(&sb, "Query: %s\n\n", query)
 
 	// Step 1: Detect capabilities
 	capabilities := a.tools.DetectCapabilities(query)
-	sb.WriteString(fmt.Sprintf("Step 1 - Capability Detection:\n"))
+	sb.WriteString("Step 1 - Capability Detection:\n")
 	if len(capabilities) == 0 {
 		sb.WriteString("  No specific capabilities detected\n")
 	} else {
 		for _, cap := range capabilities {
-			sb.WriteString(fmt.Sprintf("  ✓ %s\n", cap))
+			fmt.Fprintf(&sb, "  ✓ %s\n", cap)
 		}
 	}
 	sb.WriteString("\n")
 
 	// Step 2: Match tools
 	matchedTools := a.tools.MatchToolsByQuery(query)
-	sb.WriteString(fmt.Sprintf("Step 2 - Tool Matching:\n"))
+	sb.WriteString("Step 2 - Tool Matching:\n")
 	if len(matchedTools) == 0 {
 		sb.WriteString("  No tools matched\n")
 	} else {
 		for _, tool := range matchedTools {
-			sb.WriteString(fmt.Sprintf("  ✓ %s: %s\n", tool.Name(), tool.Description()))
+			fmt.Fprintf(&sb, "  ✓ %s: %s\n", tool.Name(), tool.Description())
 		}
 	}
 	sb.WriteString("\n")
 
 	// Step 3: Capability summary
 	summary := a.tools.GetCapabilitySummary()
-	sb.WriteString(fmt.Sprintf("Step 3 - System Capability Summary:\n"))
+	sb.WriteString("Step 3 - System Capability Summary:\n")
 	for cap, count := range summary {
-		sb.WriteString(fmt.Sprintf("  • %s: %d tools\n", cap, count))
+		fmt.Fprintf(&sb, "  • %s: %d tools\n", cap, count)
 	}
 
 	return sb.String()

@@ -119,17 +119,17 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 			if contentStr, ok := content.(string); ok {
 				lineCount, _ := dataMap["line_count"].(int)
 				totalLines, _ := dataMap["total_lines"].(int)
-				
+
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "文件: %s\n", filePath)
 				fmt.Fprintf(&sb, "行数: %d/%d\n", lineCount, totalLines)
 				sb.WriteString("\n内容:\n")
 				sb.WriteString(contentStr)
-				
+
 				if totalLines > lineCount {
-					sb.WriteString(fmt.Sprintf("\n\n... (显示 %d 行，共 %d 行)", lineCount, totalLines))
+					fmt.Fprintf(&sb, "\n\n... (显示 %d 行，共 %d 行)", lineCount, totalLines)
 				}
-				
+
 				return sb.String()
 			}
 		}
@@ -149,7 +149,7 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 				sb.WriteString("\n目录:\n")
 				for _, dir := range dirList {
 					name, _ := dir["name"].(string)
-					sb.WriteString(fmt.Sprintf("  📁 %s\n", name))
+					fmt.Fprintf(&sb, "  📁 %s\n", name)
 				}
 			}
 		}
@@ -162,7 +162,7 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 				for _, file := range fileList {
 					name, _ := file["name"].(string)
 					size, _ := file["size"].(int64)
-					sb.WriteString(fmt.Sprintf("  📄 %s (%d bytes)\n", name, size))
+					fmt.Fprintf(&sb, "  📄 %s (%d bytes)\n", name, size)
 				}
 			}
 		}
@@ -172,7 +172,7 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 			if totalsMap, ok := totals.(map[string]interface{}); ok {
 				if dirCount, ok := totalsMap["directories"].(int); ok {
 					if fileCount, ok := totalsMap["files"].(int); ok {
-						sb.WriteString(fmt.Sprintf("\n总计: %d 个目录, %d 个文件", dirCount, fileCount))
+						fmt.Fprintf(&sb, "\n总计: %d 个目录, %d 个文件", dirCount, fileCount)
 					}
 				}
 			}

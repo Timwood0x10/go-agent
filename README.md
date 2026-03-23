@@ -30,6 +30,7 @@ GoAgent is a **generic multi-agent framework** that allows users to build AI app
 - **Tool System**: Extensible tool registry for agent capabilities
 - **Result Validation**: JSON Schema validation with automatic retry
 - **Vector Storage**: PostgreSQL + pgvector for semantic search and RAG
+- **Capability Layer (ACE)**: Agent Capability Engine for intelligent tool selection and capability-based routing
 
 ## System Requirements
 
@@ -103,7 +104,7 @@ go run main.go --chat
 
 Travel Example:
 ```
-=== Request: 我想去日本东京旅游，5天4晚，预算10000元，喜欢美食和购物 ===
+=== Request: I want to travel to Tokyo, Japan for 5 days and 4 nights, budget 10000, like food and shopping ===
 ```
 
 ## Configuration Reference
@@ -152,15 +153,15 @@ Customize agent behavior through YAML templates:
 prompts:
   # Profile extraction - parse user input into structured data
   profile_extraction: |
-    你是一位旅行助手。请从用户的输入中提取旅行偏好信息。
-    用户输入: {{.input}}
+    You are a travel assistant. Please extract travel preference information from user input.
+    User input: {{.input}}
     ...
 
   # Recommendation - generate recommendations
   recommendation: |
-    请根据以下信息推荐 {{.Category}}：
-    目的地: {{index . "destination"}}
-    预算: {{index . "budget"}}
+    Please recommend {{.Category}} based on the following information:
+    Destination: {{index . "destination"}}
+    Budget: {{index . "budget"}}
     ...
 ```
 
@@ -265,7 +266,7 @@ memory:
     enabled: false          # Enable task distillation
     storage: "memory"       # "memory" or "postgres"
     vector_store: false     # Store distilled results in pgvector
-    prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
+    prompt: "Please concisely summarize the key information of the following task, including: user requirements, preferences, budget range."
 ```
 
 ### Retrieval Strategies (Optional)
@@ -409,6 +410,241 @@ goagent/
 └── pkg/                  # Utilities
 
 ```
+
+## Capability Layer (ACE)
+
+The **Agent Capability Engine (ACE)** provides intelligent tool selection and capability-based routing for agents. It solves the problem of tool selection stability and accuracy in multi-agent systems.
+
+### Problem Statement
+
+Without ACE:
+- LLM sees all available tools (e.g., 12-22 tools)
+- Tool selection becomes unstable and inaccurate
+- Higher token usage and slower responses
+- LLM may choose inappropriate tools
+
+With ACE:
+- LLM sees only relevant tools (2-4 tools)
+- Better tool selection accuracy
+- Reduced token usage and faster responses
+- Consistent tool matching across queries
+
+### Capabilities
+
+Capabilities are high-level abstractions that tools provide. The system supports 8 core capabilities:
+
+| Capability | Description | Keywords |
+|------------|-------------|----------|
+| `math` | Mathematical calculations | calculate, sum, multiply, divide, compute |
+| `knowledge` | Knowledge retrieval | what, who, explain, search, find |
+| `memory` | Memory access/storage | remember, store, recall, history |
+| `text` | Text processing | parse, format, validate, transform |
+| `network` | Network/API requests | api, request, fetch, http, url |
+| `time` | Date/time operations | time, date, schedule, timestamp |
+| `file` | File system operations | file, read, write, delete, list |
+| `external` | External system interaction | execute, run, command, script |
+
+*Note: The system also supports Chinese keywords for all capabilities.*
+
+### ACE Workflow
+
+```
+User Query
+    │
+    ▼
+┌─────────────────────┐
+│ LLM Intent Analysis │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│ Capability Detection│  ← Keyword matching (English + Chinese)
+│ - math             │
+│ - knowledge        │
+│ - memory           │
+│ - text             │
+│ - network          │
+│ - time             │
+│ - file             │
+│ - external         │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Tool Filtering    │  ← Map capabilities to tools
+│ - math → calculator │
+│ - time → datetime   │
+│ - file → file_tools │
+│ - network → http,   │
+│           scraper   │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   Tool Ranking      │  ← Prioritize relevant tools
+│ - relevance score   │
+│ - category match   │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  LLM with 2-4 Tools│  ← Focused tool set
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  Tool Execution     │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  Result Formatting  │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  User Response      │
+└─────────────────────┘
+```
+
+### Tool Categories
+
+#### Math Tools
+- `calculator`: Mathematical expression calculation with support for complex formulas
+- `datetime`: Date and time operations
+
+**Examples:**
+```bash
+> Calculate 100*(100+1)/2
+[TOOL:calculator {"expression": "100*(100+1)/2"}]
+Result: 5050
+
+> Calculate sum from 1 to 100
+[TOOL:calculator {"expression": "100*(100+1)/2"}]
+Result: 5050
+```
+
+#### Network Tools
+- `http_request`: HTTP requests (GET/POST/PUT/DELETE)
+- `web_scraper`: Web page content extraction and parsing
+
+**Examples:**
+```bash
+> Fetch data from https://httpbin.org/get
+[TOOL:http_request {"url": "https://httpbin.org/get"}]
+Result: {"args": {}, "headers": {...}}
+
+> Extract content from https://example.com
+[TOOL:web_scraper {"url": "https://example.com"}]
+Result: {"title": "Example Domain", "content": "..."}
+```
+
+#### File Tools
+- `file_tools`: File system operations (read, write, list)
+
+**Examples:**
+```bash
+> List files in current directory
+[TOOL:file_tools {"operation": "list", "directory_path": "."}]
+Result: 
+Directory: .
+  - bin (directory)
+  - config (directory)
+  - main.go (file, 12345 bytes)
+
+> List files in current directory
+[TOOL:file_tools {"operation": "list", "directory_path": "."}]
+Result: Directory: . - bin (directory) - config (directory) - main.go (file, 12345 bytes)
+```
+
+#### Text Tools
+- `text_processor`: Text processing (count, transform, split)
+- `json_tools`: JSON parsing and conversion
+- `data_validation`: Data validation
+- `data_transform`: Data transformation
+- `regex_tool`: Regular expression matching
+- `log_analyzer`: Log analysis
+
+#### Knowledge Tools
+- `knowledge_search`: Knowledge base search
+- `knowledge_add`: Add knowledge
+- `knowledge_update`: Update knowledge
+- `knowledge_delete`: Delete knowledge
+- `correct_knowledge`: Correct knowledge
+
+#### Memory Tools
+- `memory_search`: Search conversation history
+- `user_profile`: User profile management
+- `distilled_memory_search`: Distilled memory search
+
+#### System Tools
+- `id_generator`: ID generation (UUID, short ID)
+
+#### Execution Tools
+- `code_runner`: Code execution (Python, JavaScript)
+
+#### Planning Tools
+- `task_planner`: Task planning
+
+### Key Features
+
+1. **Automatic Capability Detection**: Keywords in queries are matched to capabilities (English + Chinese)
+2. **Dynamic Tool Filtering**: Only relevant tools are shown to LLM (2-4 tools instead of 12-22)
+3. **Reduced Token Usage**: 60-80% reduction in prompt tokens
+4. **Better Accuracy**: Focused tool selection improves reliability
+5. **Extensible**: Easy to add new capabilities and tools
+6. **Chinese Support**: Full Chinese keyword support for all capabilities
+7. **Relative Path Handling**: Automatic conversion of relative paths to absolute paths
+8. **File Name Suggestions**: Smart suggestions when file not found
+9. **Prompt Overflow Protection**: Fallback to essential tools when prompt exceeds limits
+
+### Usage Example
+
+```go
+// Create agent with ACE
+toolCfg := &agent.AgentToolConfig{
+    Enabled: nil, // All tools enabled
+}
+
+agent, err := NewCapabilityDemoAgent(
+    "demo-agent-1",
+    "Demo Agent",
+    "Demonstrates ACE workflow",
+    toolCfg,
+    llmClient,
+    systemPrompt,
+)
+
+// Process user query with ACE
+resp, err := agent.Process(ctx, "Calculate 1 to 100 sum")
+// ACE automatically:
+// 1. Detects [math] capability
+// 2. Matches [calculator] tool
+// 3. Executes calculation
+// 4. Returns formatted result
+```
+
+### Try the Demo
+
+```bash
+cd examples/capability-demo
+go run main.go
+
+# Try these queries:
+> Calculate 1 to 100 sum
+> What time is it?
+> List files in current directory
+> Search for information
+> Calculate 1+2
+> List files in current directory
+```
+
+### Implementation Details
+
+- **Core Implementation**: `internal/tools/resources/core/capability.go`
+- **Tool Implementation**: `internal/tools/resources/builtin/`
+- **Demo Application**: `examples/capability-demo/`
+- **Design Document**: `/plan/CapabilityLayer.md`
 
 ## Examples
 
