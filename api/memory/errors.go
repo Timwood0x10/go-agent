@@ -51,4 +51,16 @@ var (
 
 	// ErrVectorSearchFailed is returned when vector search fails.
 	ErrVectorSearchFailed = errors.New("vector search failed")
+
+	// ErrInvalidMemoryID is returned when memory ID is empty.
+	ErrInvalidMemoryID = errors.New("invalid memory ID")
+
+	// ErrMemoryNotFound is returned when memory does not exist.
+	ErrMemoryNotFound = errors.New("memory not found")
+
+	// ErrMemoryUpdateFailed is returned when memory update fails.
+	ErrMemoryUpdateFailed = errors.New("memory update failed")
+
+	// ErrMemoryDeleteFailed is returned when memory deletion fails.
+	ErrMemoryDeleteFailed = errors.New("memory deletion failed")
 )

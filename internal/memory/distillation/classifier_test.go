@@ -18,7 +18,7 @@ func TestMemoryClassifier_ClassifyMemory(t *testing.T) {
 			name:         "solution type",
 			problem:      "I have an error in my code",
 			solution:     "Fix the syntax error on line 10",
-			expectedType: MemorySolution,
+			expectedType: MemoryInteraction,
 		},
 		{
 			name:         "preference type",
@@ -30,31 +30,31 @@ func TestMemoryClassifier_ClassifyMemory(t *testing.T) {
 			name:         "fact type",
 			problem:      "What platform am I using?",
 			solution:     "You are using macOS",
-			expectedType: MemoryFact,
+			expectedType: MemoryKnowledge,
 		},
 		{
 			name:         "rule type",
 			problem:      "What are the coding standards?",
 			solution:     "Follow the Google Go style guide",
-			expectedType: MemoryRule,
+			expectedType: MemoryProfile,
 		},
 		{
 			name:         "default to fact",
 			problem:      "Tell me something",
 			solution:     "This is a generic response",
-			expectedType: MemoryFact,
+			expectedType: MemoryKnowledge,
 		},
 		{
 			name:         "debug keyword",
 			problem:      "Help me debug this",
 			solution:     "Check the logs for errors",
-			expectedType: MemorySolution,
+			expectedType: MemoryInteraction,
 		},
 		{
 			name:         "troubleshoot keyword",
 			problem:      "I need to troubleshoot",
 			solution:     "Restart the service",
-			expectedType: MemorySolution,
+			expectedType: MemoryInteraction,
 		},
 		{
 			name:         "like keyword",
@@ -94,7 +94,7 @@ func TestGetMemoryTypeFromString(t *testing.T) {
 		{
 			name:     "fact",
 			typeStr:  "fact",
-			expected: MemoryFact,
+			expected: MemoryKnowledge,
 		},
 		{
 			name:     "preference",
@@ -104,27 +104,27 @@ func TestGetMemoryTypeFromString(t *testing.T) {
 		{
 			name:     "solution",
 			typeStr:  "solution",
-			expected: MemorySolution,
+			expected: MemoryInteraction,
 		},
 		{
 			name:     "rule",
 			typeStr:  "rule",
-			expected: MemoryRule,
+			expected: MemoryProfile,
 		},
 		{
 			name:     "case insensitive",
 			typeStr:  "FACT",
-			expected: MemoryFact,
+			expected: MemoryKnowledge,
 		},
 		{
 			name:     "invalid defaults to fact",
 			typeStr:  "invalid",
-			expected: MemoryFact,
+			expected: MemoryKnowledge,
 		},
 		{
 			name:     "empty defaults to fact",
 			typeStr:  "",
-			expected: MemoryFact,
+			expected: MemoryKnowledge,
 		},
 	}
 
@@ -146,7 +146,7 @@ func TestMemoryType_String(t *testing.T) {
 	}{
 		{
 			name:     "fact",
-			memType:  MemoryFact,
+			memType:  MemoryKnowledge,
 			expected: "fact",
 		},
 		{
@@ -156,12 +156,12 @@ func TestMemoryType_String(t *testing.T) {
 		},
 		{
 			name:     "solution",
-			memType:  MemorySolution,
+			memType:  MemoryInteraction,
 			expected: "solution",
 		},
 		{
 			name:     "rule",
-			memType:  MemoryRule,
+			memType:  MemoryProfile,
 			expected: "rule",
 		},
 	}

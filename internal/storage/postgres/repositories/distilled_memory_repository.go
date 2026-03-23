@@ -74,13 +74,20 @@ func parseDistilledVectorString(vecStr string) ([]float64, error) {
 
 // Create creates a new distilled memory.
 func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *DistilledMemory) error {
+	// Set tenant context for RLS
+	// SET statement does not support parameterized queries, need to use string concatenation
+	query := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
+	if _, err := r.db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
 	// Convert metadata to JSON
 	metadataJSON, err := json.Marshal(memory.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	query := `
+	query = `
 		INSERT INTO distilled_memories
 		(id, tenant_id, user_id, session_id, content, embedding, embedding_model,
 		 embedding_version, memory_type, importance, metadata, access_count,
@@ -105,20 +112,26 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 
 // SearchByVector searches for memories using vector similarity.
 func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*DistilledMemory, error) {
+	// Set tenant context for RLS
+	// SET statement does not support parameterized queries, need to use string concatenation
+	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
 	query := `
 		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
 			   embedding_model, embedding_version, memory_type, importance,
 			   metadata, access_count, last_accessed_at, expires_at, created_at,
 			   1 - (embedding <=> $1::vector) as similarity
 		FROM distilled_memories
-		WHERE tenant_id = $2
-		  AND expires_at > NOW()
+		WHERE expires_at > NOW()
 		ORDER BY embedding <=> $1::vector
-		LIMIT $3
+		LIMIT $2
 	`
 
 	vectorStr := postgres.FormatVector(embedding)
-	rows, err := r.db.QueryContext(ctx, query, vectorStr, tenantID, limit)
+	rows, err := r.db.QueryContext(ctx, query, vectorStr, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search distilled memories: %w", err)
 	}
@@ -153,19 +166,27 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 
 // GetByUserID retrieves memories for a specific user.
 func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, userID string, limit int) ([]*DistilledMemory, error) {
-	query := `
+	var err error
+
+	// Set tenant context for RLS
+	// SET statement does not support parameterized queries, need to use string concatenation
+	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	if _, err = r.db.ExecContext(ctx, setQuery); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
+	selectQuery := `
 		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
 			   embedding_model, embedding_version, memory_type, importance,
 			   metadata, access_count, last_accessed_at, expires_at, created_at
 		FROM distilled_memories
-		WHERE tenant_id = $1
-		  AND user_id = $2
+		WHERE user_id = $1
 		  AND expires_at > NOW()
 		ORDER BY importance DESC, created_at DESC
-		LIMIT $3
+		LIMIT $2
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, tenantID, userID, limit)
+	rows, err := r.db.QueryContext(ctx, selectQuery, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get memories by user: %w", err)
 	}

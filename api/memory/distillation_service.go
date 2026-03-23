@@ -84,8 +84,6 @@ func (a *experienceRepositoryAdapter) SearchByVector(ctx interface{}, vector []f
 
 	}
 
-
-
 	apiExperiences, err := a.apiRepo.SearchByVector(ctxTyped, vector, tenantID, limit)
 
 	if err != nil {
@@ -93,8 +91,6 @@ func (a *experienceRepositoryAdapter) SearchByVector(ctx interface{}, vector []f
 		return nil, err
 
 	}
-
-
 
 	// Convert API experiences to internal experiences
 
@@ -104,19 +100,16 @@ func (a *experienceRepositoryAdapter) SearchByVector(ctx interface{}, vector []f
 
 		internalExperiences[i] = distillation.Experience{
 
-			Problem:         exp.Problem,
+			Problem: exp.Problem,
 
-			Solution:        exp.Solution,
+			Solution: exp.Solution,
 
-			Confidence:      exp.Confidence,
+			Confidence: exp.Confidence,
 
 			ExtractionMethod: distillation.ExtractionMethod(exp.ExtractionMethod),
-
 		}
 
 	}
-
-
 
 	return internalExperiences, nil
 
@@ -395,4 +388,64 @@ func defaultDistillationConfig() *DistillationConfig {
 		ConflictSearchLimit:        5,
 		PrecisionOverRecall:        true,
 	}
+}
+
+// UpdateMemory updates an existing distilled memory.
+//
+// Args:
+// ctx - operation context.
+// memoryID - the memory ID to update.
+// updates - map of fields to update (content, importance, metadata, etc.).
+// Returns error if update fails.
+func (s *DistillationServiceImpl) UpdateMemory(ctx context.Context, memoryID string, updates map[string]interface{}) error {
+	if memoryID == "" {
+		return ErrInvalidMemoryID
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Updating distilled memory", "memory_id", memoryID, "updates", updates)
+	// TODO: Implement actual memory update logic
+	// This would involve calling the repository to update the memory record
+	return fmt.Errorf("memory update not yet implemented")
+}
+
+// DeleteMemory deletes a distilled memory.
+//
+// Args:
+// ctx - operation context.
+// memoryID - the memory ID to delete.
+// Returns error if deletion fails.
+func (s *DistillationServiceImpl) DeleteMemory(ctx context.Context, memoryID string) error {
+	if memoryID == "" {
+		return ErrInvalidMemoryID
+	}
+
+	slog.InfoContext(ctx, "Deleting distilled memory", "memory_id", memoryID)
+	// TODO: Implement actual memory deletion logic
+	// This would involve calling the repository to delete the memory record
+	return fmt.Errorf("memory deletion not yet implemented")
+}
+
+// SearchMemories searches for memories by query text (using vector search).
+//
+// Args:
+// ctx - operation context.
+// query - the search query.
+// tenantID - tenant ID for multi-tenancy.
+// limit - maximum number of results.
+// Returns matching memories or error.
+func (s *DistillationServiceImpl) SearchMemories(ctx context.Context, query string, tenantID string, limit int) ([]*DistilledMemory, error) {
+	if query == "" {
+		return nil, ErrInvalidQuery
+	}
+	if limit <= 0 {
+		return nil, ErrInvalidLimit
+	}
+
+	slog.InfoContext(ctx, "Searching memories", "query", query, "tenant_id", tenantID, "limit", limit)
+	// TODO: Implement actual memory search logic
+	// This would involve calling the repository to search by vector
+	return []*DistilledMemory{}, nil
 }

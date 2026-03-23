@@ -4,6 +4,9 @@ package distillation
 import (
 	"fmt"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Message represents a single message in a conversation.
@@ -39,6 +42,7 @@ func NewExperienceExtractorWithConfig(enableCrossTurn bool) *ExperienceExtractor
 
 // ExtractExperiences extracts problem-solution pairs from a conversation.
 // It supports cross-turn extraction where the solution may appear after 2 messages.
+// Also extracts user profiles/preferences from self-introductions.
 //
 // Args:
 //
@@ -50,6 +54,12 @@ func NewExperienceExtractorWithConfig(enableCrossTurn bool) *ExperienceExtractor
 func (e *ExperienceExtractor) ExtractExperiences(messages []Message) []Experience {
 	var experiences []Experience
 
+	// Step 1: Extract user profile from self-introduction (only once per conversation)
+	if userProfile := e.extractUserProfile(messages); userProfile != nil {
+		experiences = append(experiences, *userProfile)
+	}
+
+	// Step 2: Extract problem-solution pairs
 	for i := 0; i < len(messages)-1; i++ {
 		current := messages[i]
 		next := messages[i+1]
@@ -147,9 +157,9 @@ func (e *ExperienceExtractor) extractDirectExperience(user, assistant Message) *
 	solution = e.extractCoreSolution(solution)
 
 	return &Experience{
-		Problem:         problem,
-		Solution:        solution,
-		Confidence:      e.calculateConfidence(problem, solution),
+		Problem:          problem,
+		Solution:         solution,
+		Confidence:       e.calculateConfidence(problem, solution),
 		ExtractionMethod: ExtractionDirect,
 	}
 }
@@ -195,9 +205,9 @@ func (e *ExperienceExtractor) extractCrossTurnExperience(user, a1, m2, a2 Messag
 	solution = e.extractCoreSolution(solution)
 
 	return &Experience{
-		Problem:         strings.TrimSpace(problem),
-		Solution:        solution,
-		Confidence:      e.calculateConfidence(problem, solution),
+		Problem:          strings.TrimSpace(problem),
+		Solution:         solution,
+		Confidence:       e.calculateConfidence(problem, solution),
 		ExtractionMethod: ExtractionCrossTurn,
 	}
 }
@@ -307,6 +317,204 @@ func (e *ExperienceExtractor) calculateConfidence(problem, solution string) floa
 	}
 
 	return confidence
+}
+
+// extractUserProfile extracts user profile information from conversation.
+// It identifies self-introductions and extracts key information like name,
+// profession, skills, and preferences.
+//
+// Args:
+//
+//	messages - the conversation messages.
+//
+// Returns:
+//
+//	*Experience - extracted user profile, nil if not found.
+func (e *ExperienceExtractor) extractUserProfile(messages []Message) *Experience {
+	// Look for self-introduction in early messages (first 3 user messages)
+	userMessageCount := 0
+	for _, msg := range messages {
+		if msg.Role != "user" {
+			continue
+		}
+
+		userMessageCount++
+		// Only check first 3 user messages for self-introduction
+		if userMessageCount > 3 {
+			break
+		}
+
+		content := strings.TrimSpace(msg.Content)
+		if content == "" {
+			continue
+		}
+
+		lower := strings.ToLower(content)
+
+		// Self-introduction patterns (English and Chinese)
+		selfIntroPatterns := []string{
+			// English patterns
+			"i'm ", "i am ", "my name is ", "call me ",
+			// Chinese patterns
+			"我叫", "我是", "我是的",
+		}
+
+		isSelfIntro := false
+		for _, pattern := range selfIntroPatterns {
+			if strings.Contains(lower, pattern) {
+				isSelfIntro = true
+				break
+			}
+		}
+
+		if !isSelfIntro {
+			continue
+		}
+
+		// Extract user profile information
+		profile := e.parseUserProfile(content)
+		if profile == "" {
+			continue
+		}
+
+		// Create experience with profile as solution
+		// Problem is "User profile" to indicate this is profile information
+		return &Experience{
+			Problem:    "User profile information",
+			Solution:   profile,
+			Confidence: 0.9, // High confidence for self-introduction
+			ExtractionMethod: ExtractionDirect,
+		}
+	}
+
+	return nil
+}
+
+// parseUserProfile parses user profile from self-introduction text.
+// It extracts name, profession, skills, and preferences.
+//
+// Args:
+//
+//	text - the self-introduction text.
+//
+// Returns:
+//
+//	string - formatted user profile.
+func (e *ExperienceExtractor) parseUserProfile(text string) string {
+	profile := strings.TrimSpace(text)
+
+	// Remove common greetings
+	greetings := []string{
+		"hello ", "hi ", "hey ", // English
+		"你好", "您好", // Chinese
+		"nice to meet you", "pleased to meet you", // English
+		"很高兴认识你", "幸会", // Chinese
+	}
+
+	lower := strings.ToLower(profile)
+	for _, greeting := range greetings {
+		if strings.HasPrefix(lower, strings.ToLower(greeting)) {
+			profile = strings.TrimSpace(profile[len(greeting):])
+			lower = strings.ToLower(profile)
+			break
+		}
+	}
+
+	// Extract and format profile components
+	var components []string
+
+	// Extract name (simple pattern matching)
+	namePatterns := []struct {
+		pattern string
+		label   string
+	}{
+		{"i'm ", "Name: "},
+		{"i am ", "Name: "},
+		{"my name is ", "Name: "},
+		{"call me ", "Name: "},
+		{"我叫", "姓名: "},
+		{"我是", "姓名: "},
+	}
+
+	for _, np := range namePatterns {
+		if idx := strings.Index(lower, np.pattern); idx != -1 {
+			namePart := profile[idx+len(np.pattern):]
+			// Extract name until comma, period, or space followed by profession
+			for i, c := range namePart {
+				if c == ',' || c == '，' || c == '。' {
+					namePart = namePart[:i]
+					break
+				}
+				if c == ' ' && i > 2 {
+					// Check if next word is a profession
+					rest := strings.ToLower(namePart[i:])
+					professions := []string{"developer", "engineer", "programmer", "student", "teacher",
+						"developer", "engineer", "programmer", "student", "teacher"}
+					for _, prof := range professions {
+						if strings.HasPrefix(rest, " "+prof) || strings.HasPrefix(rest, " a "+prof) {
+							namePart = namePart[:i]
+							break
+						}
+					}
+					break
+				}
+			}
+			if namePart := strings.TrimSpace(namePart); namePart != "" {
+				components = append(components, np.label+namePart)
+				break
+			}
+		}
+	}
+
+	// Extract profession/skills
+	professionPatterns := []string{
+		"developer", "engineer", "programmer", "architect", "designer",
+		"manager", "analyst", "consultant", "specialist", "expert",
+		"developer", "engineer", "programmer", "architect", "designer",
+	}
+
+	lower = strings.ToLower(profile)
+	for _, prof := range professionPatterns {
+		if strings.Contains(lower, prof) {
+			components = append(components, "Profession: "+cases.Title(language.English).String(prof))
+			break
+		}
+	}
+
+	// Extract skills/tech stack
+	skillsPatterns := []string{
+		"like ", "love ", "prefer ", "use ", "work with ",
+		"like ", "love ", "prefer ", "use ", "work with ",
+	}
+
+	for _, sp := range skillsPatterns {
+		if idx := strings.Index(lower, sp); idx != -1 {
+			skillsPart := profile[idx+len(sp):]
+			// Extract skills until end or punctuation
+			for i, c := range skillsPart {
+				if c == ',' || c == '.' || c == '。' {
+					skillsPart = skillsPart[:i]
+					break
+				}
+			}
+			if skillsPart := strings.TrimSpace(skillsPart); len(skillsPart) > 3 {
+				components = append(components, "Skills: "+skillsPart)
+				break
+			}
+		}
+	}
+
+	// If we extracted components, return formatted profile
+	if len(components) > 0 {
+		return strings.Join(components, " | ")
+	}
+
+	// Fallback: return original text if it looks like a profile
+	if len(profile) > 20 {
+		return profile
+	}
+
+	return ""
 }
 
 // FormatExperience formats an experience as a compact string representation.

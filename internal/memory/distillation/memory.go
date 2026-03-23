@@ -7,10 +7,10 @@ import "time"
 type MemoryType string
 
 const (
-	MemoryFact       MemoryType = "fact"
-	MemoryPreference MemoryType = "preference"
-	MemorySolution   MemoryType = "solution"
-	MemoryRule       MemoryType = "rule"
+	MemoryKnowledge   MemoryType = "knowledge"
+	MemoryPreference  MemoryType = "preference"
+	MemoryInteraction MemoryType = "interaction"
+	MemoryProfile     MemoryType = "profile"
 )
 
 // Memory represents a distilled memory from agent experience.
@@ -31,15 +31,15 @@ type Memory struct {
 type ExtractionMethod string
 
 const (
-	ExtractionDirect    ExtractionMethod = "direct"    // Direct user-assistant pair
+	ExtractionDirect    ExtractionMethod = "direct"     // Direct user-assistant pair
 	ExtractionCrossTurn ExtractionMethod = "cross-turn" // Multi-turn conversation
 )
 
 // Experience represents a problem-solution pair extracted from conversation.
 type Experience struct {
-	Problem         string
-	Solution        string
-	Confidence      float64
+	Problem          string
+	Solution         string
+	Confidence       float64
 	ExtractionMethod ExtractionMethod
 }
 

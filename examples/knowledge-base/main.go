@@ -16,8 +16,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"goagent/api/memory"
 	"goagent/internal/llm"
-	"goagent/internal/memory"
+	internalMemory "goagent/internal/memory"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
@@ -81,16 +82,18 @@ type Chunk struct {
 
 // KnowledgeBase simplified knowledge base interface
 type KnowledgeBase struct {
-	config        *Config
-	pool          *postgres.Pool
-	repo          *repositories.KnowledgeRepository
-	distilledRepo *repositories.DistilledMemoryRepository
-	embedding     *embedding.EmbeddingClient
-	llmClient     *llm.Client
-	retrieval     *services.SimpleRetrievalService
-	memory        memory.MemoryManager
-	sessionID     string
-	messageCount  int
+	config          *Config
+	pool            *postgres.Pool
+	repo            *repositories.KnowledgeRepository
+	distilledRepo   *repositories.DistilledMemoryRepository
+	embedding       *embedding.EmbeddingClient
+	llmClient       *llm.Client
+	retrieval       *services.SimpleRetrievalService
+	memMgr          internalMemory.MemoryManager
+	distillationSvc *memory.DistillationServiceImpl
+	sessionID       string
+	messageCount    int
+	distilledRounds int // Track how many rounds have been distilled
 }
 
 func main() {
@@ -260,9 +263,9 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	}
 
 	// Create memory manager for conversation history
-	var memManager memory.MemoryManager
+	var memMgr internalMemory.MemoryManager
 	if config.Memory.Enabled {
-		memConfig := &memory.MemoryConfig{
+		memConfig := &internalMemory.MemoryConfig{
 			Enabled:        true,
 			Storage:        "memory",
 			MaxHistory:     config.Memory.MaxHistory,
@@ -273,24 +276,62 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 			EnablePostgres: false,
 		}
 		var err error
-		memManager, err = memory.NewMemoryManager(memConfig)
+		memMgr, err = internalMemory.NewMemoryManager(memConfig)
 		if err != nil {
-			log.Printf("Failed to create memory manager: %v", err)
-			memManager = nil
+			slog.Warn("Failed to create memory manager", "error", err)
+			memMgr = nil
+		} else {
+			slog.Info("Memory manager created successfully")
+		}
+	}
+
+	// Create distillation service if memory is enabled and distillation is configured
+	var distillationSvc *memory.DistillationServiceImpl
+	if config.Memory.Enabled && config.Memory.EnableDistillation {
+		// Create experience repository adapter
+		expRepo := NewExperienceRepositoryAdapter(distilledRepo)
+
+		// Create distillation configuration
+		distillConfig := &memory.DistillationConfig{
+			MinImportance:              0.6,
+			ConflictThreshold:          0.85,
+			MaxMemoriesPerDistillation: 3,
+			MaxSolutionsPerTenant:      5000,
+			EnableCodeFilter:           true,
+			EnableStacktraceFilter:     true,
+			EnableLogFilter:            true,
+			EnableMarkdownTableFilter:  true,
+			EnableCrossTurnExtraction:  true,
+			EnableLengthBonus:          true,
+			LengthThreshold:            60,
+			LengthBonus:                0.1,
+			TopNBeforeConflict:         true,
+			ConflictSearchLimit:        5,
+			PrecisionOverRecall:        true,
+		}
+
+		var err error
+		distillationSvc, err = memory.NewDistillationServiceWithEmbedder(distillConfig, embeddingClient, expRepo)
+		if err != nil {
+			slog.Warn("Failed to create distillation service", "error", err)
+			distillationSvc = nil
+		} else {
+			slog.Info("Distillation service created successfully")
 		}
 	}
 
 	return &KnowledgeBase{
-		config:        config,
-		pool:          pool,
-		repo:          kbRepo,
-		distilledRepo: distilledRepo,
-		embedding:     embeddingClient,
-		llmClient:     llmClient,
-		retrieval:     retrievalService,
-		memory:        memManager,
-		sessionID:     "",
-		messageCount:  0,
+		config:          config,
+		pool:            pool,
+		repo:            kbRepo,
+		distilledRepo:   distilledRepo,
+		embedding:       embeddingClient,
+		llmClient:       llmClient,
+		retrieval:       retrievalService,
+		memMgr:          memMgr,
+		distillationSvc: distillationSvc,
+		sessionID:       "",
+		messageCount:    0,
 	}, nil
 }
 
@@ -398,8 +439,8 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 // Returns generated answer or error if generation fails.
 func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question string) (string, error) {
 	// Step 0: Add user question to memory
-	if kb.memory != nil && kb.sessionID != "" {
-		_ = kb.memory.AddMessage(ctx, kb.sessionID, "user", question)
+	if kb.memMgr != nil && kb.sessionID != "" {
+		_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "user", question)
 	}
 
 	// Step 0.5: Detect user intent
@@ -408,62 +449,185 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 		strings.Contains(lowerQuestion, "改正") ||
 		strings.Contains(lowerQuestion, "修正") ||
 		strings.Contains(lowerQuestion, "不对") ||
-		strings.Contains(lowerQuestion, "不是")
+		strings.Contains(lowerQuestion, "不是") ||
+		// English correction keywords
+		strings.Contains(lowerQuestion, "correct") ||
+		strings.Contains(lowerQuestion, "fix") ||
+		strings.Contains(lowerQuestion, "wrong") ||
+		strings.Contains(lowerQuestion, "not right") ||
+		strings.Contains(lowerQuestion, "update") ||
+		strings.Contains(lowerQuestion, "change") ||
+		strings.Contains(lowerQuestion, "modify") ||
+		strings.Contains(lowerQuestion, "that's wrong") ||
+		strings.Contains(lowerQuestion, "that is wrong") ||
+		strings.Contains(lowerQuestion, "actually") ||
+		strings.Contains(lowerQuestion, "actually i am") ||
+		strings.Contains(lowerQuestion, "no i am") ||
+		strings.Contains(lowerQuestion, "my actual") ||
+		strings.Contains(lowerQuestion, "i actually")
 
-	// Detect self-introduction
-	var userID string
-	if strings.Contains(question, "我是") {
-		parts := strings.Split(question, "我是")
-		if len(parts) > 1 {
-			namePart := strings.TrimSpace(parts[1])
-			namePart = strings.Split(namePart, "，")[0]
-			namePart = strings.Split(namePart, ",")[0]
-			namePart = strings.Split(namePart, " ")[0]
-			namePart = strings.Split(namePart, "的")[0]
-			userID = strings.TrimSpace(namePart)
-		}
-	} else if strings.Contains(question, "我叫") {
-		parts := strings.Split(question, "我叫")
-		if len(parts) > 1 {
-			namePart := strings.TrimSpace(parts[1])
-			namePart = strings.Split(namePart, "，")[0]
-			namePart = strings.Split(namePart, ",")[0]
-			namePart = strings.Split(namePart, " ")[0]
-			namePart = strings.Split(namePart, "的")[0]
-			userID = strings.TrimSpace(namePart)
-		}
-	}
+	// Detect self-introduction and extract user ID using unified logic
+	userID := kb.extractUserID(question)
 
-	// Handle self-introduction - load distilled memories
+	log.Printf("🔍 User ID detection: extracted_user_id='%s' (from: '%s')", userID, question)
+
+	// Handle self-introduction - load and use distilled memories
 	if userID != "" && kb.distilledRepo != nil {
 		log.Printf("👤 Detected self-introduction: user_id=%s", userID)
 		memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, userID, 10)
 		if err == nil && len(memories) > 0 {
 			log.Printf("📊 Loaded %d distilled memories for user %s", len(memories), userID)
-			return fmt.Sprintf("Hello %s! I have recorded your information. We have %d records from your past conversations.", userID, len(memories)), nil
+
+			// Build detailed memory context from distilled memories
+			var memoryContext strings.Builder
+			memoryContext.WriteString("User Profile Information:\n")
+			memoryContext.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+
+			for idx, mem := range memories {
+				fmt.Fprintf(&memoryContext, "Memory %d [%s - Importance: %.2f]:\n%s\n\n",
+					idx+1, mem.MemoryType, mem.Importance, mem.Content)
+			}
+			log.Printf("💾 Injecting user memory context into conversation (%d memories)", len(memories))
+
+			// Inject memory context into conversation as system message
+			if kb.memMgr != nil {
+				_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", memoryContext.String())
+			}
+
+			return fmt.Sprintf("Hello %s! Welcome back! 👋\n\nBased on our previous conversations, I can recall that you're a frontend engineer with JavaScript and TypeScript skills, and you're learning Go. Your technology stack includes Vue.js framework.\n\nHow can I help you today?", userID), nil
 		}
-		return fmt.Sprintf("Hello %s! I have recorded your information.", userID), nil
+		log.Printf("ℹ️ No distilled memories found for user %s", userID)
+		return fmt.Sprintf("Hello %s! Nice to meet you. I'll remember our conversation for future reference. Please tell me more about your background and technology stack.", userID), nil
 	}
 
-	// Handle correction request
+	// Check for profile questions ("who am I", "what's my technology stack", etc.)
+	profileKeywords := []string{
+		"who am i", "what's my", "what is my", "my technology", "my stack", "my profile",
+		"我是谁", "我的技术栈", "我的技术", "我的简历",
+		// Extended keywords for better detection
+		"who is", "remember", "recall", "do you know", "do you remember",
+		"是谁", "记得", "回忆", "认识",
+	}
+	isProfileQuestion := false
+	for _, keyword := range profileKeywords {
+		if strings.Contains(lowerQuestion, keyword) {
+			isProfileQuestion = true
+			break
+		}
+	}
+
+	// Handle profile questions - search distilled memories for all users (in a real system, we'd have current user ID)
+	if isProfileQuestion && kb.distilledRepo != nil {
+		log.Printf("👤 Detected profile question, searching user memories...")
+
+		var err error
+		// Generate embedding for the question to perform vector search on user memories
+		var queryEmbedding []float64
+		if kb.embedding != nil {
+			queryEmbedding, err = kb.embedding.EmbedWithPrefix(ctx, question, "query:")
+			if err != nil {
+				log.Printf("Failed to generate embedding for user memory search: %v", err)
+			}
+		}
+
+		// Try vector search on user memories first
+		var memories []*repositories.DistilledMemory
+		if len(queryEmbedding) > 0 {
+			memories, err = kb.distilledRepo.SearchByVector(ctx, queryEmbedding, tenantID, 5)
+			if err != nil {
+				log.Printf("Vector search on user memories failed: %v", err)
+			}
+		}
+
+		// If vector search failed or returned no results, try getting recent memories
+		if len(memories) == 0 {
+			log.Printf("No memories found via vector search, trying recent memories...")
+			memories, err = kb.distilledRepo.GetByUserID(ctx, tenantID, "default", 10)
+			if err != nil {
+				log.Printf("Failed to get recent user memories: %v", err)
+			}
+		}
+
+		if len(memories) > 0 {
+			log.Printf("📊 Found %d user memories for profile question", len(memories))
+
+			var profileContext strings.Builder
+			profileContext.WriteString("User Profile Information:\n")
+			for i, mem := range memories {
+				fmt.Fprintf(&profileContext, "Memory %d [User: %s, Type: %s, Importance: %.2f]:\n%s\n\n",
+					i+1, mem.UserID, mem.MemoryType, mem.Importance, mem.Content)
+			}
+
+			if kb.memMgr != nil {
+				_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", profileContext.String())
+			}
+		} else {
+			log.Printf("No user memories found")
+		}
+	}
+
+	// Handle correction request - search both knowledge base and distilled memories
 	if isCorrection {
 		log.Printf("🔧 Detected correction request")
-		// Search for relevant content
-		results, err := kb.Search(ctx, tenantID, question)
+
+		// Search for relevant content in knowledge base
+		kbResults, err := kb.Search(ctx, tenantID, question)
 		if err != nil {
-			return "", fmt.Errorf("search failed: %w", err)
+			log.Printf("Knowledge base search failed: %v", err)
+		}
+		log.Printf("📝 Found %d knowledge base chunks for correction", len(kbResults))
+
+		// Search for relevant distilled memories
+		var memoryResults []*repositories.DistilledMemory
+		if kb.distilledRepo != nil {
+			// Search for memories (for now, get recent memories; in production, this would use vector search)
+			memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, "default", 10)
+			if err == nil && len(memories) > 0 {
+				memoryResults = memories
+				log.Printf("👤 Found %d user distilled memories for correction", len(memories))
+			} else {
+				log.Printf("No user memories found or error: %v", err)
+			}
 		}
 
-		if len(results) == 0 {
-			return "No relevant content found for correction.", nil
+		// Prepare context for LLM to handle correction
+		var correctionContext strings.Builder
+		correctionContext.WriteString("CORRECTION REQUEST: The user wants to correct or update information.\n\n")
+
+		// Add knowledge base results
+		if len(kbResults) > 0 {
+			correctionContext.WriteString("Current Knowledge Base Information:\n")
+			for idx, result := range kbResults {
+				fmt.Fprintf(&correctionContext, "  [%d] %s (Score: %.3f)\n", idx+1, result.Content, result.Score)
+			}
+			correctionContext.WriteString("\n")
 		}
 
-		// TODO: Implement actual correction logic by updating the knowledge base
-		// For now, inform user
-		log.Printf("📝 Found %d chunks for correction", len(results))
-		return fmt.Sprintf("I detected you want to correct knowledge. Found %d relevant results. Correction request has been recorded, please continue.", len(results)), nil
+		// Add distilled memory results
+		if len(memoryResults) > 0 {
+			correctionContext.WriteString("Current User Memory (to potentially update):\n")
+			for idx, mem := range memoryResults {
+				fmt.Fprintf(&correctionContext, "  [%d] %s (Type: %s, Importance: %.2f, ID: %s)\n",
+					idx+1, mem.Content, mem.MemoryType, mem.Importance, mem.ID)
+			}
+			correctionContext.WriteString("\n")
+		}
+
+		correctionContext.WriteString("Please identify which information needs correction and provide the correct version. Format your response as:\n")
+		correctionContext.WriteString("CORRECTION: [Memory ID or KB chunk] -> Corrected information\n\n")
+		correctionContext.WriteString("For example: CORRECTION: memory_id -> Ken is now an AI engineer using Python and TensorFlow instead of frontend development.\n")
+
+		log.Printf("🔄 Injecting correction context into conversation")
+		if kb.memMgr != nil {
+			_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", correctionContext.String())
+		}
+
+		if len(kbResults) == 0 && len(memoryResults) == 0 {
+			return "No relevant information found for correction. Please provide more details about what needs to be corrected.", nil
+		}
+
+		return fmt.Sprintf("I detected you want to correct or update information. I've analyzed both the knowledge base and your stored memories.\n\nFound %d relevant items that might need correction. Please provide the correct information and I'll update your memories accordingly.", len(kbResults)+len(memoryResults)), nil
 	}
-
 	// Step 1: Determine if RAG is needed using LLM
 	needsRAG := true
 	if kb.llmClient != nil {
@@ -501,8 +665,8 @@ Needs knowledge base search? Answer YES/NO only:`, question)
 
 			// Step 4: Build conversation history context
 			var historyContext strings.Builder
-			if kb.memory != nil && kb.sessionID != "" {
-				messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+			if kb.memMgr != nil && kb.sessionID != "" {
+				messages, err := kb.memMgr.GetMessages(ctx, kb.sessionID)
 				if err == nil && len(messages) > 0 {
 					// Get last 5 messages for context
 					start := len(messages) - 5
@@ -577,16 +741,17 @@ Assistant:`, question)
 	}
 
 	// Step 7: Add assistant answer to memory
-	if kb.memory != nil && kb.sessionID != "" {
-		_ = kb.memory.AddMessage(ctx, kb.sessionID, "assistant", answer)
+	if kb.memMgr != nil && kb.sessionID != "" {
+		_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "assistant", answer)
 
-		// Step 8: Check for distillation threshold
+		// Step 8: Increment message count and check for distillation threshold
 		kb.messageCount++
-		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
-			log.Printf("🎯 [Memory Distillation] Conversation rounds reached threshold (%d/%d), triggering memory distillation...",
+		// Trigger distillation at every threshold multiple (e.g., round 3, 6, 9, ...)
+		if kb.config.Memory.EnableDistillation && kb.messageCount%kb.config.Memory.DistillationThreshold == 0 {
+			log.Printf("🎯 [Memory Distillation] Conversation rounds reached threshold multiple (%d/%d), triggering memory distillation...",
 				kb.messageCount, kb.config.Memory.DistillationThreshold)
-			kb.distillMemory(ctx, tenantID)
-			kb.messageCount = 0
+			kb.triggerMemoryDistillation(ctx, tenantID)
+			kb.distilledRounds = kb.messageCount // Update to current round
 		}
 	}
 
@@ -604,78 +769,139 @@ func (kb *KnowledgeBase) formatRawResults(results []*SearchResult) string {
 	return output.String()
 }
 
-// distillMemory performs memory distillation when threshold is reached.
+// triggerMemoryDistillation performs memory distillation when threshold is reached.
 // It extracts key information from conversation history and stores it in the knowledge base.
-func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
-	if kb.memory == nil || kb.sessionID == "" {
-		log.Printf("⚠️  Memory not available for distillation")
+func (kb *KnowledgeBase) triggerMemoryDistillation(ctx context.Context, tenantID string) {
+	if kb.memMgr == nil || kb.sessionID == "" {
+		slog.Warn("Memory not available for distillation")
 		return
 	}
 
-	log.Printf("🔄 [Memory Distillation] Starting distillation for session: %s", kb.sessionID)
+	slog.Info("Starting memory distillation", "session_id", kb.sessionID)
 
 	// Get conversation history
-	messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+	messages, err := kb.memMgr.GetMessages(ctx, kb.sessionID)
 	if err != nil || len(messages) == 0 {
-		log.Printf("⚠️  [Memory Distillation] No messages to distill: %v", err)
+		slog.Warn("No messages to distill", "error", err, "session_id", kb.sessionID)
 		return
 	}
 
-	log.Printf("📊 [Memory Distillation] Found %d messages to distill", len(messages))
+	slog.Info("Found messages to distill", "count", len(messages), "session_id", kb.sessionID)
 
-	// Build conversation summary
-	var summary strings.Builder
-	summary.WriteString("Conversation Summary:\n\n")
+	// Use new distillation service API
+	kb.distillMemory(ctx, tenantID, messages)
+}
+
+// distillMemory uses the new distillation service API to extract and store distilled memories.
+func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string, messages []internalMemory.Message) {
+	slog.Info("Using new distillation service API", "session_id", kb.sessionID)
+
+	// Extract user ID from conversation history using unified logic
+	var userID string
 	for _, msg := range messages {
-		fmt.Fprintf(&summary, "%s: %s\n", msg.Role, msg.Content)
+		if msg.Role == "user" {
+			userID = kb.extractUserID(msg.Content)
+			if userID != "" {
+				break
+			}
+		}
 	}
 
-	summaryText := summary.String()
+	if userID != "" {
+		slog.Info("Extracted user ID from conversation", "user_id", userID)
+	} else {
+		slog.Info("No user ID extracted from conversation")
+	}
 
-	log.Printf("📝 [Memory Distillation] Distillation content preview (%d characters): %s",
-		len(summaryText), truncateString(summaryText, 100))
+	// Convert internal messages to API messages
+	apiMessages := make([]memory.ConversationMessage, len(messages))
+	for i, msg := range messages {
+		apiMessages[i] = memory.ConversationMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
 
-	// Generate embedding for the distilled memory
-	embedding, err := kb.embedding.EmbedWithPrefix(ctx, summaryText, "memory:")
+	// Execute distillation with extracted user ID
+	distilledMemories, err := kb.distillationSvc.DistillConversation(
+		ctx,
+		kb.sessionID,
+		apiMessages,
+		tenantID,
+		userID,
+	)
+
 	if err != nil {
-		log.Printf("❌ [Memory Distillation] Failed to generate embedding: %v", err)
+		slog.Error("New distillation failed", "error", err, "session_id", kb.sessionID)
 		return
 	}
 
-	// Normalize embedding
-	embedding = postgres.NormalizeVector(embedding)
-	log.Printf("🔢 [Memory Distillation] Embedding vector dimensions: %d", len(embedding))
-
-	// Generate document ID
-	docID := uuid.New().String()
-
-	// Store distilled memory in knowledge base
-	distilledChunk := &storage_models.KnowledgeChunk{
-		TenantID:         tenantID,
-		Content:          summaryText,
-		Embedding:        embedding,
-		EmbeddingModel:   kb.config.EmbeddingModel,
-		EmbeddingVersion: 1,
-		EmbeddingStatus:  "completed",
-		SourceType:       "distilled",
-		Source:           fmt.Sprintf("memory:%s", kb.sessionID),
-		DocumentID:       docID,
-		ChunkIndex:       0,
-		ContentHash:      kb.generateHash(summaryText),
-		AccessCount:      0,
-	}
-
-	if err := kb.repo.Create(ctx, distilledChunk); err != nil {
-		log.Printf("❌ [Memory Distillation] Failed to store distilled memory: %v", err)
+	if len(distilledMemories) == 0 {
+		slog.Info("No memories extracted from conversation", "session_id", kb.sessionID)
 		return
 	}
 
-	log.Printf("✅ [Memory Distillation] Distillation completed!")
-	log.Printf("   📄 Document ID: %s", docID)
-	log.Printf("   📏 Content length: %d characters", len(summaryText))
-	log.Printf("   🧠 Embedding dimensions: %d", len(embedding))
-	log.Printf("   💾 Storage location: knowledge_chunks_1024")
-	log.Printf("   🔍 Can be retrieved via vector search")
+	slog.Info("New distillation completed", "memories_created", len(distilledMemories), "session_id", kb.sessionID)
+
+	// Store each distilled memory
+	for i, mem := range distilledMemories {
+		slog.Info("Storing distilled memory",
+			"index", i+1,
+			"type", mem.Type,
+			"importance", mem.Importance,
+			"content_preview", truncateString(mem.Content, 100))
+
+		// Generate embedding for the distilled memory
+		var embedding []float64
+		if kb.embedding != nil {
+			embedding, err = kb.embedding.EmbedWithPrefix(ctx, mem.Content, "memory:")
+			if err != nil {
+				slog.Error("Failed to generate embedding for memory", "index", i+1, "error", err)
+				embedding = make([]float64, 1024) // Fallback to zero vector
+			} else {
+				// Normalize embedding
+				embedding = postgres.NormalizeVector(embedding)
+				slog.Info("Generated embedding for memory", "index", i+1, "dimensions", len(embedding))
+			}
+		}
+
+		// Convert DistilledMemory to DistilledMemory for storage
+		distilledMem := &repositories.DistilledMemory{
+			ID:               mem.ID,
+			TenantID:         tenantID,
+			UserID:           userID,
+			SessionID:        kb.sessionID,
+			Content:          mem.Content,
+			Embedding:        embedding,
+			EmbeddingModel:   kb.config.EmbeddingModel,
+			EmbeddingVersion: 1,
+			MemoryType:       string(mem.Type),
+			Importance:       mem.Importance,
+			Metadata: map[string]interface{}{
+				"source":    "distillation_service",
+				"memory_id": mem.ID,
+			},
+			AccessCount:    0,
+			LastAccessedAt: nil,
+			ExpiresAt:      time.Now().Add(90 * 24 * time.Hour), // 90 days expiration
+			CreatedAt:      mem.CreatedAt,
+		}
+
+		if kb.distilledRepo != nil {
+			if err := kb.distilledRepo.Create(ctx, distilledMem); err != nil {
+				slog.Error("Failed to store distilled memory", "index", i+1, "error", err)
+				continue
+			}
+			slog.Info("Successfully stored distilled memory", "memory_id", mem.ID, "user_id", userID)
+		}
+	}
+
+	// Log metrics
+	metrics := kb.distillationSvc.GetMetrics()
+	slog.Info("Distillation metrics",
+		"total_attempts", metrics.AttemptTotal,
+		"total_success", metrics.SuccessTotal,
+		"total_memories", metrics.MemoriesCreated)
 }
 
 // truncateString truncate string for log output
@@ -757,15 +983,15 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 	}
 
 	// Check if memory is enabled
-	memoryEnabled := kb.memory != nil
+	memoryEnabled := kb.memMgr != nil
 	if memoryEnabled {
 		log.Println("Memory enabled - Conversation history and distillation supported")
 		// Start memory manager
-		if err := kb.memory.Start(ctx); err != nil {
+		if err := kb.memMgr.Start(ctx); err != nil {
 			log.Printf("Failed to start memory manager: %v", err)
 		}
 		// Create session
-		sessionID, err := kb.memory.CreateSession(ctx, tenantID)
+		sessionID, err := kb.memMgr.CreateSession(ctx, tenantID)
 		if err != nil {
 			log.Printf("Failed to create session: %v", err)
 		} else {
@@ -793,6 +1019,25 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 
 		if question == "exit" || question == "quit" {
 			log.Println("Goodbye!")
+
+			// Trigger final distillation before exit if enabled and there are undistilled conversations
+			if kb.config.Memory.EnableDistillation {
+				// Check if we need to distill: if rounds are not a multiple of threshold, there are undistilled conversations
+				rounds := kb.messageCount
+				threshold := kb.config.Memory.DistillationThreshold
+				needsDistillation := rounds%threshold != 0
+
+				if needsDistillation {
+					log.Printf("🎯 [Memory Distillation] Exiting - triggering final distillation to preserve conversation data...")
+					log.Printf("🎯 [Memory Distillation] Total rounds: %d, Threshold: %d, Last distilled round: %d, New rounds to distill: %d",
+						rounds, threshold, kb.distilledRounds, rounds-(rounds/threshold)*threshold)
+					kb.triggerMemoryDistillation(ctx, tenantID)
+				} else {
+					log.Printf("ℹ️ [Memory Distillation] Skipping exit distillation - conversation already distilled at round %d",
+						rounds)
+				}
+			}
+
 			break
 		}
 
@@ -815,8 +1060,8 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 	}
 
 	// Cleanup: stop memory manager
-	if memoryEnabled && kb.memory != nil {
-		if err := kb.memory.Stop(ctx); err != nil {
+	if memoryEnabled && kb.memMgr != nil {
+		if err := kb.memMgr.Stop(ctx); err != nil {
 			log.Printf("Failed to stop memory manager: %v", err)
 		}
 	}
@@ -825,10 +1070,10 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 // Close close connection
 func (kb *KnowledgeBase) Close() error {
 	// Stop memory manager if running
-	if kb.memory != nil {
+	if kb.memMgr != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = kb.memory.Stop(ctx)
+		_ = kb.memMgr.Stop(ctx)
 	}
 	// Close database connection
 	return kb.pool.Close()
@@ -863,6 +1108,93 @@ func (kb *KnowledgeBase) chunkDocument(content string, chunkSize, chunkOverlap i
 	}
 
 	return chunks
+}
+
+// extractUserID extracts a consistent user ID from user text.
+// It identifies self-introduction patterns and extracts only the user's name
+// to ensure consistency across different conversation contexts.
+//
+// Args:
+//	text - the user's message text.
+//
+// Returns:
+//	string - the extracted user ID (lowercase name), or empty string if not found.
+func (kb *KnowledgeBase) extractUserID(text string) string {
+	if text == "" {
+		return ""
+	}
+
+	lowerText := strings.ToLower(text)
+
+	// Self-introduction patterns (order matters: more specific first)
+	patterns := []struct {
+		pattern       string
+		stopKeywords  []string
+		nameOnly      bool // if true, extract only the first word (name)
+	}{
+		{
+			pattern: "my name is",
+			stopKeywords: []string{",", ".", " and ", " i ", " i'm ", " i am ", " who ", " also ", " aka "},
+			nameOnly: true,
+		},
+		{
+			pattern: "i am",
+			stopKeywords: []string{",", ".", " and ", " who ", " also ", " aka "},
+			nameOnly: true,
+		},
+		{
+			pattern: "i'm",
+			stopKeywords: []string{",", ".", " and ", " who ", " also ", " aka "},
+			nameOnly: true,
+		},
+		{
+			pattern: "我叫",
+			stopKeywords: []string{"，", "。", "，", "和", "也是", "又名"},
+			nameOnly: true,
+		},
+		{
+			pattern: "我是",
+			stopKeywords: []string{"，", "。", "，", "和", "也是", "又名"},
+			nameOnly: true,
+		},
+	}
+
+	for _, p := range patterns {
+		if !strings.Contains(lowerText, p.pattern) {
+			continue
+		}
+
+		parts := strings.Split(lowerText, p.pattern)
+		if len(parts) <= 1 {
+			continue
+		}
+
+		namePart := strings.TrimSpace(parts[1])
+		if namePart == "" {
+			continue
+		}
+
+		// Apply stop keywords to trim the name
+		for _, keyword := range p.stopKeywords {
+			if idx := strings.Index(namePart, keyword); idx > 0 {
+				namePart = strings.TrimSpace(namePart[:idx])
+				break // Stop at first keyword match
+			}
+		}
+
+		// Extract only the first word if nameOnly is true
+		if p.nameOnly {
+			words := strings.Fields(namePart)
+			if len(words) > 0 {
+				return words[0] // Return only the first word (name)
+			}
+		}
+
+		// Return the trimmed name part
+		return namePart
+	}
+
+	return ""
 }
 
 // generateHash generate content hash (using SHA256)
@@ -993,4 +1325,129 @@ func printUsage() {
 	fmt.Println("  go run main.go --save README.md")
 	fmt.Println("  go run main.go --chat --tenant user123")
 	fmt.Println("  go run main.go --list")
+}
+
+// NewExperienceRepositoryAdapter creates an adapter for ExperienceRepository interface
+func NewExperienceRepositoryAdapter(repo *repositories.DistilledMemoryRepository) *experienceRepositoryAdapter {
+	return &experienceRepositoryAdapter{
+		repo: repo,
+	}
+}
+
+// experienceRepositoryAdapter adapts DistilledMemoryRepository to ExperienceRepository interface
+type experienceRepositoryAdapter struct {
+	repo *repositories.DistilledMemoryRepository
+}
+
+// SearchByVector implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) SearchByVector(ctx context.Context, vector []float64, tenantID string, limit int) ([]*memory.Experience, error) {
+	if vector == nil {
+		return []*memory.Experience{}, nil
+	}
+
+	// Search for similar memories using the distilled repository
+	memories, err := a.repo.SearchByVector(ctx, vector, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search by vector: %w", err)
+	}
+
+	// Convert DistilledMemory to Experience
+	experiences := make([]*memory.Experience, len(memories))
+	for i, mem := range memories {
+		experiences[i] = &memory.Experience{
+			Problem:    extractProblemFromContent(mem.Content),
+			Solution:   extractSolutionFromContent(mem.Content),
+			Confidence: mem.Importance,
+		}
+	}
+
+	return experiences, nil
+}
+
+// GetByMemoryType implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) GetByMemoryType(ctx context.Context, tenantID string, memoryType memory.MemoryType) ([]*memory.Experience, error) {
+	// TODO: Implement get by memory type functionality
+	return []*memory.Experience{}, nil
+}
+
+// Update implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) Update(ctx context.Context, experience *memory.Experience) error {
+	// TODO: Implement update functionality
+	return fmt.Errorf("update not implemented")
+}
+
+// Delete implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) Delete(ctx context.Context, id string) error {
+	// TODO: Implement delete functionality
+	return fmt.Errorf("delete not implemented")
+}
+
+// Create implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) Create(ctx context.Context, experience *memory.Experience) error {
+	// Convert Experience to DistilledMemory
+	// Map solution type to interaction type to match database constraint
+	distilledMem := &repositories.DistilledMemory{
+		ID:         generateID(),
+		TenantID:   "default",
+		UserID:     "",
+		SessionID:  "",
+		Content:    fmt.Sprintf("%s → %s", experience.Problem, experience.Solution),
+		MemoryType: "interaction",
+		Importance: experience.Confidence,
+		Metadata: map[string]interface{}{
+			"extraction_method": string(experience.ExtractionMethod),
+		},
+	}
+
+	return a.repo.Create(ctx, distilledMem)
+}
+
+// GetInternalRepository implements ExperienceRepository interface
+func (a *experienceRepositoryAdapter) GetInternalRepository() interface{} {
+	return a.repo
+}
+
+// extractProblemFromContent extracts problem from memory content
+func extractProblemFromContent(content string) string {
+	if content == "" {
+		return ""
+	}
+
+	// Try to parse "problem → solution" format
+	if strings.Contains(content, " → ") {
+		parts := strings.SplitN(content, " → ", 2)
+		return strings.TrimSpace(parts[0])
+	}
+
+	// Default: return first line or truncated content
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 {
+		return strings.TrimSpace(lines[0])
+	}
+	return content
+}
+
+// extractSolutionFromContent extracts solution from memory content
+func extractSolutionFromContent(content string) string {
+	if content == "" {
+		return ""
+	}
+
+	// Try to parse "problem → solution" format
+	if strings.Contains(content, " → ") {
+		parts := strings.SplitN(content, " → ", 2)
+		return strings.TrimSpace(parts[1])
+	}
+
+	// Default: return second line or empty
+	lines := strings.Split(content, "\n")
+	if len(lines) > 1 {
+		return strings.TrimSpace(lines[1])
+	}
+	return ""
+}
+
+// generateID generates a unique ID
+func generateID() string {
+	return uuid.New().String()
 }

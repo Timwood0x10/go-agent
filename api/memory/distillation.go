@@ -10,14 +10,14 @@ import (
 type MemoryType string
 
 const (
-	// MemoryFact represents factual information.
-	MemoryFact MemoryType = "fact"
+	// MemoryKnowledge represents factual information and knowledge.
+	MemoryKnowledge MemoryType = "knowledge"
 	// MemoryPreference represents user preferences.
 	MemoryPreference MemoryType = "preference"
-	// MemorySolution represents solutions or methods.
-	MemorySolution MemoryType = "solution"
-	// MemoryRule represents rules or patterns.
-	MemoryRule MemoryType = "rule"
+	// MemoryInteraction represents interaction patterns and solutions.
+	MemoryInteraction MemoryType = "interaction"
+	// MemoryProfile represents user profile and behavioral patterns.
+	MemoryProfile MemoryType = "profile"
 )
 
 // ExtractionMethod represents how an experience was extracted.
@@ -164,6 +164,30 @@ type DistillationService interface {
 	// config - new configuration.
 	// Returns error if update fails.
 	UpdateConfig(config *DistillationConfig) error
+
+	// UpdateMemory updates an existing distilled memory.
+	// Args:
+	// ctx - operation context.
+	// memoryID - the memory ID to update.
+	// updates - map of fields to update (content, importance, metadata, etc.).
+	// Returns error if update fails.
+	UpdateMemory(ctx context.Context, memoryID string, updates map[string]interface{}) error
+
+	// DeleteMemory deletes a distilled memory.
+	// Args:
+	// ctx - operation context.
+	// memoryID - the memory ID to delete.
+	// Returns error if deletion fails.
+	DeleteMemory(ctx context.Context, memoryID string) error
+
+	// SearchMemories searches for memories by query text (using vector search).
+	// Args:
+	// ctx - operation context.
+	// query - the search query.
+	// tenantID - tenant ID for multi-tenancy.
+	// limit - maximum number of results.
+	// Returns matching memories or error.
+	SearchMemories(ctx context.Context, query string, tenantID string, limit int) ([]*DistilledMemory, error)
 }
 
 // ExperienceRepository defines the interface for experience storage and retrieval.

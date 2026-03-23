@@ -78,13 +78,13 @@ func (s *ImportanceScorer) ScoreMemory(memoryType MemoryType, problem, solution 
 
 	// Type-based adjustment
 	switch memoryType {
-	case MemorySolution:
+	case MemoryInteraction:
 		score += 0.15 // Solutions are inherently more valuable
 	case MemoryPreference:
 		score += 0.2 // Preferences are valuable for personalization
-	case MemoryFact:
+	case MemoryKnowledge:
 		score += 0.25 // Facts are useful for context (increased for short content)
-	case MemoryRule:
+	case MemoryProfile:
 		score += 0.15 // Rules are important for consistency
 	}
 
@@ -108,7 +108,7 @@ func (s *ImportanceScorer) ScoreMemory(memoryType MemoryType, problem, solution 
 		} else {
 			// Apply moderate penalty for short content even with keywords
 			// But don't penalize preference and fact types as heavily
-			if memoryType == MemoryPreference || memoryType == MemoryFact {
+			if memoryType == MemoryPreference || memoryType == MemoryKnowledge {
 				score = score * 0.9
 			} else {
 				score = score * 0.7

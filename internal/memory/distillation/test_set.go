@@ -27,7 +27,7 @@ func GetTestSet() []TestSet {
 			},
 			ShouldExtract: true,
 			ExpectedCount: 1,
-			ExpectedTypes: []MemoryType{MemorySolution},
+			ExpectedTypes: []MemoryType{MemoryInteraction},
 			Reason:        "Contains error keyword and solution",
 		},
 		{
@@ -41,7 +41,7 @@ func GetTestSet() []TestSet {
 			},
 			ShouldExtract: true,
 			ExpectedCount: 2,
-			ExpectedTypes: []MemoryType{MemorySolution, MemorySolution},
+			ExpectedTypes: []MemoryType{MemoryInteraction, MemoryInteraction},
 			Reason:        "Cross-turn extraction should capture both pairs",
 		},
 		{
@@ -79,7 +79,7 @@ func GetTestSet() []TestSet {
 			},
 			ShouldExtract: true,
 			ExpectedCount: 2,
-			ExpectedTypes: []MemoryType{MemorySolution, MemorySolution},
+			ExpectedTypes: []MemoryType{MemoryInteraction, MemoryInteraction},
 			Reason:        "Multiple problems with solutions",
 		},
 		{
@@ -91,7 +91,7 @@ func GetTestSet() []TestSet {
 			},
 			ShouldExtract: true,
 			ExpectedCount: 1,
-			ExpectedTypes: []MemoryType{MemorySolution},
+			ExpectedTypes: []MemoryType{MemoryInteraction},
 			Reason:        "Contains error and actionable solution",
 		},
 		{
@@ -103,7 +103,7 @@ func GetTestSet() []TestSet {
 			},
 			ShouldExtract: true,
 			ExpectedCount: 1,
-			ExpectedTypes: []MemoryType{MemoryRule},
+			ExpectedTypes: []MemoryType{MemoryProfile},
 			Reason:        "Contains configuration and rules",
 		},
 

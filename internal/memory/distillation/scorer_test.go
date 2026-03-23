@@ -18,7 +18,7 @@ func TestImportanceScorer_ScoreMemory(t *testing.T) {
 	}{
 		{
 			name:       "error keyword",
-			memoryType: MemorySolution,
+			memoryType: MemoryInteraction,
 			problem:    "I have an error",
 			solution:   "Fix the syntax",
 			minScore:   0.7,
@@ -26,7 +26,7 @@ func TestImportanceScorer_ScoreMemory(t *testing.T) {
 		},
 		{
 			name:       "solution keyword",
-			memoryType: MemorySolution,
+			memoryType: MemoryInteraction,
 			problem:    "I need a solution",
 			solution:   "Use this approach",
 			minScore:   0.7,
@@ -42,7 +42,7 @@ func TestImportanceScorer_ScoreMemory(t *testing.T) {
 		},
 		{
 			name:       "short solution",
-			memoryType: MemorySolution,
+			memoryType: MemoryInteraction,
 			problem:    "error",
 			solution:   "fix",
 			minScore:   0.3,
@@ -50,7 +50,7 @@ func TestImportanceScorer_ScoreMemory(t *testing.T) {
 		},
 		{
 			name:       "long solution with bonus",
-			memoryType: MemorySolution,
+			memoryType: MemoryInteraction,
 			problem:    "I have a complex error that needs detailed analysis",
 			solution:   "First check the logs, then identify the root cause, and finally implement a fix that addresses both the symptoms and the underlying issue",
 			minScore:   0.7,
@@ -58,7 +58,7 @@ func TestImportanceScorer_ScoreMemory(t *testing.T) {
 		},
 		{
 			name:       "fact type",
-			memoryType: MemoryFact,
+			memoryType: MemoryKnowledge,
 			problem:    "What is my OS?",
 			solution:   "You are using macOS",
 			minScore:   0.5,

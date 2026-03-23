@@ -68,12 +68,19 @@ func (f *NoiseFilter) IsNoise(text string) bool {
 
 	lower := strings.ToLower(text)
 
-	// Filter out casual acknowledgments
+	// Filter out casual acknowledgments (English and Chinese)
 	casualAcknowledgments := []string{
+		// English acknowledgments
 		"ok", "okay", "thanks", "thank you", "got it",
 		"sure", "alright", "yes", "yeah", "yep",
 		"no", "nope", "cool", "great", "awesome",
 		"perfect", "fine", "good", "noted", "understood",
+		// Chinese acknowledgments
+		"好的", "行", "可以", "嗯", "哎", "是的",
+		"对", "没错", "明白", "知道", "收到", "OK",
+		"好的的", "没问题", "了解了", "清楚了", "知道了",
+		"谢谢", "感谢", "不客气", "请", "麻烦", "不好意思",
+		"抱歉", "对不起", "没关系", "没事", "好的吧",
 	}
 	for _, ack := range casualAcknowledgments {
 		if lower == ack || strings.HasPrefix(lower, ack+" ") || strings.HasSuffix(lower, " "+ack) {
@@ -121,8 +128,13 @@ func (f *NoiseFilter) CodeBlockFilter(text string) bool {
 		return true
 	}
 
-	// Check for Go language keywords
-	codeKeywords := []string{"func ", "package ", "import ", "struct ", "interface "}
+	// Check for Go language keywords and Chinese code keywords
+	codeKeywords := []string{
+		// English keywords
+		"func ", "package ", "import ", "struct ", "interface ",
+		// Chinese code keywords
+		"函数 ", "包 ", "导入 ", "结构体 ", "接口 ",
+	}
 	for _, keyword := range codeKeywords {
 		if strings.Contains(lower, keyword) {
 			return true
@@ -175,8 +187,14 @@ func (f *NoiseFilter) StacktraceFilter(text string) bool {
 func (f *NoiseFilter) LogFilter(text string) bool {
 	lower := strings.ToLower(text)
 
-	// Check for log prefixes
-	logPrefixes := []string{"log.", "log::", "[info]", "[error]", "[warn]", "[debug]", "[trace]"}
+	// Check for log prefixes (English and Chinese)
+	logPrefixes := []string{
+		// English prefixes
+		"log.", "log::", "[info]", "[error]", "[warn]", "[debug]", "[trace]",
+		// Chinese prefixes
+		"日志", "信息", "错误", "警告", "调试", "追踪",
+		"[日志]", "[信息]", "[错误]", "[警告]", "[调试]",
+	}
 	for _, prefix := range logPrefixes {
 		if strings.HasPrefix(lower, prefix) {
 			return true
@@ -219,10 +237,15 @@ func SecurityFilter(text string) bool {
 
 	lower := strings.ToLower(text)
 
-	// Sensitive keywords that should never be stored
+	// Sensitive keywords that should never be stored (English and Chinese)
 	sensitiveKeywords := []string{
+		// English sensitive keywords
 		"password", "api key", "apikey", "secret", "token",
 		"credential", "private key", "auth token", "bearer token",
+		// Chinese sensitive keywords
+		"密码", "API密钥", "API key", "密钥", "令牌",
+		"凭证", "私钥", "认证令牌", "bearer令牌", "访问令牌",
+		"敏感信息", "机密", "秘密", "私密",
 	}
 
 	for _, keyword := range sensitiveKeywords {
