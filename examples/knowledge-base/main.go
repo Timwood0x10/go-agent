@@ -35,6 +35,221 @@ type SearchResult struct {
 	Score   float64
 }
 
+// UserProfile unified user profile structure
+type UserProfile struct {
+	UserID      string
+	Name        string
+	Profession  string
+	Skills      []string
+	Interests   []string
+	Bio         string
+	LastUpdated time.Time
+	Confidence  float64 // How confident we are about this profile data
+}
+
+// UserProfileService manages user profiles
+type UserProfileService struct {
+	distilledRepo *repositories.DistilledMemoryRepository
+	embedding     *embedding.EmbeddingClient
+	llmClient     *llm.Client
+}
+
+// NewUserProfileService creates a new user profile service
+func NewUserProfileService(distilledRepo *repositories.DistilledMemoryRepository, embedding *embedding.EmbeddingClient, llmClient *llm.Client) *UserProfileService {
+	return &UserProfileService{
+		distilledRepo: distilledRepo,
+		embedding:     embedding,
+		llmClient:     llmClient,
+	}
+}
+
+// ExtractProfileFromSelfIntro extracts profile from self-introduction
+func (s *UserProfileService) ExtractProfileFromSelfIntro(ctx context.Context, tenantID, userID, selfIntro string) (*UserProfile, error) {
+	log.Printf("👤 [Profile] Extracting profile from self-introduction for user: %s", userID)
+
+	profile := &UserProfile{
+		UserID:      userID,
+		LastUpdated: time.Now(),
+		Confidence:  0.8, // Default confidence for self-introduction
+	}
+
+	// Extract information from self-introduction
+	lowerIntro := strings.ToLower(selfIntro)
+
+	// Extract name (already done by extractUserID, but refine here)
+	profile.Name = strings.Title(userID)
+
+	// Extract profession
+	professionKeywords := []string{"programmer", "developer", "engineer", "designer", "manager", "student", "researcher"}
+	for _, keyword := range professionKeywords {
+		if strings.Contains(lowerIntro, keyword) {
+			profile.Profession = strings.Title(keyword)
+			break
+		}
+	}
+
+	// Extract skills
+	skillKeywords := []string{"javascript", "typescript", "js", "ts", "vue", "react", "angular", "go", "golang", "python", "java", "rust"}
+	for _, keyword := range skillKeywords {
+		if strings.Contains(lowerIntro, keyword) {
+			profile.Skills = append(profile.Skills, strings.ToUpper(keyword))
+		}
+	}
+
+	// Use LLM to extract more detailed profile if available
+	if s.llmClient != nil {
+		prompt := fmt.Sprintf(`Extract structured user profile information from this self-introduction:
+
+Self-introduction: "%s"
+
+Extract and return ONLY the following fields in JSON format:
+{
+  "name": "user's name",
+  "profession": "user's profession",
+  "skills": ["skill1", "skill2"],
+  "interests": ["interest1", "interest2"],
+  "bio": "short bio"
+}
+
+If a field cannot be extracted, use null or empty array.`, selfIntro)
+
+		genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		response, err := s.llmClient.Generate(genCtx, prompt)
+		cancel()
+
+		if err == nil {
+			log.Printf("👤 [Profile] LLM extracted profile data: %s", truncateString(response, 100))
+			// Parse JSON response and update profile
+			// TODO: Implement JSON parsing
+		}
+	}
+
+	return profile, nil
+}
+
+// StoreProfile stores profile as a distilled memory
+func (s *UserProfileService) StoreProfile(ctx context.Context, tenantID string, profile *UserProfile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is nil")
+	}
+
+	log.Printf("👤 [Profile] Storing profile for user: %s", profile.UserID)
+
+	// Build profile content
+	var content strings.Builder
+	content.WriteString("User Profile:\n")
+	content.WriteString(fmt.Sprintf("Name: %s\n", profile.Name))
+	if profile.Profession != "" {
+		content.WriteString(fmt.Sprintf("Profession: %s\n", profile.Profession))
+	}
+	if len(profile.Skills) > 0 {
+		content.WriteString(fmt.Sprintf("Skills: %s\n", strings.Join(profile.Skills, ", ")))
+	}
+	if len(profile.Interests) > 0 {
+		content.WriteString(fmt.Sprintf("Interests: %s\n", strings.Join(profile.Interests, ", ")))
+	}
+	if profile.Bio != "" {
+		content.WriteString(fmt.Sprintf("Bio: %s\n", profile.Bio))
+	}
+
+	// Generate embedding
+	var embeddingVec []float64
+	var err error
+	if s.embedding != nil {
+		embeddingVec, err = s.embedding.EmbedWithPrefix(ctx, content.String(), "profile:")
+		if err != nil {
+			log.Printf("👤 [Profile] Failed to generate embedding: %v", err)
+			return fmt.Errorf("generate embedding: %w", err)
+		}
+	}
+
+	// Store as distilled memory
+	distilledMem := &repositories.DistilledMemory{
+		ID:               uuid.New().String(),
+		TenantID:         tenantID,
+		UserID:           profile.UserID,
+		SessionID:        "",
+		Content:          content.String(),
+		Embedding:        embeddingVec,
+		EmbeddingModel:   s.embedding.GetModel(),
+		EmbeddingVersion: 1,
+		MemoryType:       "profile",
+		Importance:       profile.Confidence,
+		Metadata: map[string]interface{}{
+			"profile_type":      "unified",
+			"name":             profile.Name,
+			"profession":       profile.Profession,
+			"skills":           profile.Skills,
+			"interests":        profile.Interests,
+			"confidence":       profile.Confidence,
+			"last_updated":     profile.LastUpdated,
+		},
+		AccessCount:    0,
+		LastAccessedAt: nil,
+		ExpiresAt:      time.Now().Add(90 * 24 * time.Hour),
+		CreatedAt:      time.Now(),
+	}
+
+	return s.distilledRepo.Create(ctx, distilledMem)
+}
+
+// GetProfile retrieves user profile from distilled memories
+func (s *UserProfileService) GetProfile(ctx context.Context, tenantID, userID string) (*UserProfile, error) {
+	log.Printf("👤 [Profile] Retrieving profile for user: %s", userID)
+
+	memories, err := s.distilledRepo.GetByUserID(ctx, tenantID, userID, 5)
+	if err != nil {
+		return nil, fmt.Errorf("get memories: %w", err)
+	}
+
+	// Find the most recent profile memory
+	var latestProfileMem *repositories.DistilledMemory
+	var latestTime time.Time
+
+	for _, mem := range memories {
+		if mem.MemoryType == "profile" && mem.CreatedAt.After(latestTime) {
+			latestTime = mem.CreatedAt
+			latestProfileMem = mem
+		}
+	}
+
+	if latestProfileMem == nil {
+		return nil, fmt.Errorf("profile not found for user: %s", userID)
+	}
+
+	// Parse profile from memory content
+	profile := &UserProfile{
+		UserID:      userID,
+		LastUpdated: latestProfileMem.CreatedAt,
+		Confidence:  latestProfileMem.Importance,
+	}
+
+	// Parse content
+	lines := strings.Split(latestProfileMem.Content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Name:") {
+			profile.Name = strings.TrimSpace(strings.TrimPrefix(line, "Name:"))
+		} else if strings.HasPrefix(line, "Profession:") {
+			profile.Profession = strings.TrimSpace(strings.TrimPrefix(line, "Profession:"))
+		} else if strings.HasPrefix(line, "Skills:") {
+			skillsStr := strings.TrimSpace(strings.TrimPrefix(line, "Skills:"))
+			if skillsStr != "" {
+				profile.Skills = strings.Split(skillsStr, ", ")
+			}
+		} else if strings.HasPrefix(line, "Interests:") {
+			interestsStr := strings.TrimSpace(strings.TrimPrefix(line, "Interests:"))
+			if interestsStr != "" {
+				profile.Interests = strings.Split(interestsStr, ", ")
+			}
+		} else if strings.HasPrefix(line, "Bio:") {
+			profile.Bio = strings.TrimSpace(strings.TrimPrefix(line, "Bio:"))
+		}
+	}
+
+	return profile, nil
+}
+
 // Config configuration structure
 type Config struct {
 	Database struct {
@@ -91,6 +306,7 @@ type KnowledgeBase struct {
 	retrieval       *services.SimpleRetrievalService
 	memMgr          internalMemory.MemoryManager
 	distillationSvc *memory.DistillationServiceImpl
+	profileService  *UserProfileService
 	sessionID       string
 	messageCount    int
 	distilledRounds int // Track how many rounds have been distilled
@@ -320,6 +536,9 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 		}
 	}
 
+	// Create profile service for unified user profile management
+	profileService := NewUserProfileService(distilledRepo, embeddingClient, llmClient)
+
 	return &KnowledgeBase{
 		config:          config,
 		pool:            pool,
@@ -330,6 +549,7 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 		retrieval:       retrievalService,
 		memMgr:          memMgr,
 		distillationSvc: distillationSvc,
+		profileService:  profileService,
 		sessionID:       "",
 		messageCount:    0,
 	}, nil
@@ -471,33 +691,55 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 
 	log.Printf("🔍 User ID detection: extracted_user_id='%s' (from: '%s')", userID, question)
 
-	// Handle self-introduction - load and use distilled memories
-	if userID != "" && kb.distilledRepo != nil {
+	// Handle self-introduction - extract and store user profile
+	if userID != "" && kb.profileService != nil {
 		log.Printf("👤 Detected self-introduction: user_id=%s", userID)
-		memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, userID, 10)
-		if err == nil && len(memories) > 0 {
-			log.Printf("📊 Loaded %d distilled memories for user %s", len(memories), userID)
 
-			// Build detailed memory context from distilled memories
-			var memoryContext strings.Builder
-			memoryContext.WriteString("User Profile Information:\n")
-			memoryContext.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-
-			for idx, mem := range memories {
-				fmt.Fprintf(&memoryContext, "Memory %d [%s - Importance: %.2f]:\n%s\n\n",
-					idx+1, mem.MemoryType, mem.Importance, mem.Content)
+		// Extract profile from self-introduction
+		profile, err := kb.profileService.ExtractProfileFromSelfIntro(ctx, tenantID, userID, question)
+		if err != nil {
+			log.Printf("⚠️  [Profile] Failed to extract profile: %v", err)
+		} else {
+			// Store the extracted profile
+			if err := kb.profileService.StoreProfile(ctx, tenantID, profile); err != nil {
+				log.Printf("⚠️  [Profile] Failed to store profile: %v", err)
+			} else {
+				log.Printf("✅ [Profile] Profile extracted and stored for user: %s", userID)
 			}
-			log.Printf("💾 Injecting user memory context into conversation (%d memories)", len(memories))
-
-			// Inject memory context into conversation as system message
-			if kb.memMgr != nil {
-				_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", memoryContext.String())
-			}
-
-			return fmt.Sprintf("Hello %s! Welcome back! 👋\n\nBased on our previous conversations, I can recall that you're a frontend engineer with JavaScript and TypeScript skills, and you're learning Go. Your technology stack includes Vue.js framework.\n\nHow can I help you today?", userID), nil
 		}
-		log.Printf("ℹ️ No distilled memories found for user %s", userID)
-		return fmt.Sprintf("Hello %s! Nice to meet you. I'll remember our conversation for future reference. Please tell me more about your background and technology stack.", userID), nil
+
+		// Load existing profile to provide personalized greeting
+		existingProfile, err := kb.profileService.GetProfile(ctx, tenantID, userID)
+		if err == nil && existingProfile != nil {
+			log.Printf("📊 Loaded existing profile for user %s", userID)
+
+			// Build personalized greeting based on profile
+			var greeting strings.Builder
+			fmt.Fprintf(&greeting, "Hello %s! Welcome back! 👋\n\n", strings.Title(userID))
+
+			if existingProfile.Profession != "" {
+				fmt.Fprintf(&greeting, "I remember you're a %s", existingProfile.Profession)
+				if len(existingProfile.Skills) > 0 {
+					fmt.Fprintf(&greeting, " with skills in %s", strings.Join(existingProfile.Skills, ", "))
+				}
+				greeting.WriteString(".\n\n")
+			}
+
+			greeting.WriteString("How can I help you today?")
+
+			// Inject profile context into conversation
+			if kb.memMgr != nil {
+				profileContext := fmt.Sprintf("User Profile: %s - %s | Skills: %s",
+					existingProfile.Name, existingProfile.Profession, strings.Join(existingProfile.Skills, ", "))
+				_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", profileContext)
+			}
+
+			return greeting.String(), nil
+		}
+
+		// Fallback: simple greeting if no profile found
+		log.Printf("ℹ️ No existing profile found for user %s", userID)
+		return fmt.Sprintf("Hello %s! Nice to meet you. I'll remember our conversation for future reference. Please tell me more about your background and technology stack.", strings.Title(userID)), nil
 	}
 
 	// Check for profile questions ("who am I", "what's my technology stack", etc.)
@@ -516,50 +758,134 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 		}
 	}
 
-	// Handle profile questions - search distilled memories for all users (in a real system, we'd have current user ID)
+	// Handle profile questions - search distilled memories for the specific user
 	if isProfileQuestion && kb.distilledRepo != nil {
 		log.Printf("👤 Detected profile question, searching user memories...")
 
-		var err error
-		// Generate embedding for the question to perform vector search on user memories
-		var queryEmbedding []float64
-		if kb.embedding != nil {
-			queryEmbedding, err = kb.embedding.EmbedWithPrefix(ctx, question, "query:")
-			if err != nil {
-				log.Printf("Failed to generate embedding for user memory search: %v", err)
-			}
+		// Extract user ID from the profile question
+		// For questions like "who is Ken?", we need to extract "Ken" as the user ID
+		questionUserID := ""
+		lowerQuestionForID := strings.ToLower(question)
+
+		// Pattern matching for "who is [name]?"
+		if strings.HasPrefix(lowerQuestionForID, "who is ") {
+			namePart := strings.TrimSpace(lowerQuestionForID[len("who is "):])
+			namePart = strings.TrimSuffix(namePart, "?")
+			namePart = strings.TrimSpace(namePart)
+			questionUserID = namePart
+		} else if strings.Contains(lowerQuestionForID, "who am i") || strings.Contains(lowerQuestionForID, "我是谁") {
+			// Pattern matching for "你是谁" / "我是谁" - use current user
+			// Try to get user ID from session context
+			questionUserID = ""
 		}
 
-		// Try vector search on user memories first
 		var memories []*repositories.DistilledMemory
-		if len(queryEmbedding) > 0 {
-			memories, err = kb.distilledRepo.SearchByVector(ctx, queryEmbedding, tenantID, 5)
+		var err error
+
+		// If we extracted a user ID from the question, query by user ID
+		if questionUserID != "" {
+			log.Printf("👤 Extracted user ID from profile question: '%s'", questionUserID)
+			memories, err = kb.distilledRepo.GetByUserID(ctx, tenantID, questionUserID, 10)
 			if err != nil {
-				log.Printf("Vector search on user memories failed: %v", err)
+				log.Printf("Failed to get memories for user '%s': %v", questionUserID, err)
 			}
 		}
 
-		// If vector search failed or returned no results, try getting recent memories
+		// If no memories found with user ID, try vector search but filter for profile type
 		if len(memories) == 0 {
-			log.Printf("No memories found via vector search, trying recent memories...")
-			memories, err = kb.distilledRepo.GetByUserID(ctx, tenantID, "default", 10)
-			if err != nil {
-				log.Printf("Failed to get recent user memories: %v", err)
+			log.Printf("👤 No memories found for user '%s', trying vector search with profile filter...", questionUserID)
+			var queryEmbedding []float64
+			if kb.embedding != nil {
+				queryEmbedding, err = kb.embedding.EmbedWithPrefix(ctx, question, "query:")
+				if err != nil {
+					log.Printf("Failed to generate embedding for user memory search: %v", err)
+				}
+			}
+
+			if len(queryEmbedding) > 0 {
+				allMemories, err := kb.distilledRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
+				if err != nil {
+					log.Printf("Vector search on user memories failed: %v", err)
+				} else {
+					// Filter for profile type memories only
+					for _, mem := range allMemories {
+						if mem.MemoryType == "profile" {
+							memories = append(memories, mem)
+						}
+					}
+					log.Printf("👤 Filtered %d profile memories from vector search", len(memories))
+				}
 			}
 		}
 
 		if len(memories) > 0 {
 			log.Printf("📊 Found %d user memories for profile question", len(memories))
 
+			// Deduplicate memories based on content
+			seen := make(map[string]bool)
+			var uniqueMemories []*repositories.DistilledMemory
+			for _, mem := range memories {
+				if !seen[mem.Content] {
+					seen[mem.Content] = true
+					uniqueMemories = append(uniqueMemories, mem)
+				}
+			}
+			log.Printf("📊 Deduplicated to %d unique memories", len(uniqueMemories))
+
+			// Build structured context for LLM
 			var profileContext strings.Builder
-			profileContext.WriteString("User Profile Information:\n")
-			for i, mem := range memories {
-				fmt.Fprintf(&profileContext, "Memory %d [User: %s, Type: %s, Importance: %.2f]:\n%s\n\n",
-					i+1, mem.UserID, mem.MemoryType, mem.Importance, mem.Content)
+			profileContext.WriteString("User Profile Information from conversation history:\n")
+			profileContext.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+
+			for i, mem := range uniqueMemories {
+				fmt.Fprintf(&profileContext, "[%d] %s\n", i+1, mem.Content)
 			}
 
+			// Add context to memory manager
 			if kb.memMgr != nil {
 				_ = kb.memMgr.AddMessage(ctx, kb.sessionID, "system", profileContext.String())
+			}
+
+			// Use LLM to generate natural, polished answer
+			if kb.llmClient != nil {
+				prompt := fmt.Sprintf(`You are a helpful assistant. Answer the user's question based on the user profile information provided.
+
+User Question: %s
+
+User Profile Information:
+%s
+
+IMPORTANT INSTRUCTIONS:
+1. Synthesize the information naturally - don't just list the memories
+2. Remove duplicates and merge related information
+3. Present the answer in a friendly, conversational tone
+4. Focus on the most important and relevant information
+5. If the information is incomplete or outdated, mention that gracefully
+6. Be concise but comprehensive
+
+Answer:`, question, profileContext.String())
+
+				genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+				var genErr error
+				userMemoryAnswer, genErr := kb.llmClient.Generate(genCtx, prompt)
+				cancel()
+
+				if genErr != nil {
+					log.Printf("LLM generation failed for profile answer: %v, using fallback", genErr)
+					// Fallback: simple formatted answer
+					userMemoryAnswer = "Based on our conversation history, here's what I know:\n\n"
+					for _, mem := range uniqueMemories {
+						userMemoryAnswer += fmt.Sprintf("• %s\n", mem.Content)
+					}
+				}
+				return userMemoryAnswer, nil
+			} else {
+				// Fallback if LLM not available
+				userMemoryAnswer := "Based on our conversation history, here's what I know:\n\n"
+				for _, mem := range uniqueMemories {
+					userMemoryAnswer += fmt.Sprintf("• %s\n", mem.Content)
+				}
+				return userMemoryAnswer, nil
 			}
 		} else {
 			log.Printf("No user memories found")
@@ -1115,9 +1441,11 @@ func (kb *KnowledgeBase) chunkDocument(content string, chunkSize, chunkOverlap i
 // to ensure consistency across different conversation contexts.
 //
 // Args:
+//
 //	text - the user's message text.
 //
 // Returns:
+//
 //	string - the extracted user ID (lowercase name), or empty string if not found.
 func (kb *KnowledgeBase) extractUserID(text string) string {
 	if text == "" {
@@ -1128,34 +1456,34 @@ func (kb *KnowledgeBase) extractUserID(text string) string {
 
 	// Self-introduction patterns (order matters: more specific first)
 	patterns := []struct {
-		pattern       string
-		stopKeywords  []string
-		nameOnly      bool // if true, extract only the first word (name)
+		pattern      string
+		stopKeywords []string
+		nameOnly     bool // if true, extract only the first word (name)
 	}{
 		{
-			pattern: "my name is",
+			pattern:      "my name is",
 			stopKeywords: []string{",", ".", " and ", " i ", " i'm ", " i am ", " who ", " also ", " aka "},
-			nameOnly: true,
+			nameOnly:     true,
 		},
 		{
-			pattern: "i am",
+			pattern:      "i am",
 			stopKeywords: []string{",", ".", " and ", " who ", " also ", " aka "},
-			nameOnly: true,
+			nameOnly:     true,
 		},
 		{
-			pattern: "i'm",
+			pattern:      "i'm",
 			stopKeywords: []string{",", ".", " and ", " who ", " also ", " aka "},
-			nameOnly: true,
+			nameOnly:     true,
 		},
 		{
-			pattern: "我叫",
+			pattern:      "我叫",
 			stopKeywords: []string{"，", "。", "，", "和", "也是", "又名"},
-			nameOnly: true,
+			nameOnly:     true,
 		},
 		{
-			pattern: "我是",
+			pattern:      "我是",
 			stopKeywords: []string{"，", "。", "，", "和", "也是", "又名"},
-			nameOnly: true,
+			nameOnly:     true,
 		},
 	}
 

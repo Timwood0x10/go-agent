@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -74,12 +75,26 @@ func parseDistilledVectorString(vecStr string) ([]float64, error) {
 
 // Create creates a new distilled memory.
 func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *DistilledMemory) error {
+	// Detailed logging before storage
+	slog.InfoContext(ctx, "📝 [Storage] Starting distilled memory storage",
+		"memory_id", memory.ID,
+		"tenant_id", memory.TenantID,
+		"user_id", memory.UserID,
+		"session_id", memory.SessionID,
+		"memory_type", memory.MemoryType,
+		"importance", memory.Importance,
+		"content_preview", truncateString(memory.Content, 50))
+
 	// Set tenant context for RLS
 	// SET statement does not support parameterized queries, need to use string concatenation
 	query := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
 	if _, err := r.db.ExecContext(ctx, query); err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context",
+			"tenant_id", memory.TenantID,
+			"error", err)
 		return fmt.Errorf("set tenant context: %w", err)
 	}
+	slog.InfoContext(ctx, "✅ [Storage] Tenant context set successfully", "tenant_id", memory.TenantID)
 
 	// Convert metadata to JSON
 	metadataJSON, err := json.Marshal(memory.Metadata)
@@ -96,6 +111,15 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 		ON CONFLICT DO NOTHING
 	`
 
+	// Log the SQL parameters before execution
+	slog.InfoContext(ctx, "🔍 [Storage] Executing INSERT with parameters",
+		"memory_id", memory.ID,
+		"tenant_id", memory.TenantID,
+		"user_id", fmt.Sprintf("'%s' (length: %d)", memory.UserID, len(memory.UserID)),
+		"session_id", memory.SessionID,
+		"content_length", len(memory.Content),
+		"embedding_dims", len(memory.Embedding))
+
 	_, err = r.db.ExecContext(ctx, query,
 		memory.ID, memory.TenantID, memory.UserID, memory.SessionID, memory.Content,
 		postgres.FormatVector(memory.Embedding), memory.EmbeddingModel, memory.EmbeddingVersion,
@@ -104,20 +128,40 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 	)
 
 	if err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to INSERT distilled memory",
+			"memory_id", memory.ID,
+			"user_id", memory.UserID,
+			"error", err)
 		return fmt.Errorf("create distilled memory: %w", err)
 	}
+
+	slog.InfoContext(ctx, "✅ [Storage] Successfully stored distilled memory",
+		"memory_id", memory.ID,
+		"user_id", memory.UserID,
+		"tenant_id", memory.TenantID)
 
 	return nil
 }
 
 // SearchByVector searches for memories using vector similarity.
 func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*DistilledMemory, error) {
+	// Detailed logging before search
+	slog.InfoContext(ctx, "🔍 [Storage] Starting vector search",
+		"tenant_id", tenantID,
+		"embedding_dims", len(embedding),
+		"embedding_preview", fmt.Sprintf("[%v]", embedding[:min(10, len(embedding))]),
+		"limit", limit)
+
 	// Set tenant context for RLS
 	// SET statement does not support parameterized queries, need to use string concatenation
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in SearchByVector",
+			"tenant_id", tenantID,
+			"error", err)
 		return nil, fmt.Errorf("set tenant context: %w", err)
 	}
+	slog.InfoContext(ctx, "✅ [Storage] Tenant context set in SearchByVector", "tenant_id", tenantID)
 
 	query := `
 		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
@@ -133,6 +177,9 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 	vectorStr := postgres.FormatVector(embedding)
 	rows, err := r.db.QueryContext(ctx, query, vectorStr, limit)
 	if err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to execute SearchByVector query",
+			"tenant_id", tenantID,
+			"error", err)
 		return nil, fmt.Errorf("search distilled memories: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -142,23 +189,50 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 		memory := &DistilledMemory{}
 		var similarity float64
 		var embeddingStr string
+		var metadataStr string
 
 		err := rows.Scan(
 			&memory.ID, &memory.TenantID, &memory.UserID, &memory.SessionID,
 			&memory.Content, &embeddingStr, &memory.EmbeddingModel,
 			&memory.EmbeddingVersion, &memory.MemoryType, &memory.Importance,
-			&memory.Metadata, &memory.AccessCount, &memory.LastAccessedAt,
+			&metadataStr, &memory.AccessCount, &memory.LastAccessedAt,
 			&memory.ExpiresAt, &memory.CreatedAt, &similarity,
 		)
 		if err != nil {
+			slog.WarnContext(ctx, "⚠️ [Storage] Failed to scan search result row", "error", err)
 			continue
 		}
 
 		memory.Embedding, err = parseDistilledVectorString(embeddingStr)
 		if err != nil {
+			slog.WarnContext(ctx, "⚠️ [Storage] Failed to parse embedding in search result", "memory_id", memory.ID, "error", err)
 			continue
 		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &memory.Metadata); err != nil {
+				slog.WarnContext(ctx, "⚠️ [Storage] Failed to parse metadata in search result", "memory_id", memory.ID, "error", err)
+			}
+		}
+
 		memories = append(memories, memory)
+	}
+
+	slog.InfoContext(ctx, "✅ [Storage] SearchByVector query completed",
+		"tenant_id", tenantID,
+		"memories_found", len(memories))
+
+	// Log detailed memory contents for debugging
+	for i, mem := range memories {
+		slog.InfoContext(ctx, "📋 [Storage] Retrieved memory details",
+			"index", i+1,
+			"memory_id", mem.ID,
+			"user_id", mem.UserID,
+			"memory_type", mem.MemoryType,
+			"importance", mem.Importance,
+			"content_preview", truncateString(mem.Content, 100),
+			"similarity", mem.Metadata["similarity"])
 	}
 
 	return memories, nil
@@ -168,12 +242,22 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, userID string, limit int) ([]*DistilledMemory, error) {
 	var err error
 
+	// Detailed logging before query
+	slog.InfoContext(ctx, "🔍 [Storage] Starting GetByUserID query",
+		"tenant_id", tenantID,
+		"user_id", userID,
+		"limit", limit)
+
 	// Set tenant context for RLS
 	// SET statement does not support parameterized queries, need to use string concatenation
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	if _, err = r.db.ExecContext(ctx, setQuery); err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in GetByUserID",
+			"tenant_id", tenantID,
+			"error", err)
 		return nil, fmt.Errorf("set tenant context: %w", err)
 	}
+	slog.InfoContext(ctx, "✅ [Storage] Tenant context set in GetByUserID", "tenant_id", tenantID)
 
 	selectQuery := `
 		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
@@ -188,6 +272,9 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 
 	rows, err := r.db.QueryContext(ctx, selectQuery, userID, limit)
 	if err != nil {
+		slog.ErrorContext(ctx, "❌ [Storage] Failed to execute GetByUserID query",
+			"user_id", userID,
+			"error", err)
 		return nil, fmt.Errorf("get memories by user: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -196,24 +283,40 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 	for rows.Next() {
 		memory := &DistilledMemory{}
 		var embeddingStr string
+		var metadataStr string
 
 		err := rows.Scan(
 			&memory.ID, &memory.TenantID, &memory.UserID, &memory.SessionID,
 			&memory.Content, &embeddingStr, &memory.EmbeddingModel,
 			&memory.EmbeddingVersion, &memory.MemoryType, &memory.Importance,
-			&memory.Metadata, &memory.AccessCount, &memory.LastAccessedAt,
+			&metadataStr, &memory.AccessCount, &memory.LastAccessedAt,
 			&memory.ExpiresAt, &memory.CreatedAt,
 		)
 		if err != nil {
+			slog.WarnContext(ctx, "⚠️ [Storage] Failed to scan memory row", "error", err)
 			continue
 		}
 
 		memory.Embedding, err = parseDistilledVectorString(embeddingStr)
 		if err != nil {
+			slog.WarnContext(ctx, "⚠️ [Storage] Failed to parse embedding", "memory_id", memory.ID, "error", err)
 			continue
 		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &memory.Metadata); err != nil {
+				slog.WarnContext(ctx, "⚠️ [Storage] Failed to parse metadata", "memory_id", memory.ID, "error", err)
+			}
+		}
+
 		memories = append(memories, memory)
 	}
+
+	slog.InfoContext(ctx, "✅ [Storage] GetByUserID query completed",
+		"tenant_id", tenantID,
+		"user_id", userID,
+		"memories_found", len(memories))
 
 	return memories, nil
 }
@@ -250,4 +353,24 @@ func (r *DistilledMemoryRepository) DeleteExpired(ctx context.Context) (int64, e
 	}
 
 	return rows, nil
+}
+
+// truncateString truncates a string to the specified maximum length.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
