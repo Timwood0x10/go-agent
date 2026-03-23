@@ -106,7 +106,10 @@ func TestDistiller_ResetMetrics(t *testing.T) {
 		{Role: "assistant", Content: "response"},
 	}
 	ctx := context.Background()
-	distiller.DistillConversation(ctx, "test", messages, "default", "user1")
+	_, err := distiller.DistillConversation(ctx, "test", messages, "default", "user1")
+	if err != nil {
+		t.Error("DistillConversation() returned error:", err)
+	}
 
 	// Reset metrics
 	distiller.ResetMetrics()

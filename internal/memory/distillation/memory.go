@@ -27,11 +27,20 @@ type Memory struct {
 	Metadata   map[string]interface{}
 }
 
+// ExtractionMethod defines how an experience was extracted.
+type ExtractionMethod string
+
+const (
+	ExtractionDirect    ExtractionMethod = "direct"    // Direct user-assistant pair
+	ExtractionCrossTurn ExtractionMethod = "cross-turn" // Multi-turn conversation
+)
+
 // Experience represents a problem-solution pair extracted from conversation.
 type Experience struct {
-	Problem    string
-	Solution   string
-	Confidence float64
+	Problem         string
+	Solution        string
+	Confidence      float64
+	ExtractionMethod ExtractionMethod
 }
 
 // ResolutionStrategy defines how to resolve memory conflicts.

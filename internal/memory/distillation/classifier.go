@@ -17,10 +17,12 @@ func NewMemoryClassifier() *MemoryClassifier {
 // It uses keyword-based classification to categorize memories into one of four types.
 //
 // Args:
-//   experience - the experience to classify.
+//
+//	experience - the experience to classify.
 //
 // Returns:
-//   MemoryType - the classified memory type.
+//
+//	MemoryType - the classified memory type.
 func (c *MemoryClassifier) ClassifyMemory(experience *Experience) MemoryType {
 	if experience == nil {
 		return MemoryFact // Default fallback

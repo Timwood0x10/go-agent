@@ -30,4 +30,25 @@ var (
 
 	// ErrTaskNotFound is returned when task does not exist.
 	ErrTaskNotFound = errors.New("task not found")
+
+	// ErrInvalidConversationID is returned when conversation ID is empty.
+	ErrInvalidConversationID = errors.New("invalid conversation ID")
+
+	// ErrNoMessages is returned when no messages are provided for distillation.
+	ErrNoMessages = errors.New("no messages provided")
+
+	// ErrInvalidTenantID is returned when tenant ID is empty.
+	ErrInvalidTenantID = errors.New("invalid tenant ID")
+
+	// ErrInvalidConfig is returned when configuration is invalid.
+	ErrInvalidConfig = errors.New("invalid configuration")
+
+	// ErrDistillationFailed is returned when distillation process fails.
+	ErrDistillationFailed = errors.New("distillation failed")
+
+	// ErrEmbeddingFailed is returned when embedding generation fails.
+	ErrEmbeddingFailed = errors.New("embedding generation failed")
+
+	// ErrVectorSearchFailed is returned when vector search fails.
+	ErrVectorSearchFailed = errors.New("vector search failed")
 )

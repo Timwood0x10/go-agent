@@ -69,24 +69,44 @@ func (e *ExperienceExtractor) ExtractExperiences(messages []Message) []Experienc
 			continue
 		}
 
-		// Direct extraction: user → assistant
-		if next.Role == "assistant" {
-			exp := e.extractDirectExperience(current, next)
-			if exp != nil {
-				experiences = append(experiences, *exp)
-			}
-		}
-
-		// Cross-turn extraction: user → assistant (after 2 messages)
+		// Check if this is a cross-turn scenario (assistant asks for clarification)
+		isCrossTurn := false
 		if e.enableCrossTurn && i+3 < len(messages) {
 			m2 := messages[i+2]
 			m3 := messages[i+3]
 
-			if m3.Role == "assistant" {
-				exp := e.extractCrossTurnExperience(current, next, m2, m3)
-				if exp != nil {
-					experiences = append(experiences, *exp)
+			// Check if next message is a question/clarification and m3 is the actual solution
+			if next.Role == "assistant" && m2.Role == "user" && m3.Role == "assistant" {
+				// If the assistant's response is a question/clarification, skip direct extraction
+				lower := strings.ToLower(next.Content)
+				clarificationIndicators := []string{
+					"?", "can you", "could you", "what", "how", "why",
+					"share", "provide", "show", "tell me", "clarify",
 				}
+				for _, indicator := range clarificationIndicators {
+					if strings.Contains(lower, indicator) {
+						isCrossTurn = true
+						break
+					}
+				}
+
+				if isCrossTurn {
+					// Extract cross-turn experience
+					exp := e.extractCrossTurnExperience(current, next, m2, m3)
+					if exp != nil {
+						experiences = append(experiences, *exp)
+					}
+					// Skip the direct extraction for this iteration
+					continue
+				}
+			}
+		}
+
+		// Direct extraction: user → assistant (when not cross-turn)
+		if next.Role == "assistant" {
+			exp := e.extractDirectExperience(current, next)
+			if exp != nil {
+				experiences = append(experiences, *exp)
 			}
 		}
 	}
@@ -127,9 +147,10 @@ func (e *ExperienceExtractor) extractDirectExperience(user, assistant Message) *
 	solution = e.extractCoreSolution(solution)
 
 	return &Experience{
-		Problem:    problem,
-		Solution:   solution,
-		Confidence: e.calculateConfidence(problem, solution),
+		Problem:         problem,
+		Solution:        solution,
+		Confidence:      e.calculateConfidence(problem, solution),
+		ExtractionMethod: ExtractionDirect,
 	}
 }
 
@@ -174,9 +195,10 @@ func (e *ExperienceExtractor) extractCrossTurnExperience(user, a1, m2, a2 Messag
 	solution = e.extractCoreSolution(solution)
 
 	return &Experience{
-		Problem:    strings.TrimSpace(problem),
-		Solution:   solution,
-		Confidence: e.calculateConfidence(problem, solution),
+		Problem:         strings.TrimSpace(problem),
+		Solution:        solution,
+		Confidence:      e.calculateConfidence(problem, solution),
+		ExtractionMethod: ExtractionCrossTurn,
 	}
 }
 
@@ -221,12 +243,17 @@ func (e *ExperienceExtractor) extractCoreSolution(solution string) string {
 	// If solution is too long, truncate to first few sentences
 	if len(solution) > 500 {
 		// Find first period, newline, or end of first block
-		truncateAt := 500
+		// Leave room for "..." suffix (3 chars)
+		truncateAt := 497
 		for i, c := range solution {
 			if i > 200 && (c == '.' || c == '\n') {
 				truncateAt = i + 1
 				break
 			}
+		}
+		// Ensure we don't exceed 500 characters total including "..."
+		if truncateAt > 497 {
+			truncateAt = 497
 		}
 		solution = solution[:truncateAt] + "..."
 	}

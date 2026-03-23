@@ -18,15 +18,27 @@ func TestConflictResolver_ResolveConflict(t *testing.T) {
 	}{
 		{
 			name:           "nil old memory",
-			newMemory:      &Experience{Problem: "test", Solution: "fix"},
+			newMemory:      &Experience{Problem: "test", Solution: "fix", Confidence: 0.5},
 			existingMemory: nil,
 			expected:       ReplaceOld,
 		},
 		{
-			name:           "existing memory",
-			newMemory:      &Experience{Problem: "test", Solution: "fix"},
-			existingMemory: &Experience{Problem: "test", Solution: "old fix"},
+			name:           "new memory higher confidence",
+			newMemory:      &Experience{Problem: "test", Solution: "fix", Confidence: 0.9},
+			existingMemory: &Experience{Problem: "test", Solution: "old fix", Confidence: 0.5},
 			expected:       ReplaceOld,
+		},
+		{
+			name:           "old memory higher confidence",
+			newMemory:      &Experience{Problem: "test", Solution: "fix", Confidence: 0.5},
+			existingMemory: &Experience{Problem: "test", Solution: "old fix", Confidence: 0.9},
+			expected:       KeepBoth,
+		},
+		{
+			name:           "equal confidence",
+			newMemory:      &Experience{Problem: "test", Solution: "fix", Confidence: 0.7},
+			existingMemory: &Experience{Problem: "test", Solution: "old fix", Confidence: 0.7},
+			expected:       KeepBoth,
 		},
 	}
 

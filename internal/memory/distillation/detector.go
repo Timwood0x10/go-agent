@@ -10,10 +10,12 @@ import (
 // non-problematic conversations like "thanks", "ok", "got it".
 //
 // Args:
-//   text - the user message to analyze.
+//
+//	text - the user message to analyze.
 //
 // Returns:
-//   true if the text appears to be a problem or question, false otherwise.
+//
+//	true if the text appears to be a problem or question, false otherwise.
 func IsProblem(text string) bool {
 	if text == "" {
 		return false
@@ -43,47 +45,62 @@ func IsProblem(text string) bool {
 		"right",
 		"correct",
 		"agree",
-		"agree",
 		"cool",
 		"nice",
 		"sounds good",
 		"that works",
 		"makes sense",
+		"got it, thanks",
+		"thanks for the",
+		"you're welcome",
+		"glad i could",
+		"appreciate",
+		"welcome",
+		"show me",
+		"tell me",
+		"what's happening",
+		"what is this",
 	}
 
+	// Check negative keywords - return false immediately if matched
 	for _, keyword := range negativeKeywords {
 		if lower == keyword || strings.HasPrefix(lower, keyword+" ") || strings.HasSuffix(lower, " "+keyword) {
 			return false
 		}
 	}
 
-	// Problem-related keywords
+	// Problem-related keywords (must be more specific than casual terms)
 	problemKeywords := []string{
 		"error",
 		"issue",
 		"problem",
 		"fix",
-		"how",
-		"why",
-		"what",
-		"can",
 		"help",
 		"unable",
 		"cannot",
+		"can't",
 		"fail",
 		"failed",
 		"broken",
 		"wrong",
 		"not working",
 		"doesn't work",
+		"won't work",
+		"won't start",
 		"won't",
-		"cannot",
-		"can't",
-		"need",
-		"want",
-		"looking for",
-		"trying to",
-		"attempting",
+		"bug",
+		"crash",
+		"exception",
+		"panic",
+		"stack trace",
+		"leak",
+		"timeout",
+		"refused",
+		"denied",
+		"missing",
+		"undefined",
+		"null",
+		"invalid",
 	}
 
 	for _, keyword := range problemKeywords {
@@ -92,8 +109,22 @@ func IsProblem(text string) bool {
 		}
 	}
 
-	// Check for question mark
+	// Check for question mark (but filter out rhetorical questions)
 	if strings.Contains(text, "?") {
+		// Filter out questions that are just acknowledgments
+		questionExclusions := []string{
+			"can you?",
+			"could you?",
+			"would you?",
+			"right?",
+			"ok?",
+			"sure?",
+		}
+		for _, exclusion := range questionExclusions {
+			if strings.HasSuffix(lower, exclusion) {
+				return false
+			}
+		}
 		return true
 	}
 
@@ -116,10 +147,12 @@ func NewQuestionDetector() *QuestionDetector {
 // Detect checks if a message is a question.
 //
 // Args:
-//   text - the message to analyze.
+//
+//	text - the message to analyze.
 //
 // Returns:
-//   true if the message is likely a question.
+//
+//	true if the message is likely a question.
 func (d *QuestionDetector) Detect(text string) bool {
 	return IsProblem(text)
 }
