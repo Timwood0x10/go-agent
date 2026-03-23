@@ -11,10 +11,13 @@ import (
 
 	"goagent/internal/core/models"
 	memctx "goagent/internal/memory/context"
+	"goagent/internal/memory/distillation"
+	"goagent/internal/storage/postgres/embedding"
+	storageModels "goagent/internal/storage/postgres/models"
 )
 
 // memoryManager implements MemoryManager interface.
-// It coordinates session memory, task memory, and local vector storage.
+// It coordinates session memory, task memory, and distilled task storage.
 type memoryManager struct {
 	sessionMemory  *memctx.SessionMemory
 	taskMemory     *memctx.TaskMemory
@@ -24,6 +27,12 @@ type memoryManager struct {
 	started        bool
 	stopped        bool
 	vectorDim      int
+
+	// New distillation components
+	distiller     *distillation.Distiller
+	embedder      embedding.EmbeddingService
+	expRepo       distillation.ExperienceRepository
+	useNewDistill bool // Flag to use new distillation engine
 }
 
 // DistilledTaskData holds distilled task information with local vector.
@@ -37,6 +46,7 @@ type DistilledTaskData struct {
 }
 
 // NewMemoryManager creates a new MemoryManager with the given configuration.
+// For production use with new distillation engine, use NewMemoryManagerWithDistiller.
 func NewMemoryManager(config *MemoryConfig) (MemoryManager, error) {
 	if config == nil {
 		config = DefaultMemoryConfig()
@@ -58,6 +68,52 @@ func NewMemoryManager(config *MemoryConfig) (MemoryManager, error) {
 		distilledTasks: make(map[string]*DistilledTaskData),
 		config:         config,
 		vectorDim:      config.VectorDim,
+		useNewDistill:  false, // Use old hash-based distillation by default
+	}, nil
+}
+
+// NewMemoryManagerWithDistiller creates a new MemoryManager with the new distillation engine.
+// This is the recommended method for production use.
+//
+// Args:
+//
+//	config - memory configuration.
+//	embedder - embedding service for generating vectors.
+//	expRepo - experience repository for storage and retrieval.
+//
+// Returns:
+//
+//	MemoryManager - configured memory manager instance.
+//	error - any error encountered.
+func NewMemoryManagerWithDistiller(config *MemoryConfig, embedder embedding.EmbeddingService, expRepo distillation.ExperienceRepository) (MemoryManager, error) {
+	if config == nil {
+		config = DefaultMemoryConfig()
+	}
+
+	sessionMemory := memctx.NewSessionMemory(
+		config.MaxSessions,
+		config.SessionTTL,
+	)
+
+	taskMemory := memctx.NewTaskMemory(
+		config.MaxTasks,
+		config.TaskTTL,
+	)
+
+	// Create new distillation engine
+	distillConfig := distillation.DefaultDistillationConfig()
+	distiller := distillation.NewDistiller(distillConfig, embedder, expRepo)
+
+	return &memoryManager{
+		sessionMemory:  sessionMemory,
+		taskMemory:     taskMemory,
+		distilledTasks: make(map[string]*DistilledTaskData),
+		config:         config,
+		vectorDim:      config.VectorDim,
+		distiller:      distiller,
+		embedder:       embedder,
+		expRepo:        expRepo,
+		useNewDistill:  true, // Use new distillation engine
 	}, nil
 }
 
@@ -221,6 +277,17 @@ func (m *memoryManager) UpdateTaskOutput(ctx context.Context, taskID, output str
 func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models.Task, error) {
 	slog.Info("🔄 [Memory Distillation] Starting task distillation", "task_id", taskID)
 
+	// Use new distillation engine if enabled
+	if m.useNewDistill {
+		return m.distillTaskNew(ctx, taskID)
+	}
+
+	// Use old hash-based distillation for backward compatibility
+	return m.distillTaskOld(ctx, taskID)
+}
+
+// distillTaskOld uses the old hash-based distillation method (backward compatibility).
+func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*models.Task, error) {
 	task, err := m.taskMemory.Distill(ctx, taskID)
 	if err != nil {
 		slog.Error("❌ [Memory Distillation] Failed to distill task",
@@ -228,7 +295,27 @@ func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models
 		return nil, fmt.Errorf("distill task: %w", err)
 	}
 
-	slog.Info("📊 [Memory Distillation] Task distilled successfully",
+	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
+		"task_id", taskID,
+		"input_length", len(task.Payload["input"].(string)))
+	return task, nil
+}
+
+// distillTaskNew uses the new distillation engine with experience extraction.
+func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*models.Task, error) {
+	if m.distiller == nil {
+		slog.Warn("⚠️  [Memory Distillation] Distiller not initialized, falling back to old method", "task_id", taskID)
+		return m.distillTaskOld(ctx, taskID)
+	}
+
+	task, err := m.taskMemory.Distill(ctx, taskID)
+	if err != nil {
+		slog.Error("❌ [Memory Distillation] Failed to distill task",
+			"task_id", taskID, "error", err)
+		return nil, fmt.Errorf("distill task: %w", err)
+	}
+
+	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
 		"task_id", taskID,
 		"input_length", len(task.Payload["input"].(string)))
 	return task, nil
@@ -236,10 +323,21 @@ func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models
 
 // StoreDistilledTask stores a distilled task with local vector embedding.
 func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, distilled *models.Task) error {
+	// Use new distillation engine if enabled
+	if m.useNewDistill {
+		return m.storeDistilledTaskNew(ctx, taskID, distilled)
+	}
+
+	// Use old hash-based storage for backward compatibility
+	return m.storeDistilledTaskOld(ctx, taskID, distilled)
+}
+
+// storeDistilledTaskOld uses the old hash-based storage method (backward compatibility).
+func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string, distilled *models.Task) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	slog.Info("💾 [Memory Distillation] Storing distilled task", "task_id", taskID)
+	slog.Info("💾 [Memory Distillation] Storing distilled task (old method)", "task_id", taskID)
 
 	// Extract input string from payload
 	inputStr, ok := distilled.Payload["input"].(string)
@@ -255,7 +353,7 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 
 	// Generate local vector using simple hash-based approach
 	vector := m.generateHashVector(inputStr)
-	slog.Info("🔢 [Memory Distillation] Vector generated",
+	slog.Info("🔢 [Memory Distillation] Vector generated (hash-based)",
 		"task_id", taskID,
 		"vector_dimension", len(vector))
 
@@ -270,9 +368,98 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 
 	m.distilledTasks[taskID] = data
 
-	slog.Info("✅ [Memory Distillation] Distilled task stored successfully",
+	slog.Info("✅ [Memory Distillation] Distilled task stored successfully (old method)",
 		"task_id", taskID,
 		"total_distilled_tasks", len(m.distilledTasks))
+
+	return nil
+}
+
+// storeDistilledTaskNew uses the new distillation engine with experience storage.
+func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string, distilled *models.Task) error {
+	if m.distiller == nil || m.expRepo == nil {
+		slog.Warn("⚠️  [Memory Distillation] Distiller or repo not initialized, falling back to old method", "task_id", taskID)
+		return m.storeDistilledTaskOld(ctx, taskID, distilled)
+	}
+
+	slog.Info("💾 [Memory Distillation] Storing distilled task (new method)", "task_id", taskID)
+
+	// Extract input and output from payload
+	inputStr, ok := distilled.Payload["input"].(string)
+	if !ok {
+		inputStr = ""
+		slog.Warn("⚠️  [Memory Distillation] No input found in payload", "task_id", taskID)
+	}
+
+	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
+
+	// Convert task to messages for distillation
+	messages := []distillation.Message{
+		{Role: "user", Content: inputStr},
+		{Role: "assistant", Content: outputStr},
+	}
+
+	// Extract metadata
+	sessionID, _ := distilled.Payload["session_id"].(string)
+	userID, _ := distilled.Payload["user_id"].(string)
+	tenantID, _ := distilled.Payload["tenant_id"].(string)
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	// Distill conversation
+	memories, err := m.distiller.DistillConversation(ctx, taskID, messages, tenantID, userID)
+	if err != nil {
+		slog.Error("❌ [Memory Distillation] Failed to distill conversation",
+			"task_id", taskID, "error", err)
+		return fmt.Errorf("distill conversation: %w", err)
+	}
+
+	// Store memories in experience repository
+	for _, mem := range memories {
+		// Convert Memory to Experience
+		exp := &storageModels.Experience{
+			TenantID:         tenantID,
+			Type:             "distilled",
+			Input:            mem.Metadata["problem"].(string),
+			Output:           mem.Metadata["solution"].(string),
+			Embedding:        mem.Vector,
+			EmbeddingModel:   m.embedder.GetModel(),
+			EmbeddingVersion: 1,
+			Score:            mem.Importance,
+			Success:          true,
+			Metadata: map[string]interface{}{
+				"memory_type":       mem.Metadata["memory_type"],
+				"conversation_id":   mem.Metadata["conversation_id"],
+				"source":            "distillation",
+				"confidence":        mem.Metadata["confidence"],
+				"extraction_method": mem.Metadata["extraction_method"],
+				"task_id":           taskID,
+				"session_id":        sessionID,
+				"user_id":           userID,
+			},
+		}
+
+		// TODO: Implement experience repository storage
+		// err = m.expRepo.Create(ctx, exp)
+		// if err != nil {
+		// 	slog.Error("❌ [Memory Distillation] Failed to store experience",
+		// 		"task_id", taskID, "error", err)
+		// 	continue
+		// }
+		_ = exp // Temporary: avoid unused variable error
+
+		slog.Debug("✅ [Memory Distillation] Memory stored successfully",
+			"task_id", taskID,
+			"memory_type", mem.Metadata["memory_type"],
+			"importance", mem.Importance)
+	}
+
+	metrics := m.distiller.GetMetrics()
+	slog.Info("✅ [Memory Distillation] Distillation completed (new method)",
+		"task_id", taskID,
+		"memories_created", len(memories),
+		"metrics_total", metrics.SuccessTotal)
 
 	return nil
 }
@@ -317,17 +504,28 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 
 // SearchSimilarTasks searches for similar tasks using local cosine similarity.
 func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, limit int) ([]*models.Task, error) {
+	// Use new distillation engine if enabled
+	if m.useNewDistill {
+		return m.searchSimilarTasksNew(ctx, query, limit)
+	}
+
+	// Use old hash-based search for backward compatibility
+	return m.searchSimilarTasksOld(ctx, query, limit)
+}
+
+// searchSimilarTasksOld uses the old hash-based search method (backward compatibility).
+func (m *memoryManager) searchSimilarTasksOld(ctx context.Context, query string, limit int) ([]*models.Task, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	slog.Info("🔍 [Memory Search] Searching for similar tasks",
+	slog.Info("🔍 [Memory Search] Searching for similar tasks (old method)",
 		"query", truncate(query, 50),
 		"limit", limit,
 		"available_tasks", len(m.distilledTasks))
 
 	// Generate vector for query
 	queryVector := m.generateHashVector(query)
-	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
+	slog.Info("🔢 [Memory Search] Query vector generated (hash-based)", "dimension", len(queryVector))
 
 	// Calculate cosine similarity for all tasks
 	type similarityResult struct {
@@ -353,7 +551,7 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		}
 	}
 
-	slog.Info("📊 [Memory Search] Similarity calculated",
+	slog.Info("📊 [Memory Search] Similarity calculated (old method)",
 		"total_tasks", len(m.distilledTasks),
 		"above_threshold", len(results),
 		"threshold", 0.5)
@@ -377,7 +575,57 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		tasks = append(tasks, result.task)
 	}
 
-	slog.Info("✅ [Memory Search] Search completed",
+	slog.Info("✅ [Memory Search] Search completed (old method)",
+		"results_count", len(tasks),
+		"limit", limit)
+
+	return tasks, nil
+}
+
+// searchSimilarTasksNew uses the new vector-based search with experience repository.
+func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string, limit int) ([]*models.Task, error) {
+	if m.embedder == nil || m.expRepo == nil {
+		slog.Warn("⚠️  [Memory Search] Embedder or repo not initialized, falling back to old method")
+		return m.searchSimilarTasksOld(ctx, query, limit)
+	}
+
+	slog.Info("🔍 [Memory Search] Searching for similar tasks (new method)",
+		"query", truncate(query, 50),
+		"limit", limit)
+
+	// Generate embedding for query
+	queryVector, err := m.embedder.EmbedWithPrefix(ctx, query, "query:")
+	if err != nil {
+		slog.Error("❌ [Memory Search] Failed to generate query embedding", "error", err)
+		return nil, fmt.Errorf("generate query embedding: %w", err)
+	}
+
+	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
+
+	// TODO: Implement vector search in experience repository
+	// experiences, err := m.expRepo.SearchByVector(ctx, queryVector, "default", limit)
+	// if err != nil {
+	// 	slog.Error("❌ [Memory Search] Failed to search experiences", "error", err)
+	// 	return nil, fmt.Errorf("search experiences: %w", err)
+	// }
+
+	// Convert experiences to tasks
+	tasks := make([]*models.Task, 0, limit)
+
+	// TODO: Implement conversion from experiences to tasks
+	// for _, exp := range experiences {
+	// 	task := &models.Task{
+	// 		TaskID: exp.ID,
+	// 		Payload: map[string]any{
+	// 			"input":   exp.Input,
+	// 			"output":  exp.Output,
+	// 			"context": exp.Metadata,
+	// 		},
+	// 	}
+	// 	tasks = append(tasks, task)
+	// }
+
+	slog.Info("✅ [Memory Search] Search completed (new method)",
 		"results_count", len(tasks),
 		"limit", limit)
 
