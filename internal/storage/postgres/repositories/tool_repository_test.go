@@ -1306,11 +1306,22 @@ func TestToolRepository_ConcurrentOperations(t *testing.T) {
 
 	// Concurrent updates
 	for i := 0; i < 2; i++ {
-		go func() {
-			tool.Name = fmt.Sprintf("concurrent-tool-%d", i)
-			err := repo.Update(ctx, tool)
+		go func(idx int) {
+			toolCopy := &storage_models.Tool{
+				ID:               tool.ID,
+				TenantID:         tool.TenantID,
+				Name:             fmt.Sprintf("concurrent-tool-%d", idx),
+				Description:      tool.Description,
+				Embedding:        tool.Embedding,
+				EmbeddingModel:   tool.EmbeddingModel,
+				EmbeddingVersion: tool.EmbeddingVersion,
+				UsageCount:       tool.UsageCount,
+				SuccessRate:      tool.SuccessRate,
+				CreatedAt:        tool.CreatedAt,
+			}
+			err := repo.Update(ctx, toolCopy)
 			errCh <- err
-		}()
+		}(i)
 	}
 
 	// Concurrent vector searches

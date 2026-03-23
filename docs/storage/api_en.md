@@ -485,7 +485,7 @@ config := &postgres.Config{
 
 pool, err := postgres.NewPool(config)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 defer pool.Close()
 ```
@@ -532,7 +532,7 @@ queryEmbedding := []float64{0.1, 0.2, ...}
 // Vector retrieval
 results, err := kbRepo.SearchByVector(ctx, queryEmbedding, "tenant-001", 10)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 for _, result := range results {
@@ -577,7 +577,7 @@ req := &services.SearchRequest{
 
 results, err := retrievalService.Search(ctx, req)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 ```
 
@@ -639,7 +639,7 @@ anthropic_api_key: sk-yyy456
 adapter := &adapters.SecretAdapter{}
 items, err := adapter.ParseFrom(data)
 if err != nil {
-    log.Fatal(err)
+    slog.Error(err)
 }
 
 // Batch import

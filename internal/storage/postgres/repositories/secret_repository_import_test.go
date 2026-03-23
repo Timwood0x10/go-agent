@@ -4,7 +4,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -18,7 +18,7 @@ func TestSecretRepository_Import_JSON(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database:", "error", err)
 		}
 	}()
 
@@ -64,7 +64,7 @@ func TestSecretRepository_Import_YAML(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -104,7 +104,7 @@ func TestSecretRepository_Import_CSV(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -141,7 +141,7 @@ func TestSecretRepository_Import_DuplicateKeys(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -183,7 +183,7 @@ func TestSecretRepository_Import_InvalidFormat(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -206,7 +206,7 @@ func TestSecretRepository_Import_EmptyData(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -229,7 +229,7 @@ func TestSecretRepository_Import_EmptyTenantID(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -261,7 +261,7 @@ func TestSecretRepository_Import_EmptySecretKey(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -293,7 +293,7 @@ func TestSecretRepository_Import_EmptySecretValue(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -325,7 +325,7 @@ func TestSecretRepository_Import_InvalidExpiresAt(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -358,7 +358,7 @@ func TestSecretRepository_Import_WithExpiration(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -397,7 +397,7 @@ func TestSecretRepository_Import_MixedValidAndInvalid(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 
@@ -450,7 +450,7 @@ func TestSecretRepository_Import_AutoDetectFormat(t *testing.T) {
 	db := setupTestDB(t)
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatal("Warning: Failed to close database: ", err)
+			slog.Error("Warning: Failed to close database: ", "error", err)
 		}
 	}()
 

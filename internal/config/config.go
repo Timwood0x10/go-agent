@@ -17,6 +17,7 @@ type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	LLM        LLMConfig        `yaml:"llm"`
 	Agents     AgentsConfig     `yaml:"agents"`
+	Tools      ToolsConfig      `yaml:"tools"`
 	Prompts    PromptsConfig    `yaml:"prompts"`
 	Output     OutputConfig     `yaml:"output"`
 	Validation ValidationConfig `yaml:"validation"`
@@ -435,4 +436,18 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ToolsConfig holds tool configuration for agents.
+type ToolsConfig struct {
+	Defaults []string                   `yaml:"defaults"` // Default tools for all agents
+	Agents   map[string]AgentToolConfig `yaml:"agents"`   // Agent-specific tool assignments
+}
+
+// AgentToolConfig holds tool configuration for a specific agent.
+type AgentToolConfig struct {
+	Name         string   `yaml:"name"`          // Agent display name
+	Description  string   `yaml:"description"`   // Agent description
+	SystemPrompt string   `yaml:"system_prompt"` // Custom system prompt for this agent
+	Tools        []string `yaml:"tools"`         // List of tool names this agent can use
 }

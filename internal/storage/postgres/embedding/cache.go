@@ -234,17 +234,6 @@ func (c *EmbeddingCache) IsEnabled() bool {
 	return c.enabled
 }
 
-// sha256Sum calculates SHA256 hash.
-// nolint: unused // Kept for potential future use
-func sha256Sum(data []byte) [32]byte {
-	var hash [32]byte
-	// Simple hash implementation
-	for i, b := range data {
-		hash[i%32] ^= b
-	}
-	return hash
-}
-
 // MemoryCache provides in-memory caching as a fallback.
 type MemoryCache struct {
 	mu       sync.RWMutex

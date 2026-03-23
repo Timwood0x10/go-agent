@@ -304,6 +304,54 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 		// Create indexes for embedding_dead_letter
 		`CREATE INDEX idx_embedding_dead_letter_tenant ON embedding_dead_letter(tenant_id)`,
 		`CREATE INDEX idx_embedding_dead_letter_created ON embedding_dead_letter(created_at)`,
+
+		// 9. distilled_memories table - Distilled conversation memories for cross-session context
+		`CREATE TABLE IF NOT EXISTS distilled_memories (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id TEXT NOT NULL,
+			user_id TEXT,
+			session_id VARCHAR(64) NOT NULL,
+			content TEXT NOT NULL,
+			embedding VECTOR(1024) NOT NULL,
+			embedding_model TEXT NOT NULL DEFAULT 'intfloat/e5-large',
+			embedding_version INT NOT NULL DEFAULT 1,
+			memory_type VARCHAR(50) NOT NULL CHECK (memory_type IN ('preference', 'interaction', 'profile', 'knowledge')),
+			importance FLOAT DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
+			metadata JSONB DEFAULT '{}'::jsonb,
+			access_count INTEGER DEFAULT 0,
+			last_accessed_at TIMESTAMP,
+			expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '90 days',
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+
+		`ALTER TABLE distilled_memories ENABLE ROW LEVEL SECURITY`,
+
+		`CREATE POLICY tenant_isolation_distilled_memories ON distilled_memories
+		USING (tenant_id = current_setting('app.tenant_id', true))`,
+
+		// Create indexes for distilled_memories
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_embedding
+		ON distilled_memories
+		USING ivfflat (embedding vector_cosine_ops)
+		WITH (lists = 100)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_user
+		ON distilled_memories(user_id, created_at)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_session
+		ON distilled_memories(session_id)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_type
+		ON distilled_memories(memory_type)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_importance
+		ON distilled_memories(importance DESC)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_expires
+		ON distilled_memories(expires_at) WHERE expires_at IS NOT NULL`,
+
+		`CREATE INDEX IF NOT EXISTS idx_distilled_memories_tenant
+		ON distilled_memories(tenant_id)`,
 	}
 
 	// Execute migrations

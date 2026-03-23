@@ -38,9 +38,6 @@ type RAG struct {
 // VectorIndex is a simple in-memory vector index.
 type VectorIndex struct {
 	entries []*KnowledgeEntry
-	// mu is unused but kept for potential future use
-	// nolint: unused // Kept for potential future use
-	mu sync.RWMutex
 }
 
 // Option is a function that configures RAG.

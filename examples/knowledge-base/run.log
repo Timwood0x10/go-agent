@@ -1,276 +1,116 @@
-go run main.go --save ./example.md
-2026/03/19 14:40:53 Importing document: ./example.md
-2026/03/19 14:40:53 Document split into 7 chunks
-2026/03/19 14:40:53 Processing chunk 1/7...
-2026/03/19 14:40:53 Processing chunk 2/7...
-2026/03/19 14:40:53 Processing chunk 3/7...
-2026/03/19 14:40:53 Processing chunk 4/7...
-2026/03/19 14:40:53 Processing chunk 5/7...
-2026/03/19 14:40:53 Processing chunk 6/7...
-2026/03/19 14:40:53 Processing chunk 7/7...
-2026/03/19 14:40:54 Successfully imported 7/7 chunks
-2026/03/19 14:40:54 Document imported successfully. Document ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2
-
-
-----
-
-
-混合检索是如何设计的呢？
-2026/03/19 14:41:48 Searching for: 混合检索是如何设计的呢？ (tenant: default)
-2026/03/19 14:41:48 INFO Checking embedding client client_nil=false enabled=true
-2026/03/19 14:41:48 INFO Checking embedding circuit breaker
-2026/03/19 14:41:48 INFO Getting embeddings for queries
-2026/03/19 14:41:48 INFO Embeddings obtained original_len=1024 rewritten_len=1024
-2026/03/19 14:41:48 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=5
-2026/03/19 14:41:48 INFO Vector search query vector_length=9726 vector_preview=[0.027615,-0.022419,0.029855,0.011216,-0.026503,0.038523,-0.051842,-0.010105,-0.022080,0.008727,0.04
-2026/03/19 14:41:48 INFO Vector search query succeeded
-2026/03/19 14:41:48 INFO Vector search completed rows_scanned=5 chunks_returned=5
-2026/03/19 14:41:48 INFO Vector search succeeded results_count=5
-2026/03/19 14:41:48 INFO Before score filter results_count=5 min_score=0.6
-2026/03/19 14:41:48 INFO Result before filter index=0 score=0.8510771013407791 content=" LLM生成答案\n```\n\n### 2. 语义搜索\n\n为应用添加智能语义搜索功能：\n\n```go\n/..."
-2026/03/19 14:41:48 INFO Result before filter index=1 score=0.8438935038472272 content=" queryEmbedding, tenantID, 10)\n```\n\n### 2. 多租户隔离\n\n..."
-2026/03/19 14:41:48 INFO Result before filter index=2 score=0.8273870533436413 content="# 示例文档 - GoAgent Storage模块\n\n## 概述\n\nGoAgent Storage..."
-2026/03/19 14:41:48 INFO Result before filter index=3 score=0.827012706917361 content="# 性能优化\n\n### 1. 索引优化\n\n确保关键字段有索引：\n\n```sql\nCREATE IND..."
-2026/03/19 14:41:48 INFO Result before filter index=4 score=0.8256451252199051 content="自动加密**: 自动加密敏感字段\n- **密钥轮换**: 支持定期轮换密钥\n\n## 架构设计\n\n##..."
-2026/03/19 14:41:48 INFO After score filter results_count=5
-2026/03/19 14:41:48 Search returned 5 results
-2026/03/19 14:41:48   Result 0: score=0.851, content= LLM生成答案
-```
-
-### 2. 语义搜索
-
-为应用添加智能语义搜索功能：
-
-```go
-/...
-2026/03/19 14:41:48   Result 1: score=0.844, content= queryEmbedding, tenantID, 10)
-```
-
-### 2. 多租户隔离
-
-...
-2026/03/19 14:41:48   Result 2: score=0.827, content=# 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage...
-2026/03/19 14:41:48   Result 3: score=0.827, content=# 性能优化
-
-### 1. 索引优化
-
-确保关键字段有索引：
-
-```sql
-CREATE IND...
-2026/03/19 14:41:48   Result 4: score=0.826, content=自动加密**: 自动加密敏感字段
-- **密钥轮换**: 支持定期轮换密钥
-
-## 架构设计
-
-##...
-
-Found 5 relevant results:
-
-[1] Score: 0.851
-Content:  LLM生成答案
-```
-
-### 2. 语义搜索
-
-为应用添加智能语义搜索功能：
-
-```go
-// 语义搜索
-results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
-
-// 混合搜索
-results := retrievalService.Search(ctx, req)
-```
-
-### 3. 推荐系统
-
-基于向量相似度的内容推荐：
-
-```go
-// 找到相似内容
-similarItems := kbRepo.SearchByVector(ctx, itemEmbedding, tenantID, 5)
-```
-
-### 4. 知识库管理
-
-构建企业知识库或文档管理系统：
-
-```go
-// 导入文档
-kb.ImportDocuments(ctx, tenantID, docPath)
-
-// 知识问答
-answer := kb.Chat(ctx, tenantID, question)
-```
-
-## 性能优化
-
-### 1. 索引优化
-
-确保关键字段有索引：
-
-```sql
-CREATE IND
-Source: document
-
-[2] Score: 0.844
-Content:  queryEmbedding, tenantID, 10)
-```
-
-### 2. 多租户隔离
-
-通过RLS（Row Level Security）和Tenant Guard实现严格的多租户数据隔离：
-
-- **自动隔离**: 所有操作自动应用租户过滤
-- **双重保护**: 数据库RLS + 应用层Tenant Guard
-- **安全验证**: 验证所有跨租户访问
-
-示例：
-```go
-// 设置租户上下文
-tenantGuard.SetTenantContext(ctx, "tenant-001")
-
-// 后续所有操作自动隔离
-results := kbRepo.SearchByVector(ctx, embedding, "tenant-001", limit)
-```
-
-### 3. 混合检索
-
-结合向量检索和BM25全文检索，提高检索准确性：
-
-- **向量检索**: 基于语义相似度
-- **BM25检索**: 基于关键词匹配
-- **结果融合**: 使用RRF算法合并结果
-- **时间衰减**: 新知识优先
-
-示例：
-```go
-req := &SearchReque
-Source: document
-
-[3] Score: 0.827
-Content: # 示例文档 - GoAgent Storage模块
-
-## 概述
-
-GoAgent Storage模块是一个基于PostgreSQL + pgvector的高性能向量存储和检索系统，为AI应用提供强大的数据持久化能力。
-
-## 核心功能
-
-### 1. 向量存储与检索
-
-Storage模块使用pgvector扩展实现高效的向量相似度搜索。它支持：
-
-- **高维向量存储**: 支持1024维向量存储
-- **余弦相似度**: 使用余弦相似度进行向量检索
-- **批量操作**: 支持批量插入和检索
-- **索引优化**: 自动创建向量索引提高查询性能
-
-示例：
-```go
-// 创建知识块
-chunk := &KnowledgeChunk{
-    Content:   "这是知识内容",
-    Embedding: []float64{0.1, 0.2, ...}, // 1024维向量
-}
-
-// 向量检索
-results := kbRepo.SearchByVector(ctx, queryEmbedding, tenantID, 10)
-```
-
-### 2. 多租户隔离
-
-
-Source: document
-
-[4] Score: 0.827
-Content: # 性能优化
-
-### 1. 索引优化
-
-确保关键字段有索引：
-
-```sql
-CREATE INDEX idx_tenant_id ON knowledge_chunks_1024(tenant_id);
-CREATE INDEX idx_document_id ON knowledge_chunks_1024(document_id);
-CREATE INDEX idx_embedding_status ON knowledge_chunks_1024(embedding_status);
-```
-
-### 2. 批量操作
-
-使用批量接口提高性能：
-
-```go
-// 批量插入
-kbRepo.CreateBatch(ctx, chunks)
-
-// 批量检索
-embeddings := embeddingClient.EmbedBatch(ctx, texts)
-```
-
-### 3. 连接池配置
-
-优化连接池参数：
-
-```go
-config := &postgres.Config{
-    MaxOpenConns:    25,
-    MaxIdleConns:    10
-Source: document
-
-[5] Score: 0.826
-Content: 自动加密**: 自动加密敏感字段
-- **密钥轮换**: 支持定期轮换密钥
-
-## 架构设计
-
-### 分层架构
-
-Storage模块采用清晰的分层架构：
-
-```
-应用层 (Application)
-    ↓
-服务层 (Services)
-    ↓
-数据访问层 (Repositories)
-    ↓
-核心层 (Core)
-    ↓
-PostgreSQL + pgvector
-```
-
-### 核心组件
-
-1. **Pool**: 数据库连接池管理
-2. **TenantGuard**: 租户隔离守卫
-3. **RetrievalGuard**: 检索限流熔断
-4. **Repository**: 统一数据访问接口
-5. **Service**: 业务逻辑服务
-
-## 使用场景
-
-### 1. RAG系统
-
-Storage模块非常适合构建RAG（Retrieval-Augmented Generation）系统：
-
-```
-用户问题 → 向量化 → 检索知识库 → 构建上下文 → LLM生成答案
-```
-
-### 2. 语义搜索
-
-为应用添加智能语义搜索功能：
-
-```go
-
----
-
- go run main.go --list
-2026/03/19 14:42:53 Documents:
-2026/03/19 14:42:53   - ID: ee277832-be1c-42e0-a1f1-ebcf2a3cd4c2, Source: ./example.md, Chunks: 7
+go run main.go --chat
+2026/03/22 11:15:34 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/22 11:15:34 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/22 11:15:34 Memory enabled - Conversation history and distillation supported
+2026/03/22 11:15:34 INFO Memory manager started
+2026/03/22 11:15:34 Session created: session_default_1774149334921880000
+
+You: 我叫小刚，我 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
+2026/03/22 11:16:20 RAG check: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 -> needs RAG: true
+2026/03/22 11:16:20 Searching for: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 (tenant: default)
+2026/03/22 11:16:20 INFO SimpleRetrievalService.Search tenant_id=default query=是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发 top_k=10 min_score=0.4
+2026/03/22 11:16:20 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:16:20 INFO Vector search query vector_length=9746 vector_preview=[0.041211,-0.051733,-0.014097,-0.100258,0.043133,0.017655,0.000738,-0.015183,-0.087653,-0.002459,0.0
+2026/03/22 11:16:20 INFO Vector search query succeeded
+2026/03/22 11:16:20 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:16:20 INFO Search completed results_count=5 min_score=0.4
+2026/03/22 11:16:20 Search returned 5 results
+
+Assistant:
+根据提供的知识基因和对话记录，前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发。
+
+You: go-agent 是什么呢？
+2026/03/22 11:16:35 RAG check: go-agent 是什么呢？ -> needs RAG: true
+2026/03/22 11:16:35 Searching for: go-agent 是什么呢？ (tenant: default)
+2026/03/22 11:16:35 INFO SimpleRetrievalService.Search tenant_id=default query="go-agent 是什么呢？" top_k=10 min_score=0.4
+2026/03/22 11:16:35 INFO Using precision mode query="go-agent 是什么呢？"
+2026/03/22 11:16:35 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/22 11:16:35 INFO Vector search query vector_length=9742 vector_preview=[0.042752,-0.041852,-0.010353,-0.080358,0.008310,-0.054529,-0.026539,0.074596,-0.048974,0.031618,-0.
+2026/03/22 11:16:35 INFO Vector search query succeeded
+2026/03/22 11:16:35 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/22 11:16:35 Search returned 10 results
+
+Assistant:
+根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
+
+You: 如纠正      
+
+You: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置多种LLM tools,提供了知识库等多个例子,对开发者很友好.
+2026/03/22 11:17:38 🔧 Detected correction request
+2026/03/22 11:17:38 Searching for: 纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好. (tenant: default)
+2026/03/22 11:17:38 INFO SimpleRetrievalService.Search tenant_id=default query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好." top_k=10 min_score=0.4
+2026/03/22 11:17:38 INFO Using precision mode query="纠正，go-agent是golang实现的,一个通用的AIagent框架,内置LLM tools,提供了知识库等多个例子,对开发友好."
+2026/03/22 11:17:38 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=10
+2026/03/22 11:17:38 INFO Vector search query vector_length=9712 vector_preview=[0.014754,-0.012315,-0.009119,-0.072667,-0.015210,-0.007071,-0.053259,0.074977,-0.020428,0.047134,-0
+2026/03/22 11:17:38 INFO Vector search query succeeded
+2026/03/22 11:17:38 INFO Vector search completed rows_scanned=10 chunks_returned=10
+2026/03/22 11:17:38 Search returned 10 results
+2026/03/22 11:17:38 📝 Found 10 chunks for correction
+
+Assistant:
+我检测到你想要纠正知识。搜索到了 10 个相关结果。纠正功能已记录，请继续对话。
+
+You: go我想学习golang,但是不知道go有什么编码贵发
+2026/03/22 11:18:04 RAG check: 我想学习golang,但是不知道go有什么编码贵发 -> needs RAG: true
+2026/03/22 11:18:04 Searching for: 我想学习golang,但是不知道go有什么编码贵发 (tenant: default)
+2026/03/22 11:18:04 INFO SimpleRetrievalService.Search tenant_id=default query=我想学习golang,但是不知道go有什么编码贵发 top_k=10 min_score=0.4
+2026/03/22 11:18:04 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:18:04 INFO Vector search query vector_length=9734 vector_preview=[0.001097,-0.053108,-0.009837,-0.059723,0.031265,-0.045062,-0.049547,0.025612,-0.095053,0.037275,-0.
+2026/03/22 11:18:04 INFO Vector search query succeeded
+2026/03/22 11:18:04 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:18:04 INFO Search completed results_count=10 min_score=0.4
+2026/03/22 11:18:04 Search returned 10 results
+2026/03/22 11:18:09 🎯 [Memory Distillation] Conversation rounds reached threshold (3/3), triggering memory distillation...
+2026/03/22 11:18:09 🔄 [Memory Distillation] Starting distillation for session: session_default_1774149334921880000
+2026/03/22 11:18:09 📊 [Memory Distillation] Found 8 messages to distill
+2026/03/22 11:18:09 📝 [Memory Distillation] Distillation content preview (1770 characters): Conversation Summary:
+
+system: New session started
+user: 是前端开发工程师技术栈是JS,TS,VUE，不喜欢后端开发
+assistant: 根据...
+2026/03/22 11:18:09 🔢 [Memory Distillation] Embedding vector dimensions: 1024
+2026/03/22 11:18:09 ✅ [Memory Distillation] Distillation completed!
+2026/03/22 11:18:09    📄 Document ID: 39bfa17e-1e88-4cce-a116-675ec6b46fac
+2026/03/22 11:18:09    📏 Content length: 1770 characters
+2026/03/22 11:18:09    🧠 Embedding dimensions: 1024
+2026/03/22 11:18:09    💾 Storage location: knowledge_chunks_1024
+2026/03/22 11:18:09    🔍 Can be retrieved via vector search
+
+Assistant:
+根据提供的知识基因和对话记录，GoAgent是什么呢？可以知道它是一个通用的AI agent开发框架。以YML驱动。
+
+为了解决您的问题，“go有什么编码贵发”，请注意，在Go的编程实践中，优先考虑的是可维护性、可靠性和性能，而不是仅仅优化性能。所有代码必须通过 `go vet`、`staticcheck` 和 `golangci-lint` 进行验证，并且测试覆盖率是指引，但不是目标。
+
+Go 语言的标准和最佳实践强调使用 `gofmt` 和 `goimports` 对代码进行 formatting 和自动化管理，以确保代码质量和一致性。
+
+如果您想在AI应用中构建向量存储和检索系统，可以考虑使用GoAgent Storage模块，它支持高维向量存储、时间衰减等功能。或者，您可以 exploring Rust的库和框架来实现类似的功能。
+
+但是，如果您不喜欢Python，Rust可能是一个更好的选择，因为它提供了一个不同的编程范式和强大的多任务能力。
+
+因此，Go Agent 的重点在于使用 YML 运行，它提供了一种通用的、易于维护的 AIAgent 开发框架。
+
+You:
+
+
+
+---new chat session ----
+go run main.go --chat
+2026/03/22 11:21:22 Chat mode. Enter your questions (type 'exit' to quit):
+2026/03/22 11:21:22 LLM enabled - Using RAG (Retrieval + Generation) mode
+2026/03/22 11:21:22 Memory enabled - Conversation history and distillation supported
+2026/03/22 11:21:22 INFO Memory manager started
+2026/03/22 11:21:22 Session created: session_default_1774149682903988000
+
+You: 小刚是谁，有什么爱好，职业是什么
+2026/03/22 11:21:43 RAG check: 小刚是谁，有什么爱好，职业是什么 -> needs RAG: true
+2026/03/22 11:21:43 Searching for: 小刚是谁，有什么爱好，职业是什么 (tenant: default)
+2026/03/22 11:21:43 INFO SimpleRetrievalService.Search tenant_id=default query=小刚是谁，有什么爱好，职业是什么 top_k=10 min_score=0.4
+2026/03/22 11:21:43 INFO SearchByVector called embedding_length=1024 tenant_id=default limit=50
+2026/03/22 11:21:43 INFO Vector search query vector_length=9738 vector_preview=[0.003788,-0.078203,-0.006410,0.016892,-0.005063,-0.023641,-0.026315,0.001353,-0.016892,0.077993,0.0
+2026/03/22 11:21:43 INFO Vector search query succeeded
+2026/03/22 11:21:43 INFO Vector search completed rows_scanned=50 chunks_returned=50
+2026/03/22 11:21:43 INFO Search completed results_count=1 min_score=0.4
+2026/03/22 11:21:43 Search returned 1 results
+
+Assistant:
+小刚的职业信息没有在提供的知识基因中明确记录。但是，我们可以从之前的小talk中知道，小刚的技术栈是JS，TS，VUE。

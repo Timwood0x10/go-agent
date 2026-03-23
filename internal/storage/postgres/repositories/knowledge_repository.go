@@ -24,6 +24,9 @@ type KnowledgeRepository struct {
 	dbPool *sql.DB
 }
 
+// Ensure KnowledgeRepository implements KnowledgeRepositoryInterface.
+var _ KnowledgeRepositoryInterface = (*KnowledgeRepository)(nil)
+
 // NewKnowledgeRepository creates a new KnowledgeRepository instance.
 // Args:
 // db - database connection or transaction implementing DBTX interface.

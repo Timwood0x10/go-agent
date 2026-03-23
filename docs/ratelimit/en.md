@@ -2,231 +2,175 @@
 
 ## 1. Overview
 
-The RateLimiter module provides rate limiting and backpressure mechanisms to control request rates and prevent system overload.
+The RateLimiter module provides rate limiting and backpressure mechanisms for controlling request rates and preventing system overload.
 
 ## 2. Rate Limiting Strategies
 
 | Strategy | Use Case | Implementation |
 |----------|----------|----------------|
-| Token Bucket | LLM request rate limiting | Smooth rate |
+| Token Bucket | LLM rate limiting | Smooth rate |
 | Sliding Window | Global QPS control | Precise counting |
-| Semaphore | Agent concurrency control | Resource pool |
-| Queue Length | Task queue rate limiting | Queue capacity |
+| Semaphore | Agent concurrency control | Channel-based |
+| Weighted Semaphore | Resource weight control | Condition variable |
 
-## 3. Core Interfaces
+## 3. Core Interface
 
 ```go
 type Limiter interface {
-    // Allow check if allowed
-    Allow() (bool, error)
+    // Allow checks if request is allowed
+    Allow(ctx context.Context) (bool, error)
     
-    // Wait wait for token
+    // Wait blocks until request can proceed
     Wait(ctx context.Context) error
     
-    // Reset reset limiter
+    // Reset resets the limiter
     Reset()
     
-    // Stats get statistics
-    Stats() *LimiterStats
-}
-
-type LimiterStats struct {
-    TotalRequests  int64   `json:"total_requests"`
-    AllowedRequests int64  `json:"allowed_requests"`
-    RejectedRequests int64 `json:"rejected_requests"`
-    CurrentRate    float64 `json:"current_rate"`
+    // Rate returns current rate
+    Rate() float64
 }
 ```
 
 ## 4. Limiter Implementations
 
-### 4.1 Token Bucket
+### 4.1 Token Bucket (TokenBucketLimiter)
 
 ```go
-type TokenBucket struct {
-    rate       float64     // Tokens per second
-    capacity   int         // Bucket capacity
-    tokens     float64    // Current tokens
-    lastUpdate time.Time   // Last update time
+type TokenBucketLimiter struct {
+    tokens     float64
+    maxTokens  float64
+    rate       float64
+    lastCheck  time.Time
     mu         sync.Mutex
+    config     *LimiterConfig
 }
 
-func NewTokenBucket(rate float64, capacity int) *TokenBucket {
-    return &TokenBucket{
-        rate:       rate,
-        capacity:   capacity,
-        tokens:     float64(capacity),
-        lastUpdate: time.Now(),
-    }
-}
-
-func (tb *TokenBucket) Allow() (bool, error) {
-    tb.mu.Lock()
-    defer tb.mu.Unlock()
-    
-    tb.refill()
-    
-    if tb.tokens >= 1 {
-        tb.tokens--
-        return true, nil
-    }
-    return false, nil
-}
-
-func (tb *TokenBucket) refill() {
-    now := time.Now()
-    elapsed := now.Sub(tb.lastUpdate).Seconds()
-    tb.tokens = math.Min(float64(tb.capacity), tb.tokens+elapsed*tb.rate)
-    tb.lastUpdate = now
-}
+// Key methods
+func (l *TokenBucketLimiter) Allow(ctx context.Context) (bool, error)
+func (l *TokenBucketLimiter) Wait(ctx context.Context) error
+func (l *TokenBucketLimiter) AvailableTokens() float64
+func (l *TokenBucketLimiter) SetRate(rate float64)
+func (l *TokenBucketLimiter) SetBurst(burst int)
 ```
 
-### 4.2 Sliding Window
+### 4.2 Sliding Window (SlidingWindowLimiter)
 
 ```go
-type SlidingWindow struct {
-    windowSize  time.Duration // Window size
-    maxRequests int           // Max requests in window
-    requests   []time.Time   // Request timestamps
-    mu         sync.Mutex
+type SlidingWindowLimiter struct {
+    requests     []time.Time
+    windowSize    time.Duration
+    maxRequests   int
+    mu            sync.Mutex
+    config        *LimiterConfig
 }
 
-func NewSlidingWindow(windowSize time.Duration, maxRequests int) *SlidingWindow {
-    return &SlidingWindow{
-        windowSize:  windowSize,
-        maxRequests: maxRequests,
-        requests:    make([]time.Time, 0, maxRequests),
-    }
-}
-
-func (sw *SlidingWindow) Allow() (bool, error) {
-    sw.mu.Lock()
-    defer sw.mu.Unlock()
-    
-    now := time.Now()
-    cutoff := now.Add(-sw.windowSize)
-    
-    // Clean up expired requests
-    var valid []time.Time
-    for _, t := range sw.requests {
-        if t.After(cutoff) {
-            valid = append(valid, t)
-        }
-    }
-    sw.requests = valid
-    
-    // Check if limit exceeded
-    if len(sw.requests) >= sw.maxRequests {
-        return false, nil
-    }
-    
-    sw.requests = append(sw.requests, now)
-    return true, nil
-}
+// Key methods
+func (l *SlidingWindowLimiter) Allow(ctx context.Context) (bool, error)
+func (l *SlidingWindowLimiter) Wait(ctx context.Context) error
+func (l *SlidingWindowLimiter) CurrentCount() int
+func (l *SlidingWindowLimiter) Remaining() int
 ```
 
-### 4.3 Semaphore
+### 4.3 Semaphore (SemaphoreLimiter)
+
+Channel-based semaphore implementation.
 
 ```go
 type SemaphoreLimiter struct {
-    sem *semaphore.Weighted
-    mu  sync.Mutex
+    sem      chan struct{}
+    acquired map[string]int
+    mu       sync.RWMutex
+    config   *LimiterConfig
 }
 
-func NewSemaphoreLimiter(permits int) *SemaphoreLimiter {
-    return &SemaphoreLimiter{
-        sem: semaphore.NewWeighted(int64(permits)),
-    }
-}
-
-func (s *SemaphoreLimiter) Acquire(ctx context.Context) error {
-    return s.sem.Acquire(ctx, 1)
-}
-
-func (s *SemaphoreLimiter) Release() {
-    s.sem.Release(1)
-}
+// Key methods
+func (l *SemaphoreLimiter) Acquire(ctx context.Context, key string) error
+func (l *SemaphoreLimiter) Release(key string)
+func (l *SemaphoreLimiter) Allow(ctx context.Context) (bool, error)
+func (l *SemaphoreLimiter) Available() int
 ```
 
-## 5. Backpressure Mechanism
+### 4.4 Weighted Semaphore (WeightedSemaphoreLimiter)
+
+Supports weighted resource acquisition.
 
 ```go
-type Backpressure struct {
-    queueLimit    int
-    currentLoad   atomic.Int32
-    rejectionRate float64
-    
-    // Response headers
-    RetryAfter   time.Duration
-    RetryCount   int
-    
-    // Alert callback
-    OnThreshold  func(load int)
+type WeightedSemaphoreLimiter struct {
+    mu        sync.Mutex
+    available int
+    used      int
+    weighted  map[string]int
+    cond      *sync.Cond
+    config    *LimiterConfig
 }
 
-func (bp *Backpressure) Check() (bool, int) {
-    load := int(bp.currentLoad.Load())
-    percentage := float64(load) / float64(bp.queueLimit)
-    
-    switch {
-    case percentage >= 1.0:
-        // Queue full, reject new tasks
-        return false, http.StatusServiceUnavailable
-    case percentage >= 0.9:
-        // 90% alert
-        if bp.OnThreshold != nil {
-            bp.OnThreshold(load)
-        }
-        return false, http.StatusTooManyRequests
-    case percentage >= 0.8:
-        // 80% alert
-        if bp.OnThreshold != nil {
-            bp.OnThreshold(load)
-        }
-    }
-    
-    return true, http.StatusOK
+// Key methods
+func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error
+func (l *WeightedSemaphoreLimiter) Release(key string, weight int)
+func (l *WeightedSemaphoreLimiter) Allow(ctx context.Context, weight int) (bool, error)
+```
+
+## 5. Factory Pattern
+
+Create limiters through factory:
+
+```go
+type Factory struct {
+    creators map[LimiterType]func(*LimiterConfig) Limiter
 }
+
+// Create limiter
+limiter, err := ratelimit.CreateLimiter(ratelimit.LimiterTypeTokenBucket, config)
+limiter, err := ratelimit.CreateLimiter(ratelimit.LimiterTypeSlidingWindow, config)
+limiter, err := ratelimit.CreateLimiter(ratelimit.LimiterTypeSemaphore, config)
 ```
 
 ## 6. Usage Example
 
 ```go
-// Create limiters
-llmLimiter := ratelimit.NewTokenBucket(10, 50)      // LLM: 10 req/s
-agentLimiter := ratelimit.NewSemaphoreLimiter(10)   // Agent: 10 concurrent
-globalLimiter := ratelimit.NewSlidingWindow(1*time.Second, 100) // Global: 100 QPS
+// Create limiter
+config := &ratelimit.LimiterConfig{
+    Rate:  10,            // Requests per second
+    Burst: 50,            // Burst capacity
+}
 
-// Use in request handling
+llmLimiter := ratelimit.NewTokenBucketLimiter(config)
+
+// In request handling
 func handleRequest(ctx context.Context) error {
-    // 1. Global limit
-    if ok, _ := globalLimiter.Allow(); !ok {
+    // Non-blocking check
+    if ok, _ := llmLimiter.Allow(ctx); !ok {
         return ErrRateLimitExceeded
     }
     
-    // 2. LLM limit
+    // Or block and wait
     if err := llmLimiter.Wait(ctx); err != nil {
         return err
     }
-    
-    // 3. Agent limit
-    if err := agentLimiter.Acquire(ctx); err != nil {
-        return err
-    }
-    defer agentLimiter.Release()
     
     // Process request
     return doProcess(ctx)
 }
 ```
 
+### Keyed Semaphore
+
+```go
+semLimiter := ratelimit.NewSemaphoreLimiter(config)
+
+// Rate limit by user
+userID := getUserID(ctx)
+if err := semLimiter.Acquire(ctx, userID); err != nil {
+    return err
+}
+defer semLimiter.Release(userID)
+```
+
 ## 7. Configuration Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| llm_rate | 10 | LLM requests per second |
-| llm_burst | 50 | LLM burst capacity |
-| agent_concurrency | 10 | Agent max concurrency |
-| global_qps | 100 | Global QPS limit |
-| queue_threshold | 0.8 | Queue threshold |
-| backoff_base | 1s | Backoff base time |
+| Rate | 10 | Requests per second |
+| Burst | 10 | Burst capacity |
+| Timeout | 30s | Wait timeout |
+| RefillRate | 1s | Token refill interval |

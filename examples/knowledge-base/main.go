@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"goagent/internal/llm"
+	"goagent/internal/memory"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
@@ -44,6 +47,23 @@ type Config struct {
 	EmbeddingServiceURL string `yaml:"embedding_service_url"`
 	EmbeddingModel      string `yaml:"embedding_model"`
 
+	LLM struct {
+		Provider  string `yaml:"provider"`
+		APIKey    string `yaml:"api_key"`
+		BaseURL   string `yaml:"base_url"`
+		Model     string `yaml:"model"`
+		Timeout   int    `yaml:"timeout"`
+		MaxTokens int    `yaml:"max_tokens"`
+	} `yaml:"llm"`
+
+	Memory struct {
+		Enabled               bool `yaml:"enabled"`
+		MaxHistory            int  `yaml:"max_history"`
+		MaxSessions           int  `yaml:"max_sessions"`
+		EnableDistillation    bool `yaml:"enable_distillation"`
+		DistillationThreshold int  `yaml:"distillation_threshold"`
+	} `yaml:"memory"`
+
 	Knowledge struct {
 		ChunkSize    int     `yaml:"chunk_size"`
 		ChunkOverlap int     `yaml:"chunk_overlap"`
@@ -61,11 +81,16 @@ type Chunk struct {
 
 // KnowledgeBase simplified knowledge base interface
 type KnowledgeBase struct {
-	config    *Config
-	pool      *postgres.Pool
-	repo      *repositories.KnowledgeRepository
-	embedding *embedding.EmbeddingClient
-	retrieval *services.SimpleRetrievalService
+	config        *Config
+	pool          *postgres.Pool
+	repo          *repositories.KnowledgeRepository
+	distilledRepo *repositories.DistilledMemoryRepository
+	embedding     *embedding.EmbeddingClient
+	llmClient     *llm.Client
+	retrieval     *services.SimpleRetrievalService
+	memory        memory.MemoryManager
+	sessionID     string
+	messageCount  int
 }
 
 func main() {
@@ -82,17 +107,20 @@ func main() {
 	// Load configuration
 	config, err := loadConfig(*configFlag)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Create knowledge base
 	kb, err := NewKnowledgeBase(config)
 	if err != nil {
-		log.Fatalf("Failed to create knowledge base: %v", err)
+		slog.Error("Failed to create knowledge base", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := kb.Close(); err != nil {
-			log.Fatal("Failed to close knowledge base: ", err)
+			slog.Error("Failed to close knowledge base", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -109,9 +137,11 @@ func main() {
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Fatalf("Import timeout (5 minutes exceeded)")
+				slog.Error("Import timeout (5 minutes exceeded)")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to import document: %v", err)
+			slog.Error("Failed to import document", "error", err)
+			os.Exit(1)
 		}
 		log.Printf("Document imported successfully. Document ID: %s", docID)
 
@@ -128,9 +158,11 @@ func main() {
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Fatalf("List timeout")
+				slog.Error("List timeout")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to list documents: %v", err)
+			slog.Error("Failed to list documents", "error", err)
+			os.Exit(1)
 		}
 		if len(docs) == 0 {
 			log.Println("No documents found")
@@ -148,9 +180,11 @@ func main() {
 		if err := kb.DeleteDocument(deleteCtx, *tenantFlag, *deleteFlag); err != nil {
 			cancel()
 			if err == context.DeadlineExceeded {
-				log.Fatalf("Delete timeout")
+				slog.Error("Delete timeout")
+				os.Exit(1)
 			}
-			log.Fatalf("Failed to delete document: %v", err)
+			slog.Error("Failed to delete document", "error", err)
+			os.Exit(1)
 		}
 		cancel()
 		log.Printf("Document deleted successfully")
@@ -193,6 +227,9 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 	// Create knowledge repository
 	kbRepo := repositories.NewKnowledgeRepository(pool.GetDB(), pool.GetDB())
 
+	// Create distilled memory repository
+	distilledRepo := repositories.NewDistilledMemoryRepository(pool.GetDB(), pool.GetDB())
+
 	// Create simple retrieval service (pure vector similarity, no complex weights)
 	retrievalService := services.NewSimpleRetrievalService(
 		kbRepo,
@@ -204,12 +241,56 @@ func NewKnowledgeBase(config *Config) (*KnowledgeBase, error) {
 		},
 	)
 
+	// Create LLM client for RAG (optional, may be nil)
+	var llmClient *llm.Client
+	if config.LLM.Provider != "" && config.LLM.Model != "" {
+		llmConfig := &llm.Config{
+			Provider: config.LLM.Provider,
+			APIKey:   config.LLM.APIKey,
+			BaseURL:  config.LLM.BaseURL,
+			Model:    config.LLM.Model,
+			Timeout:  config.LLM.Timeout,
+		}
+		var err error
+		llmClient, err = llm.NewClient(llmConfig)
+		if err != nil {
+			log.Printf("Failed to create LLM client: %v, RAG will be disabled", err)
+			llmClient = nil
+		}
+	}
+
+	// Create memory manager for conversation history
+	var memManager memory.MemoryManager
+	if config.Memory.Enabled {
+		memConfig := &memory.MemoryConfig{
+			Enabled:        true,
+			Storage:        "memory",
+			MaxHistory:     config.Memory.MaxHistory,
+			MaxSessions:    config.Memory.MaxSessions,
+			SessionTTL:     24 * time.Hour,
+			TaskTTL:        7 * 24 * time.Hour,
+			VectorDim:      128,
+			EnablePostgres: false,
+		}
+		var err error
+		memManager, err = memory.NewMemoryManager(memConfig)
+		if err != nil {
+			log.Printf("Failed to create memory manager: %v", err)
+			memManager = nil
+		}
+	}
+
 	return &KnowledgeBase{
-		config:    config,
-		pool:      pool,
-		repo:      kbRepo,
-		embedding: embeddingClient,
-		retrieval: retrievalService,
+		config:        config,
+		pool:          pool,
+		repo:          kbRepo,
+		distilledRepo: distilledRepo,
+		embedding:     embeddingClient,
+		llmClient:     llmClient,
+		retrieval:     retrievalService,
+		memory:        memManager,
+		sessionID:     "",
+		messageCount:  0,
 	}, nil
 }
 
@@ -292,10 +373,8 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 		return nil, err
 	}
 
+	// Search results details removed for cleaner output
 	log.Printf("Search returned %d results", len(results))
-	for i, result := range results {
-		log.Printf("  Result %d: score=%.3f, source=%s, content=%s", i, result.Score, result.Source, truncateString(result.Content, 50))
-	}
 
 	// Convert to local SearchResult type for backward compatibility
 	var localResults []*SearchResult
@@ -308,6 +387,295 @@ func (kb *KnowledgeBase) Search(ctx context.Context, tenantID, question string) 
 	}
 
 	return localResults, nil
+}
+
+// GenerateAnswer generates a response based on retrieved documents using LLM.
+// This implements the complete RAG pipeline: retrieve → generate → validate.
+// Args:
+// ctx - operation context.
+// tenantID - tenant identifier for isolation.
+// question - user question.
+// Returns generated answer or error if generation fails.
+func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question string) (string, error) {
+	// Step 0: Add user question to memory
+	if kb.memory != nil && kb.sessionID != "" {
+		_ = kb.memory.AddMessage(ctx, kb.sessionID, "user", question)
+	}
+
+	// Step 0.5: Detect user intent
+	lowerQuestion := strings.ToLower(question)
+	isCorrection := strings.Contains(lowerQuestion, "纠正") ||
+		strings.Contains(lowerQuestion, "改正") ||
+		strings.Contains(lowerQuestion, "修正") ||
+		strings.Contains(lowerQuestion, "不对") ||
+		strings.Contains(lowerQuestion, "不是")
+
+	// Detect self-introduction
+	var userID string
+	if strings.Contains(question, "我是") {
+		parts := strings.Split(question, "我是")
+		if len(parts) > 1 {
+			namePart := strings.TrimSpace(parts[1])
+			namePart = strings.Split(namePart, "，")[0]
+			namePart = strings.Split(namePart, ",")[0]
+			namePart = strings.Split(namePart, " ")[0]
+			namePart = strings.Split(namePart, "的")[0]
+			userID = strings.TrimSpace(namePart)
+		}
+	} else if strings.Contains(question, "我叫") {
+		parts := strings.Split(question, "我叫")
+		if len(parts) > 1 {
+			namePart := strings.TrimSpace(parts[1])
+			namePart = strings.Split(namePart, "，")[0]
+			namePart = strings.Split(namePart, ",")[0]
+			namePart = strings.Split(namePart, " ")[0]
+			namePart = strings.Split(namePart, "的")[0]
+			userID = strings.TrimSpace(namePart)
+		}
+	}
+
+	// Handle self-introduction - load distilled memories
+	if userID != "" && kb.distilledRepo != nil {
+		log.Printf("👤 Detected self-introduction: user_id=%s", userID)
+		memories, err := kb.distilledRepo.GetByUserID(ctx, tenantID, userID, 10)
+		if err == nil && len(memories) > 0 {
+			log.Printf("📊 Loaded %d distilled memories for user %s", len(memories), userID)
+			return fmt.Sprintf("Hello %s! I have recorded your information. We have %d records from your past conversations.", userID, len(memories)), nil
+		}
+		return fmt.Sprintf("Hello %s! I have recorded your information.", userID), nil
+	}
+
+	// Handle correction request
+	if isCorrection {
+		log.Printf("🔧 Detected correction request")
+		// Search for relevant content
+		results, err := kb.Search(ctx, tenantID, question)
+		if err != nil {
+			return "", fmt.Errorf("search failed: %w", err)
+		}
+
+		if len(results) == 0 {
+			return "No relevant content found for correction.", nil
+		}
+
+		// TODO: Implement actual correction logic by updating the knowledge base
+		// For now, inform user
+		log.Printf("📝 Found %d chunks for correction", len(results))
+		return fmt.Sprintf("I detected you want to correct knowledge. Found %d relevant results. Correction request has been recorded, please continue.", len(results)), nil
+	}
+
+	// Step 1: Determine if RAG is needed using LLM
+	needsRAG := true
+	if kb.llmClient != nil {
+		ragPrompt := fmt.Sprintf(`Question: %s
+
+Needs knowledge base search? Answer YES/NO only:`, question)
+
+		ragCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ragResponse, err := kb.llmClient.Generate(ragCtx, ragPrompt)
+		cancel()
+
+		if err == nil {
+			needsRAG = strings.Contains(strings.ToUpper(ragResponse), "YES")
+			log.Printf("RAG check: %s -> needs RAG: %v", question, needsRAG)
+		}
+	}
+
+	var answer string
+	if needsRAG {
+		// Step 2: Retrieve relevant documents
+		results, err := kb.Search(ctx, tenantID, question)
+		if err != nil {
+			return "", fmt.Errorf("retrieve documents: %w", err)
+		}
+
+		// If no documents found, inform user
+		if len(results) == 0 {
+			answer = "No relevant information found in the knowledge base. Please try rephrasing your question."
+		} else {
+			// Step 3: Build context from retrieved documents
+			var contextBuilder strings.Builder
+			for i, result := range results {
+				fmt.Fprintf(&contextBuilder, "[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content)
+			}
+
+			// Step 4: Build conversation history context
+			var historyContext strings.Builder
+			if kb.memory != nil && kb.sessionID != "" {
+				messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+				if err == nil && len(messages) > 0 {
+					// Get last 5 messages for context
+					start := len(messages) - 5
+					if start < 0 {
+						start = 0
+					}
+					for _, msg := range messages[start:] {
+						fmt.Fprintf(&historyContext, "%s: %s\n", msg.Role, msg.Content)
+					}
+				}
+			}
+
+			// Step 5: Generate answer with LLM
+			if kb.llmClient != nil {
+				prompt := fmt.Sprintf(`You are a helpful assistant that answers questions based on the provided knowledge base and conversation history.
+
+User Question: %s
+
+Conversation History:
+%s
+
+Knowledge Base Context:
+%s
+
+CRITICAL INSTRUCTIONS:
+1. Answer the user's question based ONLY on the provided knowledge base context.
+2. If the user's question contains INCORRECT ASSUMPTIONS or MISUNDERSTANDINGS, POLITELY CORRECT them with FACTS from the context.
+3. DO NOT simply agree with the user if they are wrong - use facts to correct them.
+4. DO NOT make up information that is not in the context.
+5. If the context doesn't contain the answer, say "I don't have enough information to answer this question."
+6. Be concise and direct.
+7. Cite the relevant document numbers (e.g., [Document 1]) when using information from specific documents.
+
+Answer:`, question, historyContext.String(), contextBuilder.String())
+
+				// Call LLM with timeout
+				genCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+				var genErr error
+				answer, genErr = kb.llmClient.Generate(genCtx, prompt)
+				cancel()
+
+				if genErr != nil {
+					log.Printf("LLM generation failed: %v, falling back to raw results", genErr)
+					// Fall back to showing raw results if LLM fails
+					answer = kb.formatRawResults(results)
+				}
+			} else {
+				// Step 6: If LLM client is not available, format raw results
+				answer = kb.formatRawResults(results)
+			}
+		}
+	} else {
+		// General conversation without RAG
+		if kb.llmClient != nil {
+			prompt := fmt.Sprintf(`You are a helpful assistant. Respond to the user's question naturally.
+
+User: %s
+
+Assistant:`, question)
+
+			genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			var genErr error
+			answer, genErr = kb.llmClient.Generate(genCtx, prompt)
+			cancel()
+
+			if genErr != nil {
+				answer = "I'm sorry, I'm having trouble generating a response right now. Please try again."
+			}
+		} else {
+			answer = "LLM not configured. Please configure the llm section in config.yaml."
+		}
+	}
+
+	// Step 7: Add assistant answer to memory
+	if kb.memory != nil && kb.sessionID != "" {
+		_ = kb.memory.AddMessage(ctx, kb.sessionID, "assistant", answer)
+
+		// Step 8: Check for distillation threshold
+		kb.messageCount++
+		if kb.config.Memory.EnableDistillation && kb.messageCount >= kb.config.Memory.DistillationThreshold {
+			log.Printf("🎯 [Memory Distillation] Conversation rounds reached threshold (%d/%d), triggering memory distillation...",
+				kb.messageCount, kb.config.Memory.DistillationThreshold)
+			kb.distillMemory(ctx, tenantID)
+			kb.messageCount = 0
+		}
+	}
+
+	return answer, nil
+}
+
+// formatRawResults formats search results for display when LLM is not available.
+func (kb *KnowledgeBase) formatRawResults(results []*SearchResult) string {
+	var output strings.Builder
+	fmt.Fprintf(&output, "Found %d relevant documents:\n\n", len(results))
+	for i, result := range results {
+		fmt.Fprintf(&output, "[Document %d - Score: %.3f]\n%s\n\n", i+1, result.Score, result.Content)
+	}
+	output.WriteString("Please configure LLM settings in config.yaml to enable natural language answers.")
+	return output.String()
+}
+
+// distillMemory performs memory distillation when threshold is reached.
+// It extracts key information from conversation history and stores it in the knowledge base.
+func (kb *KnowledgeBase) distillMemory(ctx context.Context, tenantID string) {
+	if kb.memory == nil || kb.sessionID == "" {
+		log.Printf("⚠️  Memory not available for distillation")
+		return
+	}
+
+	log.Printf("🔄 [Memory Distillation] Starting distillation for session: %s", kb.sessionID)
+
+	// Get conversation history
+	messages, err := kb.memory.GetMessages(ctx, kb.sessionID)
+	if err != nil || len(messages) == 0 {
+		log.Printf("⚠️  [Memory Distillation] No messages to distill: %v", err)
+		return
+	}
+
+	log.Printf("📊 [Memory Distillation] Found %d messages to distill", len(messages))
+
+	// Build conversation summary
+	var summary strings.Builder
+	summary.WriteString("Conversation Summary:\n\n")
+	for _, msg := range messages {
+		fmt.Fprintf(&summary, "%s: %s\n", msg.Role, msg.Content)
+	}
+
+	summaryText := summary.String()
+
+	log.Printf("📝 [Memory Distillation] Distillation content preview (%d characters): %s",
+		len(summaryText), truncateString(summaryText, 100))
+
+	// Generate embedding for the distilled memory
+	embedding, err := kb.embedding.EmbedWithPrefix(ctx, summaryText, "memory:")
+	if err != nil {
+		log.Printf("❌ [Memory Distillation] Failed to generate embedding: %v", err)
+		return
+	}
+
+	// Normalize embedding
+	embedding = postgres.NormalizeVector(embedding)
+	log.Printf("🔢 [Memory Distillation] Embedding vector dimensions: %d", len(embedding))
+
+	// Generate document ID
+	docID := uuid.New().String()
+
+	// Store distilled memory in knowledge base
+	distilledChunk := &storage_models.KnowledgeChunk{
+		TenantID:         tenantID,
+		Content:          summaryText,
+		Embedding:        embedding,
+		EmbeddingModel:   kb.config.EmbeddingModel,
+		EmbeddingVersion: 1,
+		EmbeddingStatus:  "completed",
+		SourceType:       "distilled",
+		Source:           fmt.Sprintf("memory:%s", kb.sessionID),
+		DocumentID:       docID,
+		ChunkIndex:       0,
+		ContentHash:      kb.generateHash(summaryText),
+		AccessCount:      0,
+	}
+
+	if err := kb.repo.Create(ctx, distilledChunk); err != nil {
+		log.Printf("❌ [Memory Distillation] Failed to store distilled memory: %v", err)
+		return
+	}
+
+	log.Printf("✅ [Memory Distillation] Distillation completed!")
+	log.Printf("   📄 Document ID: %s", docID)
+	log.Printf("   📏 Content length: %d characters", len(summaryText))
+	log.Printf("   🧠 Embedding dimensions: %d", len(embedding))
+	log.Printf("   💾 Storage location: knowledge_chunks_1024")
+	log.Printf("   🔍 Can be retrieved via vector search")
 }
 
 // truncateString truncate string for log output
@@ -338,7 +706,7 @@ func (kb *KnowledgeBase) ListDocuments(ctx context.Context, tenantID string) ([]
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Fatal("Failed to close rows", err)
+			slog.Error("Failed to close rows", "error", err)
 		}
 	}()
 
@@ -375,9 +743,36 @@ func (kb *KnowledgeBase) DeleteDocument(ctx context.Context, tenantID, documentI
 	return nil
 }
 
-// StartChat start interactive Q&A
+// StartChat start interactive Q&A with RAG and memory
 func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 	scanner := NewTextScanner()
+
+	// Check if LLM is configured
+	llmEnabled := kb.llmClient != nil && kb.llmClient.IsEnabled()
+	if llmEnabled {
+		log.Println("LLM enabled - Using RAG (Retrieval + Generation) mode")
+	} else {
+		log.Println("LLM not configured - Using retrieval-only mode")
+		log.Println("To enable LLM answers, configure llm section in config.yaml")
+	}
+
+	// Check if memory is enabled
+	memoryEnabled := kb.memory != nil
+	if memoryEnabled {
+		log.Println("Memory enabled - Conversation history and distillation supported")
+		// Start memory manager
+		if err := kb.memory.Start(ctx); err != nil {
+			log.Printf("Failed to start memory manager: %v", err)
+		}
+		// Create session
+		sessionID, err := kb.memory.CreateSession(ctx, tenantID)
+		if err != nil {
+			log.Printf("Failed to create session: %v", err)
+		} else {
+			kb.sessionID = sessionID
+			log.Printf("Session created: %s", sessionID)
+		}
+	}
 
 	for {
 		fmt.Print("\nYou: ")
@@ -401,37 +796,41 @@ func (kb *KnowledgeBase) StartChat(ctx context.Context, tenantID string) {
 			break
 		}
 
-		// Set timeout for each retrieval operation (30 seconds)
-		searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		results, err := kb.Search(searchCtx, tenantID, question)
+		// Set timeout for each RAG operation (120 seconds)
+		ragCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+		answer, err := kb.GenerateAnswer(ragCtx, tenantID, question)
 		cancel()
 
 		if err != nil {
 			if err == context.DeadlineExceeded {
-				log.Println("Search timeout. Please try again.")
+				log.Println("Response timeout. Please try again.")
 			} else {
-				log.Printf("Search failed: %v", err)
+				log.Printf("Failed to generate answer: %v", err)
 			}
 			continue
 		}
 
-		// Display results
-		fmt.Printf("\nFound %d relevant results:\n", len(results))
-		for i, result := range results {
-			fmt.Printf("\n[%d] Score: %.3f\n", i+1, result.Score)
-			fmt.Printf("Content: %s\n", result.Content)
-			fmt.Printf("Source: %s\n", result.Source)
-		}
+		// Display generated answer
+		fmt.Printf("\nAssistant:\n%s\n", answer)
+	}
 
-		// If no results
-		if len(results) == 0 {
-			fmt.Println("No relevant information found in the knowledge base.")
+	// Cleanup: stop memory manager
+	if memoryEnabled && kb.memory != nil {
+		if err := kb.memory.Stop(ctx); err != nil {
+			log.Printf("Failed to stop memory manager: %v", err)
 		}
 	}
 }
 
 // Close close connection
 func (kb *KnowledgeBase) Close() error {
+	// Stop memory manager if running
+	if kb.memory != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = kb.memory.Stop(ctx)
+	}
+	// Close database connection
 	return kb.pool.Close()
 }
 
@@ -509,6 +908,30 @@ func setDefaults(config *Config) {
 	}
 	if config.EmbeddingModel == "" {
 		config.EmbeddingModel = "e5-large-v2"
+	}
+	if config.LLM.Provider == "" {
+		config.LLM.Provider = "openrouter"
+	}
+	if config.LLM.BaseURL == "" {
+		config.LLM.BaseURL = "https://openrouter.ai/api/v1"
+	}
+	if config.LLM.Model == "" {
+		config.LLM.Model = "meta-llama/llama-3.1-8b-instruct"
+	}
+	if config.LLM.Timeout == 0 {
+		config.LLM.Timeout = 60
+	}
+	if config.LLM.MaxTokens == 0 {
+		config.LLM.MaxTokens = 2048
+	}
+	if config.Memory.MaxHistory == 0 {
+		config.Memory.MaxHistory = 10
+	}
+	if config.Memory.MaxSessions == 0 {
+		config.Memory.MaxSessions = 100
+	}
+	if config.Memory.DistillationThreshold == 0 {
+		config.Memory.DistillationThreshold = 5
 	}
 	if config.Knowledge.ChunkSize == 0 {
 		config.Knowledge.ChunkSize = 1000

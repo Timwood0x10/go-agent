@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"time"
 
@@ -377,7 +376,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Fatal("Failed to close rows: ", err)
+			slog.Error("Failed to close rows", "error", err)
 		}
 	}()
 

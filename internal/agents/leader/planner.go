@@ -12,17 +12,15 @@ import (
 )
 
 // taskIDCounter is used to generate unique task IDs.
-// nolint: unused // Kept for potential future use
 var taskIDCounter uint64
 
 // getRandomSuffix returns a random suffix for extra uniqueness.
-// nolint: unused // Kept for potential future use
 func getRandomSuffix() string {
 	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
 	return fmt.Sprintf("%04d", n.Int64())
 }
 
-// nolint: unused // Kept for potential future use
+// generateTaskID generates a unique task ID.
 func generateTaskID() string {
 	id := atomic.AddUint64(&taskIDCounter, 1)
 	randSuffix := getRandomSuffix()
@@ -91,178 +89,4 @@ func (p *taskPlanner) Plan(ctx context.Context, profile *models.UserProfile) ([]
 	}
 
 	return tasks, nil
-}
-
-// createTasksFromConfig creates tasks based on sub-agent triggers in config.
-// nolint: unused // Kept for potential future use
-func (p *taskPlanner) createTasksFromConfig(profile *models.UserProfile) []*models.Task {
-	tasks := make([]*models.Task, 0)
-	addedTypes := make(map[models.AgentType]bool)
-
-	// Get all profile fields (from Preferences or direct fields)
-	profileFields := p.getProfileFields(profile)
-
-	// Check each sub-agent's triggers
-	for _, agent := range p.subAgents {
-		if len(agent.Triggers) == 0 {
-			continue
-		}
-
-		// Check if any trigger matches profile fields
-		matched := false
-		for _, trigger := range agent.Triggers {
-			if _, exists := profileFields[trigger]; exists {
-				matched = true
-				break
-			}
-		}
-
-		if matched {
-			agentType := models.AgentType(agent.Type)
-			// Avoid duplicate tasks for same agent type
-			if !addedTypes[agentType] {
-				task := models.NewTask(generateTaskID(), agentType, profile)
-				task.Deadline = time.Now().Add(1 * time.Hour)
-				tasks = append(tasks, task)
-				addedTypes[agentType] = true
-			}
-		}
-	}
-
-	// If no tasks matched (e.g., empty profile), add all agents as fallback
-	if len(tasks) == 0 {
-		for _, agent := range p.subAgents {
-			agentType := models.AgentType(agent.Type)
-			if !addedTypes[agentType] {
-				task := models.NewTask(generateTaskID(), agentType, profile)
-				task.Deadline = time.Now().Add(1 * time.Hour)
-				tasks = append(tasks, task)
-				addedTypes[agentType] = true
-			}
-		}
-	}
-
-	return tasks
-}
-
-// getProfileFields extracts all field names from profile for matching.
-// nolint: unused // Kept for potential future use
-func (p *taskPlanner) getProfileFields(profile *models.UserProfile) map[string]bool {
-	fields := make(map[string]bool)
-
-	// Add style tags
-	for _, style := range profile.Style {
-		fields[string(style)] = true
-	}
-
-	// Add occasions
-	for _, occasion := range profile.Occasions {
-		fields[string(occasion)] = true
-	}
-
-	// Add preferences (travel-specific fields)
-	if profile.Preferences != nil {
-		for key := range profile.Preferences {
-			fields[key] = true
-			// Also add string values for partial matching
-			if val, ok := profile.Preferences[key].(string); ok {
-				fields[val] = true
-			}
-			// Add values from string arrays
-			if vals, ok := profile.Preferences[key].([]interface{}); ok {
-				for _, v := range vals {
-					if s, ok := v.(string); ok {
-						fields[s] = true
-					}
-				}
-			}
-		}
-	}
-
-	return fields
-}
-
-// createFashionTasks creates tasks for fashion recommendation (fallback).
-// nolint: unused // Kept for potential future use
-func (p *taskPlanner) createFashionTasks(profile *models.UserProfile) []*models.Task {
-	tasks := make([]*models.Task, 0)
-	addedTypes := make(map[models.AgentType]bool)
-
-	// Generate tasks based on style tags
-	for _, style := range profile.Style {
-		agentType := getAgentTypeForStyle(style)
-		if !addedTypes[agentType] {
-			task := models.NewTask(generateTaskID(), agentType, profile)
-			task.Priority = calculatePriority(style)
-			task.Deadline = time.Now().Add(1 * time.Hour)
-			tasks = append(tasks, task)
-			addedTypes[agentType] = true
-		}
-	}
-
-	// Add occasion-based tasks
-	for _, occasion := range profile.Occasions {
-		agentType := getAgentTypeForOccasion(occasion)
-		if !addedTypes[agentType] {
-			task := models.NewTask(generateTaskID(), agentType, profile)
-			task.Priority = calculatePriorityForOccasion(occasion)
-			task.Deadline = time.Now().Add(1 * time.Hour)
-			tasks = append(tasks, task)
-			addedTypes[agentType] = true
-		}
-	}
-
-	return tasks
-}
-
-// nolint: unused // Kept for potential future use
-func getAgentTypeForStyle(style models.StyleTag) models.AgentType {
-	switch style {
-	case models.StyleCasual, models.StyleMinimalist:
-		return models.AgentTypeTop
-	case models.StyleFormal:
-		return models.AgentTypeBottom
-	case models.StyleStreet, models.StyleVintage:
-		return models.AgentTypeBottom
-	default:
-		return models.AgentTypeTop
-	}
-}
-
-// nolint: unused // Kept for potential future use
-func getAgentTypeForOccasion(occasion models.Occasion) models.AgentType {
-	switch occasion {
-	case models.OccasionWork, models.OccasionFormal:
-		return models.AgentTypeBottom
-	case models.OccasionParty, models.OccasionDate:
-		return models.AgentTypeAccessory
-	case models.OccasionSports:
-		return models.AgentTypeShoes
-	default:
-		return models.AgentTypeTop
-	}
-}
-
-// nolint: unused // Kept for potential future use
-func calculatePriority(style models.StyleTag) int {
-	switch style {
-	case models.StyleFormal:
-		return 10
-	case models.StyleCasual:
-		return 5
-	default:
-		return 3
-	}
-}
-
-// nolint: unused // Kept for potential future use
-func calculatePriorityForOccasion(occasion models.Occasion) int {
-	switch occasion {
-	case models.OccasionWork, models.OccasionFormal:
-		return 10
-	case models.OccasionParty, models.OccasionDate:
-		return 8
-	default:
-		return 5
-	}
 }

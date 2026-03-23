@@ -1,0 +1,86 @@
+# Fashion Recommendation Workflow
+# Demonstrates DAG-based agent orchestration
+
+id: "fashion-recommendation"
+name: "Fashion Recommendation Workflow"
+version: "1.0.0"
+description: "Multi-agent fashion recommendation system with parallel execution"
+
+# Variables that can be referenced in steps
+variables:
+  default_budget: "1000"
+  default_style: "casual"
+
+# Workflow steps with dependencies
+steps:
+  # Step 1: Extract user preferences (no dependencies, runs first)
+  - id: "extract-profile"
+    name: "Extract User Preferences"
+    agent_type: "top"
+    input: "Extract fashion preferences from user request: {{.input}}"
+    timeout: 30s
+    retry_policy:
+      max_attempts: 3
+      initial_delay: 1s
+      max_delay: 5s
+      backoff_multiplier: 2.0
+    metadata:
+      category: "preprocessing"
+      priority: "high"
+
+  # Step 2: Recommend tops (depends on profile extraction)
+  - id: "recommend-tops"
+    name: "Recommend Top Wear"
+    agent_type: "top"
+    input: "Based on user profile from {{.extract-profile}}, recommend 3 top items"
+    depends_on:
+      - "extract-profile"
+    timeout: 30s
+    retry_policy:
+      max_attempts: 2
+      initial_delay: 1s
+
+  # Step 3: Recommend bottoms (depends on profile extraction)
+  - id: "recommend-bottoms"
+    name: "Recommend Bottom Wear"
+    agent_type: "bottom"
+    input: "Based on user profile from {{.extract-profile}}, recommend 3 bottom items"
+    depends_on:
+      - "extract-profile"
+    timeout: 30s
+    retry_policy:
+      max_attempts: 2
+      initial_delay: 1s
+
+  # Step 4: Recommend shoes (depends on profile extraction)
+  - id: "recommend-shoes"
+    name: "Recommend Shoes"
+    agent_type: "shoes"
+    input: "Based on user profile from {{.extract-profile}}, recommend 3 shoe items"
+    depends_on:
+      - "extract-profile"
+    timeout: 30s
+    retry_policy:
+      max_attempts: 2
+      initial_delay: 1s
+
+  # Step 5: Aggregate all recommendations (depends on all recommendation steps)
+  - id: "aggregate-results"
+    name: "Aggregate Recommendations"
+    agent_type: "accessory"
+    input: "Aggregate recommendations from {{.recommend-tops}}, {{.recommend-bottoms}}, and {{.recommend-shoes}} into a complete outfit"
+    depends_on:
+      - "recommend-tops"
+      - "recommend-bottoms"
+      - "recommend-shoes"
+    timeout: 45s
+    retry_policy:
+      max_attempts: 1
+    metadata:
+      category: "aggregation"
+      priority: "high"
+
+metadata:
+  author: "GoAgent Team"
+  created_date: "2026-03-21"
+  tags: ["fashion", "recommendation", "multi-agent"]

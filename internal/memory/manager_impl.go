@@ -151,6 +151,16 @@ func (m *memoryManager) GetMessages(ctx context.Context, sessionID string) ([]Me
 	return messages, nil
 }
 
+// DeleteSession deletes a session and all its messages immediately.
+func (m *memoryManager) DeleteSession(ctx context.Context, sessionID string) error {
+	if err := m.sessionMemory.Delete(ctx, sessionID); err != nil {
+		return fmt.Errorf("delete session: %w", err)
+	}
+
+	slog.Debug("Session deleted", "session_id", sessionID)
+	return nil
+}
+
 // BuildContext builds input with conversation history context.
 func (m *memoryManager) BuildContext(ctx context.Context, input string, sessionID string) (string, error) {
 	messages, err := m.GetMessages(ctx, sessionID)
@@ -209,12 +219,18 @@ func (m *memoryManager) UpdateTaskOutput(ctx context.Context, taskID, output str
 
 // DistillTask extracts key information from task for future reference.
 func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models.Task, error) {
+	slog.Info("🔄 [Memory Distillation] Starting task distillation", "task_id", taskID)
+
 	task, err := m.taskMemory.Distill(ctx, taskID)
 	if err != nil {
+		slog.Error("❌ [Memory Distillation] Failed to distill task",
+			"task_id", taskID, "error", err)
 		return nil, fmt.Errorf("distill task: %w", err)
 	}
 
-	slog.Debug("Task distilled", "task_id", taskID)
+	slog.Info("📊 [Memory Distillation] Task distilled successfully",
+		"task_id", taskID,
+		"input_length", len(task.Payload["input"].(string)))
 	return task, nil
 }
 
@@ -223,14 +239,25 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	slog.Info("💾 [Memory Distillation] Storing distilled task", "task_id", taskID)
+
 	// Extract input string from payload
 	inputStr, ok := distilled.Payload["input"].(string)
 	if !ok {
 		inputStr = ""
+		slog.Warn("⚠️  [Memory Distillation] No input found in payload", "task_id", taskID)
 	}
+
+	slog.Info("📝 [Memory Distillation] Task details",
+		"task_id", taskID,
+		"input_length", len(inputStr),
+		"vector_dimension", m.vectorDim)
 
 	// Generate local vector using simple hash-based approach
 	vector := m.generateHashVector(inputStr)
+	slog.Info("🔢 [Memory Distillation] Vector generated",
+		"task_id", taskID,
+		"vector_dimension", len(vector))
 
 	data := &DistilledTaskData{
 		TaskID:    taskID,
@@ -242,7 +269,10 @@ func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, d
 	}
 
 	m.distilledTasks[taskID] = data
-	slog.Debug("Distilled task stored", "task_id", taskID)
+
+	slog.Info("✅ [Memory Distillation] Distilled task stored successfully",
+		"task_id", taskID,
+		"total_distilled_tasks", len(m.distilledTasks))
 
 	return nil
 }
@@ -290,8 +320,14 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	slog.Info("🔍 [Memory Search] Searching for similar tasks",
+		"query", truncate(query, 50),
+		"limit", limit,
+		"available_tasks", len(m.distilledTasks))
+
 	// Generate vector for query
 	queryVector := m.generateHashVector(query)
+	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
 
 	// Calculate cosine similarity for all tasks
 	type similarityResult struct {
@@ -317,6 +353,11 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		}
 	}
 
+	slog.Info("📊 [Memory Search] Similarity calculated",
+		"total_tasks", len(m.distilledTasks),
+		"above_threshold", len(results),
+		"threshold", 0.5)
+
 	// Sort by score (descending)
 	for i := 0; i < len(results); i++ {
 		for j := i + 1; j < len(results); j++ {
@@ -336,7 +377,10 @@ func (m *memoryManager) SearchSimilarTasks(ctx context.Context, query string, li
 		tasks = append(tasks, result.task)
 	}
 
-	slog.Debug("Similar tasks found", "count", len(tasks))
+	slog.Info("✅ [Memory Search] Search completed",
+		"results_count", len(tasks),
+		"limit", limit)
+
 	return tasks, nil
 }
 

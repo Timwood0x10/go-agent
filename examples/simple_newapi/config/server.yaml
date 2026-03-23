@@ -1,0 +1,98 @@
+# GoAgent Fashion Recommendation System Configuration
+# Configure your agents and prompts here
+
+# LLM Configuration
+llm:
+  provider: "ollama"
+  api_key: ""
+  base_url: "http://localhost:11434"
+  model: "llama3.2"
+  timeout: 60
+
+# API Configuration
+api:
+  request_timeout: 30
+  max_retries: 3
+  retry_delay: 1
+
+# Agent Configuration
+agents:
+  # Leader Agent coordinates all sub-agents
+  leader:
+    id: "leader-fashion"
+    max_steps: 10
+    max_parallel_tasks: 5
+
+  # Sub Agents - Each handles a specific category
+  sub:
+    # Top Wear Agent
+    - id: "agent-top"
+      type: "top"
+      category: "tops"
+      name: "Top Wear Recommender"
+      max_retries: 3
+      timeout: 30
+
+    # Bottom Wear Agent
+    - id: "agent-bottom"
+      type: "bottom"
+      category: "bottoms"
+      name: "Bottom Wear Recommender"
+      max_retries: 3
+      timeout: 30
+
+    # Shoes Agent
+    - id: "agent-shoes"
+      type: "shoes"
+      category: "shoes"
+      name: "Shoes Recommender"
+      max_retries: 3
+      timeout: 30
+
+    # Accessories Agent
+    - id: "agent-accessory"
+      type: "accessory"
+      category: "accessories"
+      name: "Accessories Recommender"
+      max_retries: 3
+      timeout: 30
+
+# Prompt Templates for Agents
+prompts:
+  # Prompt for extracting user preferences
+  profile_extraction: |
+    Extract fashion preferences from the user's request:
+    {{.user_input}}
+
+    Return JSON format only:
+    {
+      "style": ["casual", "formal", etc.],
+      "occasions": ["daily", "work", etc.],
+      "budget": {"min": 0, "max": 1000},
+      "colors": ["black", "white", etc.]
+    }
+
+  # Prompt for generating recommendations
+  recommendation: |
+    You are a fashion expert specializing in {{.category}}.
+
+    User preferences:
+    - Style: {{.style}}
+    - Occasions: {{.occasions}}
+    - Budget: {{.budget}}
+    - Colors: {{.colors}}
+
+    Recommend 3 items in JSON format:
+    {
+      "items": [
+        {
+          "name": "Product name",
+          "price": 999,
+          "reason": "Why this fits"
+        }
+      ]
+    }
+
+# Output Configuration
+output:
+  format: "simple"  # simple, table, json

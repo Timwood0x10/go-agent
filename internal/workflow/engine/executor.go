@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -311,18 +312,26 @@ func (e *Executor) executeStep(
 // resolveInput resolves the input for a step.
 func (e *Executor) resolveInput(step *Step, initialInput string, completed map[string]bool) string {
 	if len(step.DependsOn) == 0 {
-		return step.Input
+		// For steps with no dependencies, replace {{.input}} with initialInput
+		if step.Input != "" {
+			return e.replaceTemplateVariables(step.Input, initialInput, nil)
+		}
+		return initialInput
 	}
 
 	if step.Input != "" {
-		return step.Input
+		// For steps with dependencies, replace template variables with actual outputs
+		return e.replaceTemplateVariables(step.Input, initialInput, completed)
 	}
 
+	// Fallback: concatenate all dependency outputs
 	var depsOutput string
 	for _, dep := range step.DependsOn {
 		if output, exists := e.outputStore.Get(dep); exists {
-			depsOutput = output.Output
-			break
+			if depsOutput != "" {
+				depsOutput += "\n\n"
+			}
+			depsOutput += output.Output
 		}
 	}
 
@@ -331,6 +340,32 @@ func (e *Executor) resolveInput(step *Step, initialInput string, completed map[s
 	}
 
 	return initialInput
+}
+
+// replaceTemplateVariables replaces template variables in input with actual values.
+func (e *Executor) replaceTemplateVariables(input, initialInput string, completed map[string]bool) string {
+	result := input
+
+	// Replace {{.input}} with initial input
+	result = strings.ReplaceAll(result, "{{.input}}", initialInput)
+
+	// Replace {{.step_id}} templates with actual outputs
+	// Find all template variables
+	replacements := make(map[string]string)
+
+	// Collect outputs from completed steps
+	for stepID := range completed {
+		if output, exists := e.outputStore.Get(stepID); exists {
+			replacements[fmt.Sprintf("{{.%s}}", stepID)] = output.Output
+		}
+	}
+
+	// Apply replacements
+	for template, value := range replacements {
+		result = strings.ReplaceAll(result, template, value)
+	}
+
+	return result
 }
 
 // executeWithRetry executes a step with retry logic.

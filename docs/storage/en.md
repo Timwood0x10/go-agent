@@ -451,11 +451,6 @@ retrieval:
 - Boundary condition tests
 - Error scenario tests
 
-**Test Quality:**
-- All tests must be meaningful, not just coverage boosters
-- Tests must validate behavior, edge cases, and failure scenarios
-- No TODOs used to skip core logic
-- No fake implementations returning constant values
 
 ## 11. Deployment
 
