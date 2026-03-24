@@ -42,7 +42,7 @@ PORT=8000
 
 ### Memory Distillation model
 
-![distillation](./images/distillation.png)
+![distillation](./images/memory_distill.png)
 
 
 ## Tech Stack

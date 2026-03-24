@@ -90,6 +90,6 @@ func main() {
 	}
 
 	// Cleanup
-	pool.Exec(ctx, "DELETE FROM distilled_memories WHERE id = $1", testID)
+	_, _ = pool.Exec(ctx, "DELETE FROM distilled_memories WHERE id = $1", testID)
 	fmt.Println("✓ Cleanup: deleted test memory")
 }

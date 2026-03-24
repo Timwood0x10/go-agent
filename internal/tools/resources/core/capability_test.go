@@ -200,7 +200,7 @@ func TestCapabilityEngineToolsFor(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(mockTool)
+	_ = registry.Register(mockTool)
 
 	engine := NewCapabilityEngine(registry)
 
@@ -266,8 +266,8 @@ func TestCapabilityEngineFilter(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(mockTool1)
-	registry.Register(mockTool2)
+	_ = registry.Register(mockTool1)
+	_ = registry.Register(mockTool2)
 
 	engine := NewCapabilityEngine(registry)
 
@@ -375,7 +375,7 @@ func TestCapabilityEngineGetAllCapabilities(t *testing.T) {
 		description: "A test tool",
 		category:    CategoryCore,
 	}
-	registry.Register(mockTool)
+	_ = registry.Register(mockTool)
 
 	engine := NewCapabilityEngine(registry)
 
@@ -425,7 +425,7 @@ func TestCapabilityEngineRebuild(t *testing.T) {
 		description: "New tool after rebuild",
 		category:    CategoryCore,
 	}
-	registry.Register(mockTool)
+	_ = registry.Register(mockTool)
 	engine.Rebuild()
 
 	// Should still work after rebuild

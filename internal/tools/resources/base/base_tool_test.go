@@ -561,7 +561,7 @@ func TestMetadataToolImplementsToolInterface(t *testing.T) {
 	tool := WithMetadata(baseTool, metadata)
 
 	// This should compile if metadataTool implements Tool interface
-	var _ core.Tool = tool
+	var _ = tool
 }
 
 // TestBaseToolEdgeCases tests edge cases for BaseTool.

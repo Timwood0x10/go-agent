@@ -111,7 +111,7 @@ func TestNewService(t *testing.T) {
 			svc := NewService(tt.memoryMgr)
 
 			if svc == nil {
-				t.Error("NewService() should not return nil")
+				t.Fatal("NewService() should not return nil")
 			}
 			if svc.memoryMgr != tt.memoryMgr {
 				t.Errorf("NewService().memoryMgr = %v, want %v", svc.memoryMgr, tt.memoryMgr)

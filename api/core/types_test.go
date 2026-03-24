@@ -301,7 +301,7 @@ func TestNewRequestContext(t *testing.T) {
 			rc := NewRequestContext(tt.ctx, tt.tenantID)
 
 			if rc == nil {
-				t.Error("NewRequestContext() should not return nil")
+				t.Fatal("NewRequestContext() should not return nil")
 			}
 
 			if rc.Context != tt.ctx {

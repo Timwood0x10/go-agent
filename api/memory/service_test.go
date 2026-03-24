@@ -155,7 +155,7 @@ func TestNewService(t *testing.T) {
 			svc := NewService(tt.memoryMgr)
 
 			if svc == nil {
-				t.Error("NewService() should not return nil")
+				t.Fatal("NewService() should not return nil")
 			}
 			if svc.memoryMgr != tt.memoryMgr {
 				t.Errorf("NewService().memoryMgr = %v, want %v", svc.memoryMgr, tt.memoryMgr)
@@ -292,8 +292,8 @@ func TestGetMessages(t *testing.T) {
 
 	// Create a test session and add messages
 	sessionID, _ := svc.CreateSession(ctx, "user-123")
-	svc.AddMessage(ctx, sessionID, "user", "Hello")
-	svc.AddMessage(ctx, sessionID, "assistant", "Hi there!")
+	_ = svc.AddMessage(ctx, sessionID, "user", "Hello")
+	_ = svc.AddMessage(ctx, sessionID, "assistant", "Hi there!")
 
 	tests := []struct {
 		name      string

@@ -54,7 +54,7 @@ func TestRegistryRegister(t *testing.T) {
 				description: "First registration",
 				category:    CategoryCore,
 			},
-			wantErr:  true,
+			wantErr: true,
 			errType: ErrToolAlreadyRegistered,
 		},
 	}
@@ -131,7 +131,7 @@ func TestRegistryGet(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(tool)
+	_ = registry.Register(tool)
 
 	tests := []struct {
 		name       string
@@ -189,7 +189,7 @@ func TestRegistryUnregister(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(tool)
+	_ = registry.Register(tool)
 
 	tests := []struct {
 		name     string
@@ -258,8 +258,8 @@ func TestRegistryList(t *testing.T) {
 		category:    CategorySystem,
 	}
 
-	registry.Register(tool1)
-	registry.Register(tool2)
+	_ = registry.Register(tool1)
+	_ = registry.Register(tool2)
 
 	tools = registry.List()
 	if len(tools) != 2 {
@@ -294,12 +294,12 @@ func TestRegistryCount(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(tool)
+	_ = registry.Register(tool)
 	if registry.Count() != 1 {
 		t.Errorf("registry should have count 1, got %d", registry.Count())
 	}
 
-	registry.Unregister("count_test_tool")
+	_ = registry.Unregister("count_test_tool")
 	if registry.Count() != 0 {
 		t.Errorf("registry should have count 0 after unregister, got %d", registry.Count())
 	}
@@ -315,7 +315,7 @@ func TestRegistryExecute(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(tool)
+	_ = registry.Register(tool)
 
 	ctx := context.Background()
 	params := map[string]interface{}{
@@ -349,7 +349,7 @@ func TestRegistryClear(t *testing.T) {
 			description: "Tool",
 			category:    CategoryCore,
 		}
-		registry.Register(tool)
+		_ = registry.Register(tool)
 	}
 
 	if registry.Count() != 5 {
@@ -389,9 +389,9 @@ func TestRegistryFilter(t *testing.T) {
 		category:    CategoryData,
 	}
 
-	registry.Register(tool1)
-	registry.Register(tool2)
-	registry.Register(tool3)
+	_ = registry.Register(tool1)
+	_ = registry.Register(tool2)
+	_ = registry.Register(tool3)
 
 	tests := []struct {
 		name      string
@@ -467,9 +467,9 @@ func TestRegistryFilterByCategory(t *testing.T) {
 		category:    CategoryCore,
 	}
 
-	registry.Register(tool1)
-	registry.Register(tool2)
-	registry.Register(tool3)
+	_ = registry.Register(tool1)
+	_ = registry.Register(tool2)
+	_ = registry.Register(tool3)
 
 	filtered := registry.FilterByCategory(CategoryCore)
 
@@ -508,8 +508,8 @@ func TestRegistryGetSchemas(t *testing.T) {
 		category:    CategorySystem,
 	}
 
-	registry.Register(tool1)
-	registry.Register(tool2)
+	_ = registry.Register(tool1)
+	_ = registry.Register(tool2)
 
 	schemas = registry.GetSchemas()
 	if len(schemas) != 2 {
@@ -544,7 +544,7 @@ func TestRegistryConcurrency(t *testing.T) {
 		description: "A tool for concurrency test",
 		category:    CategoryCore,
 	}
-	registry.Register(tool)
+	_ = registry.Register(tool)
 
 	var wg sync.WaitGroup
 	numGoroutines := 10
@@ -672,7 +672,7 @@ func TestGlobalRegistry(t *testing.T) {
 	}
 
 	// Cleanup
-	GlobalRegistry.Unregister("global_test_tool")
+	_ = GlobalRegistry.Unregister("global_test_tool")
 
 	// Verify cleanup
 	if GlobalRegistry.Count() != originalCount {
@@ -717,7 +717,7 @@ func TestRegistryFilterEdgeCases(t *testing.T) {
 		description: "A tool for edge case test",
 		category:    CategoryCore,
 	}
-	registry.Register(tool)
+	_ = registry.Register(tool)
 
 	tests := []struct {
 		name      string

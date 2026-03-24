@@ -38,9 +38,8 @@ func TestFashionFilters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.filters.Category != tt.filters.Category {
-				t.Errorf("Category field not properly set")
-			}
+			// Verify that filters can be created without errors
+			_ = tt.filters
 		})
 	}
 }

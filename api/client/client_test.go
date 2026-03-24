@@ -399,7 +399,7 @@ func TestNewClientWithConfigFile(t *testing.T) {
 	}
 
 	if client == nil {
-		t.Errorf("expected client to be non-nil")
+		t.Fatal("expected client to be non-nil")
 	}
 
 	if client.configFile == nil {

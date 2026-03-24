@@ -3863,3 +3863,68 @@ LIMIT 5;
 - PostgreSQL NOW() Function: https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT
 - Time Decay in Information Retrieval: https://en.wikipedia.org/wiki/Time_decay
 - Exponential Decay: https://en.wikipedia.org/wiki/Exponential_decay
+
+## Bug #10: memory_tools.go extractPreferences 函数误识别"不喜欢"为"喜欢"
+
+### Date
+2026-03-24
+
+### Severity
+Medium - 导致用户偏好提取错误
+
+### Affected Files
+- `internal/tools/resources/builtin/memory/memory_tools.go`
+
+### Bug Description
+
+#### 症状
+当用户说"不喜欢某某"时，被错误地识别为"喜欢某某"。
+
+#### 示例
+- 输入："我不喜欢 C++"
+- 错误输出：识别为"喜欢 C++"
+- 正确输出：识别为"不喜欢 C++"
+
+### Root Cause Analysis
+
+#### 问题：子字符串匹配逻辑错误
+代码首先检查是否包含"喜欢"：
+```go
+if strings.Contains(content, "喜欢") {
+    // 提取"喜欢"之后的内容
+    afterLike := strings.Split(content, "喜欢")
+    preference := strings.TrimSpace(strings.Split(afterLike[1], "，")[0])
+    // ...
+}
+```
+
+由于 "不喜欢" 包含 "喜欢"，这个检查会先匹配成功，导致错误的分类。
+
+### Solution
+
+#### 修复建议
+需要调整匹配顺序，先检查"不喜欢"和"讨厌"，再检查"喜欢"：
+```go
+// 先检查不喜欢
+if strings.Contains(content, "不喜欢") || strings.Contains(content, "讨厌") {
+    // 提取不喜欢的内容
+    // ...
+} 
+// 再检查喜欢（需要排除"不喜欢"的情况）
+else if strings.Contains(content, "喜欢") {
+    // 提取喜欢的内容
+    // ...
+}
+```
+
+### Verification
+
+#### 当前状态
+- 测试已记录此 bug
+- 测试用例反映当前（错误）行为
+- 需要修复代码逻辑
+
+### References
+- Go String Functions: https://pkg.go.dev/strings
+
+---

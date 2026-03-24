@@ -358,7 +358,7 @@ func TestCalculatorCapabilities(t *testing.T) {
 
 	parameters := calculator.Parameters()
 	if parameters == nil {
-		t.Error("Parameters() should not be nil")
+		t.Fatal("Parameters() should not be nil")
 	}
 
 	if parameters.Type != "object" {

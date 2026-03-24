@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/google/uuid"
 
 	"goagent/api/memory"
@@ -77,13 +80,13 @@ func (s *UserProfileService) ExtractProfileFromSelfIntro(ctx context.Context, te
 	lowerIntro := strings.ToLower(selfIntro)
 
 	// Extract name (already done by extractUserID, but refine here)
-	profile.Name = strings.Title(userID)
+	profile.Name = cases.Title(language.English).String(userID)
 
 	// Extract profession
 	professionKeywords := []string{"programmer", "developer", "engineer", "designer", "manager", "student", "researcher"}
 	for _, keyword := range professionKeywords {
 		if strings.Contains(lowerIntro, keyword) {
-			profile.Profession = strings.Title(keyword)
+			profile.Profession = cases.Title(language.English).String(keyword)
 			break
 		}
 	}
@@ -138,18 +141,18 @@ func (s *UserProfileService) StoreProfile(ctx context.Context, tenantID string, 
 	// Build profile content
 	var content strings.Builder
 	content.WriteString("User Profile:\n")
-	content.WriteString(fmt.Sprintf("Name: %s\n", profile.Name))
+	fmt.Fprintf(&content, "Name: %s\n", profile.Name)
 	if profile.Profession != "" {
-		content.WriteString(fmt.Sprintf("Profession: %s\n", profile.Profession))
+		fmt.Fprintf(&content, "Profession: %s\n", profile.Profession)
 	}
 	if len(profile.Skills) > 0 {
-		content.WriteString(fmt.Sprintf("Skills: %s\n", strings.Join(profile.Skills, ", ")))
+		fmt.Fprintf(&content, "Skills: %s\n", strings.Join(profile.Skills, ", "))
 	}
 	if len(profile.Interests) > 0 {
-		content.WriteString(fmt.Sprintf("Interests: %s\n", strings.Join(profile.Interests, ", ")))
+		fmt.Fprintf(&content, "Interests: %s\n", strings.Join(profile.Interests, ", "))
 	}
 	if profile.Bio != "" {
-		content.WriteString(fmt.Sprintf("Bio: %s\n", profile.Bio))
+		fmt.Fprintf(&content, "Bio: %s\n", profile.Bio)
 	}
 
 	// Generate embedding
@@ -715,7 +718,7 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 
 			// Build personalized greeting based on profile
 			var greeting strings.Builder
-			fmt.Fprintf(&greeting, "Hello %s! Welcome back! 👋\n\n", strings.Title(userID))
+			fmt.Fprintf(&greeting, "Hello %s! Welcome back! 👋\n\n", cases.Title(language.English).String(userID))
 
 			if existingProfile.Profession != "" {
 				fmt.Fprintf(&greeting, "I remember you're a %s", existingProfile.Profession)
@@ -739,7 +742,7 @@ func (kb *KnowledgeBase) GenerateAnswer(ctx context.Context, tenantID, question 
 
 		// Fallback: simple greeting if no profile found
 		log.Printf("ℹ️ No existing profile found for user %s", userID)
-		return fmt.Sprintf("Hello %s! Nice to meet you. I'll remember our conversation for future reference. Please tell me more about your background and technology stack.", strings.Title(userID)), nil
+		return fmt.Sprintf("Hello %s! Nice to meet you. I'll remember our conversation for future reference. Please tell me more about your background and technology stack.", cases.Title(language.English).String(userID)), nil
 	}
 
 	// Check for profile questions ("who am I", "what's my technology stack", etc.)

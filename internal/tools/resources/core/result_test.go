@@ -389,7 +389,7 @@ func TestErrorResultWithDetails(t *testing.T) {
 		"field":   "username",
 		"attempt": 3,
 	}
-	err.WithDetails(details)
+	_ = err.WithDetails(details)
 
 	if err.Details == nil {
 		t.Error("Details should not be nil after WithDetails")

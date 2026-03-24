@@ -90,7 +90,11 @@ func main() {
 		log.Printf("Failed to query table structure: %v", err)
 		return
 	}
-	defer rows2.Close()
+	defer func() {
+		if err := rows2.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	for rows2.Next() {
 		var colName, dataType, nullable, defaultVal string

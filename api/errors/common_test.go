@@ -224,7 +224,7 @@ func TestAppError_WithContext(t *testing.T) {
 	}
 
 	// Test adding multiple contexts
-	result.WithContext("key2", 123).WithContext("key3", true)
+	_ = result.WithContext("key2", 123).WithContext("key3", true)
 	if result.Context["key2"] != 123 {
 		t.Errorf("WithContext() second context value = %v, want %v", result.Context["key2"], 123)
 	}

@@ -55,7 +55,7 @@ func TestNewConfigLoader(t *testing.T) {
 			if got.envPrefix != tt.want.envPrefix {
 				t.Errorf("envPrefix mismatch: got %q, want %q", got.envPrefix, tt.want.envPrefix)
 			}
-			if tt.opts != nil && len(tt.opts) > 0 {
+			if len(tt.opts) > 0 {
 				if len(got.defaultPaths) != len(tt.want.defaultPaths) {
 					t.Errorf("defaultPaths length mismatch: got %d, want %d", len(got.defaultPaths), len(tt.want.defaultPaths))
 				}
@@ -368,8 +368,10 @@ func TestConfigFileLoadFromEnv(t *testing.T) {
 			// Setup environment variables
 			if tt.setupEnv {
 				for k, v := range tt.envVars {
-					os.Setenv(k, v)
-					defer os.Unsetenv(k)
+					_ = os.Setenv(k, v)
+					defer func() {
+						_ = os.Unsetenv(k)
+					}()
 				}
 			}
 
