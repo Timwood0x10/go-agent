@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	"goagent/internal/storage/postgres"
@@ -30,7 +31,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create database pool: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		if err := pool.Close(); err != nil {
+			slog.Error("Failed to close database pool", "error", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -40,16 +45,17 @@ func main() {
 	// Set tenant context
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", "default")
 	if _, err := pool.Exec(ctx, setQuery); err != nil {
-		log.Printf("Failed to set tenant context: %v", err)
+		slog.Error("Failed to set tenant context", "error", err)
 	} else {
-		log.Println("✓ Tenant context set to 'default'")
+		slog.Info("Tenant context set to 'default'")
 	}
 
 	// Test 1: Get all memories for user "ken"
 	fmt.Println("\n=== Test 1: GetByUserID for 'ken' ===")
 	memories, err := distilledRepo.GetByUserID(ctx, "default", "ken", 10)
 	if err != nil {
-		log.Printf("✗ Failed to get memories for 'ken': %v", err)
+		slog.Error("Failed to get memories for 'ken'", "error", err)
+
 	} else {
 		fmt.Printf("✓ Found %d memories for user 'ken'\n", len(memories))
 		for i, mem := range memories {
@@ -72,9 +78,13 @@ func main() {
 		LIMIT 10
 	`)
 	if err != nil {
-		log.Printf("✗ Failed to query all memories: %v", err)
+		slog.Error("✗ Failed to query all memories", "error", err)
 	} else {
-		defer rows.Close()
+		defer func() {
+			if err := rows.Close(); err != nil {
+				slog.Error("✗ Failed to close rows", "error", err)
+			}
+		}()
 		fmt.Println("✓ All memories in database:")
 		for rows.Next() {
 			var id, userID, memType, content string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	"goagent/internal/storage/postgres"
@@ -29,7 +30,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create database pool: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		if err := pool.Close(); err != nil {
+			slog.Error("Failed to close database pool", "error", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -44,7 +49,11 @@ func main() {
 		log.Printf("Failed to query RLS policies: %v", err)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Error("Failed to close rows", "error", err)
+		}
+	}()
 
 	hasPolicies := false
 	for rows.Next() {

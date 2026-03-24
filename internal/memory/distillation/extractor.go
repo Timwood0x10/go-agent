@@ -380,9 +380,9 @@ func (e *ExperienceExtractor) extractUserProfile(messages []Message) *Experience
 		// Create experience with profile as solution
 		// Problem is "User profile" to indicate this is profile information
 		return &Experience{
-			Problem:    "User profile information",
-			Solution:   profile,
-			Confidence: 0.9, // High confidence for self-introduction
+			Problem:          "User profile information",
+			Solution:         profile,
+			Confidence:       0.9, // High confidence for self-introduction
 			ExtractionMethod: ExtractionDirect,
 		}
 	}

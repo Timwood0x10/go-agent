@@ -101,10 +101,10 @@ func TestClassifier_IsUserProfile(t *testing.T) {
 	classifier := NewMemoryClassifier()
 
 	tests := []struct {
-		name      string
-		problem   string
-		solution  string
-		expected  bool
+		name     string
+		problem  string
+		solution string
+		expected bool
 	}{
 		{
 			name:     "user profile with name",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +32,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create database pool: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		if err := pool.Close(); err != nil {
+			slog.Error("Failed to close database pool", "error", err)
+		}
+	}()
 
 	ctx := context.Background()
 
