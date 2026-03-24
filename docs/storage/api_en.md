@@ -1,17 +1,18 @@
 # Storage Module API Documentation
 
+**Last Updated**: 2026-03-24
+
 ## Overview
 
-The Storage module is the core data persistence layer of goagent, implemented based on PostgreSQL 16 + pgvector, providing high-performance vector storage, retrieval, and multi-tenant isolation capabilities.
+The Storage module is the core data persistence layer of GoAgent, implemented based on PostgreSQL 15+ with pgvector, providing high-performance vector storage, retrieval, and multi-tenant isolation capabilities.
 
 ### Core Capabilities
 
-- **Vector Storage and Retrieval**: High-performance vector similarity search based on pgvector
-- **Multi-Tenant Isolation**: RLS + Tenant Guard dual-layer protection
-- **Hybrid Retrieval**: Vector search + BM25 full-text search
+- **Vector Storage & Retrieval**: High-performance vector similarity search based on pgvector
+- **Connection Pool Management**: "Get-Use-Release" pattern connection pool
 - **Intelligent Caching**: Embedding vector caching, result caching
-- **Security Encryption**: AES-256-GCM encryption for sensitive data
-- **Rate Limiting and Circuit Breaking**: Protect system stability
+- **Rate Limiting & Circuit Breaking**: System stability protection
+- **Transaction Support**: Complete database transaction support
 
 ## Architecture Design
 
@@ -20,27 +21,22 @@ The Storage module is the core data persistence layer of goagent, implemented ba
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   Application Layer                       │
-│  Knowledge Base | Agent Experience | Tool Management      │
+│  Knowledge Base | Agent Experience | Tool Management    │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
-│                   Service Layer                          │
-│  RetrievalService | EmbeddingClient | Reconciler         │
+│                 Data Access Layer (Repositories)         │
+│  KnowledgeRepository | SessionRepository | ...          │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
-│                 Data Access Layer (Repositories)          │
-│  KnowledgeRepository | SecretRepository | ...            │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│                   Core Layer                             │
+│                   Core Layer                              │
 │  Pool | TenantGuard | RetrievalGuard | Security         │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
-│              PostgreSQL 16 + pgvector                    │
-│  knowledge_chunks_1024 | experiences_1024 | tools | ...   │
+│              PostgreSQL 15+ + pgvector                   │
+│  knowledge_chunks_1024 | sessions | distilled_memories   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -48,26 +44,57 @@ The Storage module is the core data persistence layer of goagent, implemented ba
 
 #### 1. Pool (Connection Pool)
 
-Database connection pool that manages all database connections.
+Database connection pool implementing the "Get-Use-Release" pattern.
+
+**Code Location**: `internal/storage/postgres/pool.go:1-50`
 
 **Interface:**
 ```go
 type Pool struct {
-    db  *sql.DB
-    cfg *Config
+    cfg          *Config
+    db           *sql.DB
+    mu           sync.RWMutex
+    openCount    int
+    idleCount    int
+    waitCount    int
+    waitDuration time.Duration
 }
 
 // Create connection pool
 func NewPool(cfg *Config) (*Pool, error)
 
-// Get underlying connection
-func (p *Pool) DB() *sql.DB
+// Get connection
+func (p *Pool) Get(ctx context.Context) (*sql.Conn, error)
 
-// Get configuration
-func (p *Pool) Config() *Config
+// Release connection
+func (p *Pool) Release(conn *sql.Conn)
+
+// Use connection (recommended pattern)
+func (p *Pool) WithConnection(ctx context.Context, fn func(*sql.Conn) error) error
 
 // Close connection pool
 func (p *Pool) Close() error
+
+// Get statistics
+func (p *Pool) Stats() *PoolStats
+
+// Check health status
+func (p *Pool) IsHealthy() bool
+
+// Ping database
+func (p *Pool) Ping(ctx context.Context) error
+
+// Execute query
+func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
+
+// Query multiple rows
+func (p *Pool) Query(ctx context.Context, query string, args ...any) (*ManagedRows, error)
+
+// Query single row
+func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
+
+// Begin transaction
+func (p *Pool) Begin(ctx context.Context) (*sql.Tx, error)
 ```
 
 **Configuration:**
@@ -78,108 +105,31 @@ type Config struct {
     User            string
     Password        string
     Database        string
-    MaxOpenConns    int           // Maximum connections (default 25)
+    MaxOpenConns    int           // Maximum open connections (default 25)
     MaxIdleConns    int           // Maximum idle connections (default 10)
-    ConnMaxLifetime time.Duration // Connection maximum lifetime (default 5 minutes)
+    ConnMaxLifetime time.Duration // Connection max lifetime (default 5 minutes)
+    ConnMaxIdleTime time.Duration // Connection max idle time (default 1 minute)
     QueryTimeout    time.Duration // Query timeout (default 30 seconds)
-    Embedding       *EmbeddingConfig
+    SSLMode         string        // SSL mode (disable, require, verify-ca, verify-full)
 }
+
+// DSN generates connection string
+func (c *Config) DSN() string
+
+// Validate configuration
+func (c *Config) Validate() error
 ```
 
-#### 2. TenantGuard (Tenant Guard)
-
-Implements multi-tenant data isolation through PostgreSQL RLS and Tenant Context dual protection.
-
-**Interface:**
+**Statistics:**
 ```go
-type TenantGuard struct {
-    pool *Pool
+type PoolStats struct {
+    OpenConnections  int           // Current open connections
+    InUseConnections int           // Connections in use
+    IdleConnections  int           // Idle connections
+    WaitCount        int64         // Wait count
+    WaitDuration     time.Duration // Total wait duration
+    MaxOpenConns     int           // Maximum open connections
 }
-
-// Create tenant guard
-func NewTenantGuard(pool *Pool) *TenantGuard
-
-// Set tenant context
-func (tg *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) error
-
-// Get current tenant ID
-func (tg *TenantGuard) GetCurrentTenantID(ctx context.Context) (string, error)
-
-// Validate tenant permission
-func (tg *TenantGuard) ValidateTenantAccess(ctx context.Context, tenantID string) error
-```
-
-**How It Works:**
-1. Set `app.tenant_id` session variable at the start of each request
-2. PostgreSQL RLS policies automatically filter out non-current tenant data
-3. Repository layer automatically applies tenant isolation
-
-#### 3. RetrievalGuard (Retrieval Guard)
-
-Provides rate limiting, circuit breaking, and timeout protection to prevent retrieval service overload.
-
-**Interface:**
-```go
-type RetrievalGuard struct {
-    rateLimiter    *RateLimiter
-    circuitBreaker *CircuitBreaker
-    dbTimeout      time.Duration
-}
-
-// Create retrieval guard
-func NewRetrievalGuard() *RetrievalGuard
-
-// Check rate limiting
-func (rg *RetrievalGuard) AllowRateLimit() error
-
-// Check circuit breaker
-func (rg *RetrievalGuard) CheckEmbeddingCircuitBreaker() error
-
-// Record embedding service success
-func (rg *RetrievalGuard) RecordEmbeddingSuccess()
-
-// Record embedding service failure
-func (rg *RetrievalGuard) RecordEmbeddingFailure()
-
-// Set database timeout
-func (rg *RetrievalGuard) WithDBTimeout(ctx context.Context) (context.Context, context.CancelFunc)
-```
-
-**Rate Limiting Strategy:**
-- Default 100 retrieval requests per second
-- Uses sliding window algorithm
-- Returns error when limit exceeded
-
-**Circuit Breaking Strategy:**
-- Default failure threshold 5 times
-- Wait 30 seconds before retry after opening
-- Half-open state allows a small number of test requests
-
-#### 4. Repository (Data Access Layer)
-
-Provides unified data access interface with transaction support.
-
-**Interface:**
-```go
-type Repository struct {
-    Session   *SessionRepository
-    Recommend *RecommendRepository
-    Profile   *ProfileRepository
-    Vector    *VectorSearcher
-    pool      *Pool
-}
-
-// Create repository
-func NewRepository(pool *Pool) *Repository
-
-// Transaction operation
-func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) error) error
-
-// Get connection pool
-func (r *Repository) Pool() *Pool
-
-// Close repository
-func (r *Repository) Close() error
 ```
 
 ## Functional Modules
@@ -188,10 +138,11 @@ func (r *Repository) Close() error
 
 Manages document knowledge storage and retrieval.
 
+**Code Location**: `internal/storage/postgres/repositories/knowledge_repository.go`
+
 **Core Features:**
-- Document chunking storage
+- Document chunk storage
 - Vector similarity retrieval
-- BM25 full-text retrieval
 - Batch import
 - Time decay
 
@@ -208,14 +159,11 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *KnowledgeChunk)
 // Batch create
 func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*KnowledgeChunk) error
 
-// Query by ID
+// Get by ID
 func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*KnowledgeChunk, error)
 
-// Vector retrieval
+// Vector search
 func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []float64, tenantID string, limit int) ([]*KnowledgeChunk, error)
-
-// Keyword retrieval
-func (r *KnowledgeRepository) SearchByKeyword(ctx context.Context, query, tenantID string, limit int) ([]*KnowledgeChunk, error)
 
 // List all chunks by document
 func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, tenantID string) ([]*KnowledgeChunk, error)
@@ -225,9 +173,6 @@ func (r *KnowledgeRepository) UpdateEmbedding(ctx context.Context, id string, em
 
 // Delete
 func (r *KnowledgeRepository) Delete(ctx context.Context, id string) error
-
-// Cleanup expired data
-func (r *KnowledgeRepository) CleanupExpired(ctx context.Context, olderThan time.Time) (int64, error)
 ```
 
 **Data Model:**
@@ -252,214 +197,55 @@ type KnowledgeChunk struct {
 }
 ```
 
-### 2. Secret Repository
+### 2. Session Repository
 
-Manages API keys, passwords and other sensitive information with AES-256-GCM encryption.
+Manages user sessions and message history.
 
-**Core Features:**
-- Key encryption storage
-- Multi-format import (JSON/YAML/CSV)
-- Batch import
-- Key rotation
+**Code Location**: `internal/storage/postgres/repositories/session_repository.go`
 
 **Interface:**
 ```go
-type SecretRepository struct {
-    db     DBTX
-    dbPool *sql.DB
+type SessionRepository struct {
+    db DBTX
 }
 
-// Create key
-func (r *SecretRepository) Create(ctx context.Context, secret *Secret) error
+// Create session
+func (r *SessionRepository) Create(ctx context.Context, session *Session) error
 
-// Batch import
-func (r *SecretRepository) Import(ctx context.Context, items []*SecretImportItem) error
+// Get session
+func (r *SessionRepository) Get(ctx context.Context, id string) (*Session, error)
 
-// Get key
-func (r *SecretRepository) Get(ctx context.Context, tenantID, key string) (*Secret, error)
+// Delete session
+func (r *SessionRepository) Delete(ctx context.Context, id string) error
 
-// List all keys
-func (r *SecretRepository) List(ctx context.Context, tenantID string) ([]*Secret, error)
+// Add message
+func (r *SessionRepository) AddMessage(ctx context.Context, message *Message) error
 
-// Update key
-func (r *SecretRepository) Update(ctx context.Context, secret *Secret) error
-
-// Delete key
-func (r *SecretRepository) Delete(ctx context.Context, tenantID, key string) error
+// Get messages
+func (r *SessionRepository) GetMessages(ctx context.Context, sessionID string, limit int) ([]*Message, error)
 ```
 
 **Data Model:**
 ```go
-type Secret struct {
-    ID        string    `json:"id"`
-    TenantID  string    `json:"tenant_id"`
-    Key       string    `json:"key"`
-    Value     string    `json:"value"` // Encrypted storage
-    Type      string    `json:"type"`
-    ExpiresAt *time.Time `json:"expires_at,omitempty"`
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
-}
-
-type SecretImportItem struct {
-    Key   string `json:"key"`
-    Value string `json:"value"`
-    Type  string `json:"type"`
-}
-```
-
-**Adapter Support:**
-```go
-type SecretAdapter struct{}
-
-// Parse from different formats
-func (a *SecretAdapter) ParseFrom(data []byte) ([]*SecretImportItem, error)
-
-// Format detection
-func (a *SecretAdapter) DetectFormat(data []byte) Format
-
-type Format string
-
-const (
-    FormatJSON Format = "json"
-    FormatYAML Format = "yaml"
-    FormatCSV  Format = "csv"
-)
-```
-
-### 3. Retrieval Service
-
-Intelligent retrieval service supporting multi-source hybrid retrieval.
-
-**Core Features:**
-- Hybrid retrieval (vector + BM25)
-- Multi-source retrieval (knowledge base, experience, tools)
-- Query rewriting
-- Time decay
-- Result merging and ranking
-
-**Interface:**
-```go
-type RetrievalService struct {
-    db              *Pool
-    embeddingClient *EmbeddingClient
-    tenantGuard     *TenantGuard
-    retrievalGuard  *RetrievalGuard
-    logger          *slog.Logger
-}
-
-// Create retrieval service
-func NewRetrievalService(pool *Pool, embeddingClient *EmbeddingClient, tenantGuard *TenantGuard, retrievalGuard *RetrievalGuard) *RetrievalService
-
-// Execute retrieval
-func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*SearchResult, error)
-```
-
-**Retrieval Request:**
-```go
-type SearchRequest struct {
-    Query       string          `json:"query"`           // Retrieval query
-    TenantID    string          `json:"tenant_id"`       // Tenant ID
-    TopK        int             `json:"top_k"`           // Number of results to return
-    MinScore    float64         `json:"min_score"`       // Minimum similarity
-    Plan        *RetrievalPlan  `json:"plan"`            // Retrieval strategy
-    EnableTrace bool            `json:"enable_trace"`    // Enable tracing
-    Trace       *RetrievalTrace `json:"trace,omitempty"` // Trace information
-}
-```
-
-**Retrieval Strategy:**
-```go
-type RetrievalPlan struct {
-    SearchKnowledge   bool    `json:"search_knowledge"`    // Search knowledge base
-    SearchExperience  bool    `json:"search_experience"`   // Search experience
-    SearchTools       bool    `json:"search_tools"`        // Search tools
-    SearchTaskResults bool    `json:"search_task_results"` // Search task results
-
-    KnowledgeWeight   float64 `json:"knowledge_weight"`    // Knowledge base weight (default 0.4)
-    ExperienceWeight  float64 `json:"experience_weight"`   // Experience weight (default 0.3)
-    ToolsWeight       float64 `json:"tools_weight"`        // Tools weight (default 0.2)
-    TaskResultsWeight float64 `json:"task_results_weight"` // Task results weight (default 0.1)
-
-    EnableQueryRewrite  bool `json:"enable_query_rewrite"`  // Enable query rewriting
-    EnableKeywordSearch bool `json:"enable_keyword_search"` // Enable keyword search
-    EnableTimeDecay     bool `json:"enable_time_decay"`     // Enable time decay
-
-    TopK int `json:"top_k"` // Maximum results per source
-}
-```
-
-**Retrieval Result:**
-```go
-type SearchResult struct {
+type Session struct {
     ID        string                 `json:"id"`
-    Content   string                 `json:"content"`
-    Score     float64                `json:"score"`
-    Source    string                 `json:"source"`   // knowledge, experience, tool, task_result
-    Type      string                 `json:"type"`     // Result type
-    Metadata  map[string]interface{} `json:"metadata"` // Additional metadata
+    UserID    string                 `json:"user_id"`
+    TenantID  string                 `json:"tenant_id"`
+    Status    string                 `json:"status"`
     CreatedAt time.Time              `json:"created_at"`
-}
-```
-
-**Default Retrieval Strategy:**
-```go
-func DefaultRetrievalPlan() *RetrievalPlan {
-    return &RetrievalPlan{
-        SearchKnowledge:     true,
-        SearchExperience:    true,
-        SearchTools:         true,
-        SearchTaskResults:   false,
-        KnowledgeWeight:     0.4,
-        ExperienceWeight:    0.3,
-        ToolsWeight:         0.2,
-        TaskResultsWeight:   0.1,
-        EnableQueryRewrite:  false,
-        EnableKeywordSearch: true,
-        EnableTimeDecay:     true,
-        TopK:                10,
-    }
-}
-```
-
-### 4. Embedding Client
-
-Provides embedding vector generation service supporting multiple embedding models.
-
-**Core Features:**
-- Embedding vector generation
-- Batch processing
-- Cache support
-- Timeout protection
-- Retry mechanism
-
-**Interface:**
-```go
-type EmbeddingClient struct {
-    serviceURL string
-    model      string
-    httpClient *http.Client
-    cache      *cache.Cache
-    enabled    bool
+    UpdatedAt time.Time              `json:"updated_at"`
+    ExpiresAt *time.Time             `json:"expires_at,omitempty"`
+    Metadata  map[string]interface{} `json:"metadata"`
 }
 
-// Create embedding client
-func NewEmbeddingClient(serviceURL, model string) *EmbeddingClient
-
-// Generate embedding vector
-func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float64, error)
-
-// Batch generate embedding vectors
-func (c *EmbeddingClient) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error)
-
-// Check if enabled
-func (c *EmbeddingClient) IsEnabled() bool
-
-// Enable client
-func (c *EmbeddingClient) Enable()
-
-// Disable client
-func (c *EmbeddingClient) Disable()
+type Message struct {
+    ID        string                 `json:"id"`
+    SessionID string                 `json:"session_id"`
+    Role      string                 `json:"role"`
+    Content   string                 `json:"content"`
+    Time      time.Time              `json:"time"`
+    Metadata  map[string]interface{} `json:"metadata"`
+}
 ```
 
 ## Usage Guide
@@ -468,225 +254,167 @@ func (c *EmbeddingClient) Disable()
 
 #### 1. Initialize Connection Pool
 
+**Code Location**: `internal/storage/postgres/pool.go:30-50`
+
 ```go
 import "goagent/internal/storage/postgres"
 
 config := &postgres.Config{
-    Host:     "localhost",
-    Port:     5433,
-    User:     "postgres",
-    Password: "postgres",
-    Database: "goagent",
-    Embedding: &postgres.EmbeddingConfig{
-        ServiceURL: "http://localhost:11434",
-        Model:      "nomic-embed-text",
-    },
+    Host:            "localhost",
+    Port:            5433,
+    User:            "postgres",
+    Password:        "postgres",
+    Database:        "goagent",
+    MaxOpenConns:    25,
+    MaxIdleConns:    10,
+    ConnMaxLifetime: 5 * time.Minute,
+    QueryTimeout:    30 * time.Second,
 }
 
 pool, err := postgres.NewPool(config)
 if err != nil {
-    slog.Error(err)
+    slog.Error("Failed to create pool", "error", err)
+    return
 }
 defer pool.Close()
 ```
 
-#### 2. Create Repository
+#### 2. Use Connection Pool (Recommended Pattern)
+
+**Code Location**: `internal/storage/postgres/pool.go:70-90`
 
 ```go
-repo := postgres.NewRepository(pool)
-defer repo.Close()
-```
+// Use WithConnection pattern
+err := pool.WithConnection(ctx, func(conn *sql.Conn) error {
+    var result int
+    return conn.QueryRowContext(ctx, "SELECT 1").Scan(&result)
+})
 
-#### 3. Use Knowledge Base
-
-```go
-import "goagent/internal/storage/postgres/repositories"
-import "goagent/internal/storage/postgres/models"
-
-// Create knowledge base repository
-kbRepo := repositories.NewKnowledgeRepository(pool.DB(), pool.DB())
-
-// Create knowledge chunk
-chunk := &models.KnowledgeChunk{
-    TenantID:        "tenant-001",
-    Content:         "This is knowledge content",
-    Embedding:       []float64{0.1, 0.2, ...}, // 1024-dimensional vector
-    EmbeddingModel:  "nomic-embed-text",
-    EmbeddingVersion: 1,
-    EmbeddingStatus: "completed",
-    SourceType:      "document",
-    Source:          "doc.pdf",
-    ChunkIndex:      0,
-    ContentHash:     "hash123",
-}
-
-err := kbRepo.Create(ctx, chunk)
-```
-
-#### 4. Vector Retrieval
-
-```go
-// Query vector
-queryEmbedding := []float64{0.1, 0.2, ...}
-
-// Vector retrieval
-results, err := kbRepo.SearchByVector(ctx, queryEmbedding, "tenant-001", 10)
 if err != nil {
-    slog.Error(err)
-}
-
-for _, result := range results {
-    fmt.Printf("ID: %s, Content: %s\n", result.ID, result.Content)
+    slog.Error("Query failed", "error", err)
 }
 ```
 
-#### 5. Use Retrieval Service
+#### 3. Query Data
+
+**Code Location**: `internal/storage/postgres/pool.go:100-120`
 
 ```go
-import "goagent/internal/storage/postgres/services"
-import "goagent/internal/storage/postgres/embedding"
+// Query single row
+row := pool.QueryRow(ctx, "SELECT id, content FROM knowledge_chunks WHERE id = $1", chunkID)
 
-// Create embedding client
-embeddingClient := embedding.NewEmbeddingClient(
-    "http://localhost:11434",
-    "nomic-embed-text",
-)
+var chunk KnowledgeChunk
+err := row.Scan(&chunk.ID, &chunk.Content)
+if err != nil {
+    slog.Error("Failed to scan row", "error", err)
+}
+```
 
-// Create tenant guard
-tenantGuard := postgres.NewTenantGuard(pool)
+#### 4. Execute Query
 
-// Create retrieval guard
-retrievalGuard := postgres.NewRetrievalGuard()
+**Code Location**: `internal/storage/postgres/pool.go:130-150`
 
-// Create retrieval service
-retrievalService := services.NewRetrievalService(
-    pool,
-    embeddingClient,
-    tenantGuard,
-    retrievalGuard,
-)
+```go
+// Execute insert
+result, err := pool.Exec(ctx, `
+    INSERT INTO knowledge_chunks (id, tenant_id, content)
+    VALUES ($1, $2, $3)
+`, chunkID, tenantID, content)
 
-// Execute retrieval
-req := &services.SearchRequest{
-    Query:    "What is RAG?",
-    TenantID: "tenant-001",
-    TopK:     5,
-    MinScore: 0.6,
-    Plan:     services.DefaultRetrievalPlan(),
+if err != nil {
+    slog.Error("Failed to insert", "error", err)
 }
 
-results, err := retrievalService.Search(ctx, req)
+rowsAffected, _ := result.RowsAffected()
+slog.Info("Inserted rows", "count", rowsAffected)
+```
+
+#### 5. Use Transactions
+
+**Code Location**: `internal/storage/postgres/pool.go:160-180`
+
+```go
+// Begin transaction
+tx, err := pool.Begin(ctx)
 if err != nil {
-    slog.Error(err)
+    return err
+}
+
+// Execute multiple operations
+_, err = tx.ExecContext(ctx, "INSERT INTO sessions ...")
+if err != nil {
+    tx.Rollback()
+    return err
+}
+
+_, err = tx.ExecContext(ctx, "INSERT INTO messages ...")
+if err != nil {
+    tx.Rollback()
+    return err
+}
+
+// Commit transaction
+if err := tx.Commit(); err != nil {
+    return err
 }
 ```
 
 ### Advanced Usage
 
-#### 1. Transaction Operations
+#### 1. Connection Pool Monitoring
+
+**Code Location**: `internal/storage/postgres/pool.go:190-210`
 
 ```go
-err := repo.Transaction(ctx, func(txRepo *postgres.Repository) error {
-    // Create session
-    session := &models.Session{
-        ID:       "session-001",
-        TenantID: "tenant-001",
-        Status:   "active",
-    }
-    if err := txRepo.Session.Create(ctx, session); err != nil {
-        return err
-    }
+// Get connection pool statistics
+stats := pool.Stats()
 
-    // Create recommendation result
-    result := &models.RecommendResult{
-        SessionID: "session-001",
-        Items:     []string{"item1", "item2"},
-    }
-    if err := txRepo.Recommend.Create(ctx, result); err != nil {
-        return err
-    }
+slog.Info("Pool stats",
+    "open_connections", stats.OpenConnections,
+    "in_use", stats.InUseConnections,
+    "idle", stats.IdleConnections,
+    "wait_count", stats.WaitCount,
+    "wait_duration", stats.WaitDuration,
+)
 
-    return nil
-})
+// Check health status
+if !pool.IsHealthy() {
+    slog.Warn("Pool is not healthy")
+}
 ```
 
-#### 2. Batch Import
+#### 2. Error Handling
+
+**Code Location**: `internal/storage/postgres/pool.go:220-240`
 
 ```go
-chunks := []*models.KnowledgeChunk{
+// Handle connection errors
+conn, err := pool.Get(ctx)
+if err != nil {
+    if errors.Is(err, context.DeadlineExceeded) {
+        slog.Error("Connection timeout")
+        return ErrTimeout
+    }
+    return fmt.Errorf("failed to get connection: %w", err)
+}
+defer pool.Release(conn)
+```
+
+#### 3. Batch Operations
+
+**Code Location**: `internal/storage/postgres/repositories/knowledge_repository.go:100-120`
+
+```go
+// Batch create knowledge chunks
+chunks := []*KnowledgeChunk{
     {Content: "Content 1", ...},
     {Content: "Content 2", ...},
     {Content: "Content 3", ...},
 }
 
 err := kbRepo.CreateBatch(ctx, chunks)
-```
-
-#### 3. Key Management
-
-```go
-import "goagent/internal/storage/postgres/adapters"
-
-// Create key repository
-secretRepo := repositories.NewSecretRepository(pool.DB(), pool.DB())
-
-// Import keys (supports JSON/YAML/CSV)
-data := []byte(`
-openai_api_key: sk-xxx123
-anthropic_api_key: sk-yyy456
-`)
-
-adapter := &adapters.SecretAdapter{}
-items, err := adapter.ParseFrom(data)
 if err != nil {
-    slog.Error(err)
-}
-
-// Batch import
-err = secretRepo.Import(ctx, "tenant-001", items)
-```
-
-#### 4. Custom Retrieval Strategy
-
-```go
-// Custom retrieval plan
-customPlan := &services.RetrievalPlan{
-    SearchKnowledge:     true,
-    SearchExperience:    false,  // Don't search experience
-    SearchTools:         false,  // Don't search tools
-    KnowledgeWeight:     1.0,    // Only consider knowledge base
-    EnableKeywordSearch: true,
-    EnableTimeDecay:     false,  // Don't use time decay
-    TopK:                3,
-}
-
-req := &services.SearchRequest{
-    Query:    "Query content",
-    TenantID: "tenant-001",
-    Plan:     customPlan,
-}
-
-results, err := retrievalService.Search(ctx, req)
-```
-
-#### 5. Retrieval Tracing
-
-```go
-req := &services.SearchRequest{
-    Query:       "Query content",
-    TenantID:    "tenant-001",
-    EnableTrace: true,  // Enable tracing
-}
-
-results, err := retrievalService.Search(ctx, req)
-
-// View trace information
-if req.Trace != nil {
-    log.Printf("Original query: %s", req.Trace.OriginalQuery)
-    log.Printf("Vector results: %d", req.Trace.VectorResults)
-    log.Printf("Keyword results: %d", req.Trace.KeywordResults)
-    log.Printf("Final results: %d", req.Trace.FinalResults)
-    log.Printf("Execution time: %v", req.Trace.ExecutionTime)
+    slog.Error("Failed to create batch", "error", err)
 }
 ```
 
@@ -694,87 +422,75 @@ if req.Trace != nil {
 
 ### 1. Connection Pool Configuration
 
+**Code Location**: `internal/storage/postgres/pool.go:50-60`
+
 ```go
 config := &postgres.Config{
     MaxOpenConns:    25,  // Adjust based on concurrency needs
     MaxIdleConns:    10,  // Maintain some idle connections
-    ConnMaxLifetime: 5 * time.Minute,  // Refresh connections periodically
+    ConnMaxLifetime: 5 * time.Minute,  // Periodically refresh connections
     QueryTimeout:    30 * time.Second,  // Set reasonable timeout
 }
 ```
 
-### 2. Error Handling
+### 2. Use WithConnection Pattern
+
+**Code Location**: `internal/storage/postgres/pool.go:70-90`
 
 ```go
-results, err := kbRepo.SearchByVector(ctx, embedding, tenantID, limit)
-if err != nil {
-    if errors.Is(err, errors.ErrRecordNotFound) {
-        // Record does not exist
-        return nil, nil
-    }
-    // Other errors
-    return nil, fmt.Errorf("search failed: %w", err)
+// Recommended pattern: automatically handle connection acquisition and release
+err := pool.WithConnection(ctx, func(conn *sql.Conn) error {
+    // Use connection to perform operations
+    return doSomething(conn)
+})
+```
+
+### 3. Error Handling
+
+**Code Location**: `internal/storage/postgres/pool.go:220-240`
+
+```go
+// Check error types
+if errors.Is(err, context.DeadlineExceeded) {
+    // Timeout error
+    return ErrTimeout
+}
+
+if errors.Is(err, sql.ErrConnDone) {
+    // Connection closed
+    return ErrConnectionClosed
 }
 ```
 
-### 3. Context Management
+### 4. Context Management
+
+**Code Location**: `internal/storage/postgres/pool.go:130-150`
 
 ```go
 // Set timeout
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 defer cancel()
 
-results, err := kbRepo.SearchByVector(ctx, embedding, tenantID, limit)
-```
-
-### 4. Multi-Tenant Isolation
-
-```go
-// Create tenant guard
-tenantGuard := postgres.NewTenantGuard(pool)
-
-// Set tenant context at the start of each request
-ctx = context.WithValue(ctx, "tenant_id", "tenant-001")
-if err := tenantGuard.SetTenantContext(ctx, "tenant-001"); err != nil {
-    return err
-}
-
-// Subsequent operations automatically apply tenant isolation
-results, err := kbRepo.SearchByVector(ctx, embedding, "tenant-001", limit)
-```
-
-### 5. Batch Operations
-
-```go
-// Batch import is better than individual imports
-chunks := make([]*models.KnowledgeChunk, 0, 100)
-for _, doc := range documents {
-    chunks = append(chunks, doc.Chunks...)
-}
-err := kbRepo.CreateBatch(ctx, chunks)
+// Execute query
+result, err := pool.Exec(ctx, query, args...)
 ```
 
 ## Performance Optimization
 
-### 1. Vector Retrieval Optimization
+### 1. Connection Pool Optimization
 
-- Use appropriate TopK values (5-10)
-- Set reasonable minimum similarity (0.6-0.8)
-- Use time decay to avoid interference from outdated data
+- **MaxOpenConns**: Adjust based on concurrency needs (default 25)
+- **MaxIdleConns**: Maintain some idle connections (default 10)
+- **ConnMaxLifetime**: Periodically refresh connections (default 5 minutes)
+- **QueryTimeout**: Set reasonable timeout (default 30 seconds)
 
-### 2. Caching Strategy
+### 2. Batch Operations
 
-- Enable embedding vector caching
-- Cache common query results
-- Set reasonable cache TTL
-
-### 3. Batch Processing
-
-- Use batch import interfaces
+- Use batch insert interfaces
 - Batch generate embedding vectors
 - Batch update operations
 
-### 4. Index Optimization
+### 3. Index Optimization
 
 - Ensure tenant_id has index
 - Ensure embedding_status has index
@@ -784,109 +500,81 @@ err := kbRepo.CreateBatch(ctx, chunks)
 
 ### Error Types
 
+**Code Location**: `internal/core/errors/common.go`
+
 ```go
 // Core errors
 var (
-    ErrInvalidArgument   = errors.New("invalid argument")
-    ErrRecordNotFound    = errors.New("record not found")
-    ErrDuplicateKey      = errors.New("duplicate key")
-    ErrNoTransaction     = errors.New("no transaction")
-    ErrTenantNotAllowed  = errors.New("tenant not allowed")
-    ErrRateLimitExceeded = errors.New("rate limit exceeded")
-    ErrCircuitBreakerOpen = errors.New("circuit breaker open")
+    ErrInvalidArgument    = errors.New("invalid argument")
+    ErrRecordNotFound     = errors.New("record not found")
+    ErrDuplicateKey       = errors.New("duplicate key")
+    ErrNoTransaction      = errors.New("no transaction")
+    ErrDBConnectionFailed = errors.New("database connection failed")
 )
 ```
 
-### Error Handling Examples
+### Error Handling Example
+
+**Code Location**: `internal/storage/postgres/pool.go:220-240`
 
 ```go
 // Check error types
-if errors.Is(err, errors.ErrRecordNotFound) {
-    // Record does not exist
-    return nil, nil
+if errors.Is(err, context.DeadlineExceeded) {
+    // Timeout error
+    return ErrTimeout
 }
 
-if errors.Is(err, errors.ErrRateLimitExceeded) {
-    // Rate limit error, wait and retry
-    time.Sleep(time.Second)
-    return nil, err
-}
-
-if errors.Is(err, errors.ErrCircuitBreakerOpen) {
-    // Circuit breaker open, fallback processing
-    return fallbackSearch(ctx, query)
+if errors.Is(err, sql.ErrConnDone) {
+    // Connection closed
+    return ErrConnectionClosed
 }
 ```
 
-## Security Considerations
+## Monitoring & Logging
 
-### 1. Data Encryption
+### 1. Connection Pool Monitoring
 
-- Sensitive data encrypted with AES-256-GCM
-- Key management using dedicated Secret Repository
-- Regular rotation of encryption keys
-
-### 2. Multi-Tenant Isolation
-
-- Use RLS policies for automatic isolation
-- Tenant Guard dual protection
-- Validate all cross-tenant access
-
-### 3. SQL Injection Protection
-
-- Use parameterized queries
-- Avoid string concatenation for SQL
-- Validate all input parameters
-
-### 4. Access Control
-
-- Implement principle of least privilege
-- Regularly audit access logs
-- Monitor abnormal access patterns
-
-## Monitoring and Logging
-
-### 1. Performance Monitoring
+**Code Location**: `internal/storage/postgres/pool.go:190-210`
 
 ```go
-// Enable retrieval tracing
-req.EnableTrace = true
-results, err := retrievalService.Search(ctx, req)
+// Periodically log connection pool statistics
+ticker := time.NewTicker(30 * time.Second)
+defer ticker.Stop()
 
-// Record performance metrics
-log.Printf("Execution time: %v", req.Trace.ExecutionTime)
-log.Printf("Vector results: %d", req.Trace.VectorResults)
-log.Printf("Keyword results: %d", req.Trace.KeywordResults)
+for range ticker.C {
+    stats := pool.Stats()
+    slog.Info("Pool stats",
+        "open_connections", stats.OpenConnections,
+        "in_use", stats.InUseConnections,
+        "idle", stats.IdleConnections,
+        "wait_count", stats.WaitCount,
+        "wait_duration", stats.WaitDuration,
+    )
+}
 ```
 
-### 2. Error Logging
+### 2. Query Performance Monitoring
 
 ```go
-// Record detailed error information
-slog.Error("Failed to search knowledge base",
-    "error", err,
-    "tenant_id", tenantID,
+// Log query time
+start := time.Now()
+result, err := pool.Query(ctx, query, args...)
+duration := time.Since(start)
+
+slog.Info("Query executed",
+    "duration", duration,
     "query", query,
-    "top_k", topK,
 )
-```
-
-### 3. Metrics Collection
-
-```go
-// Record retrieval count
-metrics.RecordSearch("knowledge", tenantID)
-
-// Record retrieval duration
-metrics.RecordSearchDuration("knowledge", time.Since(start))
-
-// Record retrieval result count
-metrics.RecordSearchResults("knowledge", len(results))
 ```
 
 ## References
 
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/16/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/15/)
 - [pgvector Documentation](https://github.com/pgvector/pgvector)
-- [RLS Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
-- [Vector Retrieval Best Practices](https://github.com/pgvector/pgvector#best-practices)
+- [Go database/sql](https://pkg.go.dev/database/sql)
+
+---
+
+**Version**: 1.0  
+**Last Updated**: 2026-03-24  
+**Maintainer**: GoAgent Team

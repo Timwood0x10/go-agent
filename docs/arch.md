@@ -1,18 +1,20 @@
-# Style Agent Framework 架构设计
+# GoAgent 框架架构设计
+
+**更新日期**: 2026-03-23
 
 ## 系统架构总览
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           User Input                                    │
-│                    "Xiao Ming, male, 22..."                            │
+│                    "帮我规划一次旅行..."                                │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          Leader Agent                                    │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │
-│  │ Parse Profile│  │  Task Plan   │  │  Aggregate   │                │
+│  │ Parse Input  │  │  Task Plan   │  │  Aggregate   │                │
 │  │   (LLM)      │  │  (LLM)       │  │   Results    │                │
 │  └──────────────┘  └──────────────┘  └──────────────┘                │
 │         │                 │                 │                           │
@@ -25,25 +27,23 @@
          │                  │                  │
          ▼                  ▼                  ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  agent_top      │ │ agent_bottom    │ │  agent_head     │
-│  agent_shoes    │ │    ...          │ │    ...          │
-│  (Worker Actors)│ │                 │ │                 │
+│  Agent-destination │ │ Agent-food    │ │  Agent-hotel    │
+│  (Sub Agent)     │ │  (Sub Agent)   │ │  (Sub Agent)    │
 └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
          │                  │                  │
          └──────────────────┼──────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      AHP Protocol Layer                                 │
+│                      Protocol Layer                                     │
 │  ┌────────────────────────────────────────────────────────────────┐    │
-│  │  Message Queue (In-Memory)                                     │    │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │    │
-│  │  │ leader  │ │agent_top│ │agent_bt │ │agent_hd │   ...        │    │
-│  │  │  queue  │ │  queue  │ │  queue  │ │  queue  │              │    │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │    │
+│  │  AHP Protocol (Agent Handshake Protocol)                       │    │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐                          │    │
+│  │  │  TASK   │ │ RESULT  │ │ PROGRESS│                          │    │
+│  │  └─────────┘ └─────────┘ └─────────┘                          │    │
 │  └────────────────────────────────────────────────────────────────┘    │
 │                                                                         │
-│  Message Types: TASK | RESULT | PROGRESS | ACK | HEARTBEAT            │
+│  Message Types: TASK | RESULT | PROGRESS | ACK                          │
 └─────────────────────────────────────────────────────────────────────────┘
                             │
          ┌──────────────────┼──────────────────┐
@@ -52,9 +52,9 @@
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
 │     Tools       │ │     LLM         │ │    Storage      │
 │                 │ │                  │ │                 │
-│ • fashion_search│ │ • gpt-oss:20b   │ │  • PostgreSQL   │
-│ • weather_check │ │ • llama3.2:3b   │ │  • pgvector     │
-│ • style_recomm  │ │                  │ │                 │
+│ • calculator    │ │ • Ollama        │ │  • PostgreSQL   │
+│ • datetime      │ │ • OpenRouter    │ │  • pgvector     │
+│ • http_request  │ │                  │ │                 │
 └─────────────────┘ └─────────────────┘ └────────┬────────┘
          │                                    │
          │                                    ▼
@@ -64,7 +64,6 @@
          │                        │  │ • Connections    │  │
          │                        │  │   Pool (25/10)   │  │
          │                        │  │ • Transactions  │  │
-         │                        │  │ • RLS (Tenant)    │  │
          │                        │  └───────────────────┘  │
          │                        │  ┌───────────────────┐  │
          │                        │  │ • Vector Index   │  │
@@ -77,13 +76,21 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Memory System                                    │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                    │
-│  │ SessionMemory│  │UserMemory   │  │TaskMemory   │                    │
-│  │  (短期-内存)  │  │ (长期-PG)    │  │ (蒸馏-PG)    │                    │
+│  │ Session     │  │ User Memory  │  │ Task Memory  │                    │
+│  │  (短期内存)  │  │  (长期-PG)   │  │  (蒸馏-PG)   │                    │
 │  └─────────────┘  └─────────────┘  └─────────────┘                    │
 │                    │                                                 │
-│  ProductionMemoryManager (PG + pgvector 持久化)              │
+│  ProductionMemoryManager (PG + pgvector 持久化)                        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**代码位置**:
+- Leader Agent: `internal/agents/leader/agent.go`
+- Sub Agent: `internal/agents/sub/agent.go`
+- Protocol: `internal/protocol/ahp/`
+- LLM Client: `internal/llm/client.go`
+- Storage Pool: `internal/storage/postgres/pool.go`
+- Memory Manager: `internal/memory/production_manager.go`
 
 ---
 
@@ -210,16 +217,138 @@
 
 ---
 
-## Actor 模型对应关系
+## 核心组件实现
 
-| Actor 模型概念 | iFlow 实现 |
-|----------------|-----------|
-| Actor | `LeaderAgent`, `OutfitSubAgent` |
-| Mailbox | `MessageQueue` (In-Memory) |
-| Message | `AHPMessage` (TASK/RESULT/PROGRESS/ACK) |
-| Behavior | Agent 内部的 `_handle_task()`, `_recommend()` |
-| Supervisor | `LeaderAgent` 协调多个 Sub Agent |
-| Failure Handling | DLQ (Dead Letter Queue) |
+### Leader Agent
+
+Leader Agent 负责任务分解、分发和结果聚合。
+
+**代码位置**: `internal/agents/leader/agent.go`
+
+```go
+type LeaderAgent struct {
+    id               string
+    maxSteps         int
+    maxParallelTasks int
+    subAgents        map[string]*SubAgent
+    llmClient        *llm.Client
+}
+
+func (l *LeaderAgent) Process(ctx context.Context, input string) (string, error) {
+    // 1. 解析用户输入
+    parsed, err := l.parseInput(ctx, input)
+    if err != nil {
+        return "", err
+    }
+
+    // 2. 生成任务计划
+    tasks, err := l.planTasks(ctx, parsed)
+    if err != nil {
+        return "", err
+    }
+
+    // 3. 并行执行任务
+    results, err := l.executeTasks(ctx, tasks)
+    if err != nil {
+        return "", err
+    }
+
+    // 4. 聚合结果
+    return l.aggregateResults(ctx, results)
+}
+```
+
+### Sub Agent
+
+Sub Agent 负责执行具体任务。
+
+**代码位置**: `internal/agents/sub/agent.go`
+
+```go
+type SubAgent struct {
+    id        string
+    agentType string
+    triggers  []string
+    llmClient *llm.Client
+    tools     []Tool
+}
+
+func (s *SubAgent) Execute(ctx context.Context, task *Task) (*TaskResult, error) {
+    // 1. 检查触发条件
+    if !s.shouldExecute(task) {
+        return nil, nil
+    }
+
+    // 2. 执行工具
+    toolResults, err := s.executeTools(ctx, task)
+    if err != nil {
+        return nil, err
+    }
+
+    // 3. LLM 生成响应
+    response, err := s.llmClient.Generate(ctx, s.buildPrompt(task, toolResults))
+    if err != nil {
+        return nil, err
+    }
+
+    return &TaskResult{
+        AgentID: s.id,
+        Result:  response,
+    }, nil
+}
+```
+
+### LLM Client
+
+支持多个 LLM 提供商的统一客户端。
+
+**代码位置**: `internal/llm/client.go`
+
+```go
+type Client struct {
+    config     *Config
+    httpClient *http.Client
+}
+
+func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
+    switch ProviderType(c.config.Provider) {
+    case ProviderOpenRouter:
+        return c.generateOpenRouter(ctx, prompt)
+    case ProviderOllama:
+        return c.generateOllama(ctx, prompt)
+    default:
+        return "", fmt.Errorf("unsupported provider: %s", c.config.Provider)
+    }
+}
+```
+
+### Storage Pool
+
+PostgreSQL 连接池实现"获取-使用-释放"模式。
+
+**代码位置**: `internal/storage/postgres/pool.go`
+
+```go
+type Pool struct {
+    cfg          *Config
+    db           *sql.DB
+    mu           sync.RWMutex
+    openCount    int
+    idleCount    int
+    waitCount    int
+    waitDuration time.Duration
+}
+
+func (p *Pool) WithConnection(ctx context.Context, fn func(*sql.Conn) error) error {
+    conn, err := p.Get(ctx)
+    if err != nil {
+        return err
+    }
+    defer p.Release(conn)
+
+    return fn(conn)
+}
+```
 
 ---
 
@@ -422,72 +551,97 @@ Retry (3次) ── 自动重试
 ## 目录结构
 
 ```
-src/
-├── agents/
-│   ├── leader/           # Leader Agent
-│   └── sub/             # Sub Agent
-│
-├── workflow/            # 工作流引擎
-│   ├── loader.go       # 加载工作流 (YAML/JSON)
-│   ├── executor.go     # 执行引擎 (DAG)
-│   └── registry.go     # Agent 注册表
-│
-├── agents/definition/  # Agent Markdown 定义
-│   ├── agent_leader.md
-│   ├── agent_top.md
-│   └── ...
-│
-├── protocol/ahp/       # AHP Protocol
-│
-├── core/
-│   ├── models/         # 数据模型
-│   ├── errors/         # 错误码
-│   └── registry/       # Agent 注册
-│
-├── llm/                # LLM 层
-│   ├── adapter/        # 多模型适配器
-│   ├── parser/         # Output Parser
-│   ├── validator/      # Schema Validator
-│   └── ollama/         # Ollama 实现
-│
-├── storage/postgres/   # PostgreSQL + pgvector
-│
-├── tools/resources/    # Tools
-│
-├── memory/context/     # Memory System
-│
-├── shutdown/           # 优雅退出
-│
-└── ratelimit/         # 限流/背压
+goagent/
+├── internal/                # 核心实现
+│   ├── agents/              # Agent 系统
+│   │   ├── base/            # Agent 基础接口
+│   │   ├── leader/          # Leader Agent
+│   │   └── sub/             # Sub Agent
+│   ├── protocol/            # AHP 协议
+│   │   └── ahp/             # 协议实现
+│   ├── storage/             # 存储层
+│   │   └── postgres/        # PostgreSQL + pgvector
+│   │       ├── pool.go      # 连接池
+│   │       ├── repositories/ # 数据仓库
+│   │       └── migrations/   # 数据库迁移
+│   ├── memory/              # 记忆系统
+│   │   └── production_manager.go
+│   ├── llm/                 # LLM 客户端
+│   │   └── client.go
+│   ├── tools/               # 工具系统
+│   │   └── resources/
+│   ├── core/                # 核心类型
+│   │   ├── errors/          # 错误定义
+│   │   └── types.go
+│   ├── config/              # 配置管理
+│   ├── workflow/            # 工作流引擎
+│   ├── ratelimit/           # 限流
+│   ├── shutdown/            # 优雅退出
+│   └── observability/       # 可观测性
+├── api/                     # API 层
+│   ├── service/             # 服务接口
+│   │   ├── agent/           # Agent 服务
+│   │   ├── llm/             # LLM 服务
+│   │   ├── memory/          # 记忆服务
+│   │   └── retrieval/       # 检索服务
+│   └── client/              # 客户端
+├── examples/                # 示例应用
+│   ├── travel/              # 旅行规划
+│   ├── knowledge-base/      # 知识库问答
+│   ├── simple/              # 简单示例
+│   └── capability-demo/     # 功能演示
+├── services/                # 独立服务
+│   └── embedding/           # Embedding 服务
+│       ├── app.py           # FastAPI 服务
+│       └── config.py
+├── cmd/                     # 命令行工具
+│   └── server/              # 服务器启动
+├── docs/                    # 文档
+└── configs/                 # 配置文件
 ```
+
+**代码位置**: 项目根目录
 
 ---
 
 ## 技术栈
 
-| 层级 | 技术选型 |
-|------|----------|
-| 语言 | golang |
-| LLM | Ollama (gpt-oss:20b / llama3.2:3b) |
-| 协议 | AHP (自定义) |
-| 存储 | PostgreSQL + pgvector |
-| 并发 | ThreadPoolExecutor |
-| 消息队列 | In-Memory (asyncio.Queue) |
+| 层级 | 技术选型 | 代码位置 |
+|------|----------|----------|
+| 语言 | Go 1.21+ | - |
+| LLM | Ollama / OpenRouter | `internal/llm/client.go` |
+| 协议 | AHP (Agent Handshake Protocol) | `internal/protocol/ahp/` |
+| 存储 | PostgreSQL 15+ with pgvector | `internal/storage/postgres/` |
+| 并发 | errgroup, sync | - |
+| 工具 | 内置工具 | `internal/tools/` |
+| Embedding | FastAPI + Ollama/SentenceTransformers | `services/embedding/` |
 
 ---
 
 ## 消息格式 (AHP Protocol)
 
-```python
-class AHPMessage:
-    message_id: str
-    method: AHPMethod        # TASK, RESULT, PROGRESS, ACK, HEARTBEAT
-    agent_id: str            # 发送方
-    target_agent: str        # 接收方
-    task_id: str             # 任务ID
-    session_id: str          # 会话ID
-    payload: Dict             # 消息内容
-    timestamp: datetime
+**代码位置**: `internal/protocol/ahp/message.go`
+
+```go
+type Message struct {
+    MessageID  string    `json:"message_id"`
+    Method     Method    `json:"method"`     // TASK, RESULT, PROGRESS, ACK
+    AgentID    string    `json:"agent_id"`
+    TargetID   string    `json:"target_id"`
+    TaskID     string    `json:"task_id"`
+    SessionID  string    `json:"session_id"`
+    Payload    []byte    `json:"payload"`
+    Timestamp  time.Time `json:"timestamp"`
+}
+
+type Method string
+
+const (
+    MethodTask     Method = "TASK"
+    MethodResult   Method = "RESULT"
+    MethodProgress Method = "PROGRESS"
+    MethodAck      Method = "ACK"
+)
 ```
 
 ---
