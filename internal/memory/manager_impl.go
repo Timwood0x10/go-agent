@@ -13,7 +13,6 @@ import (
 	memctx "goagent/internal/memory/context"
 	"goagent/internal/memory/distillation"
 	"goagent/internal/storage/postgres/embedding"
-	storageModels "goagent/internal/storage/postgres/models"
 )
 
 // memoryManager implements MemoryManager interface.
@@ -400,7 +399,6 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	}
 
 	// Extract metadata
-	sessionID, _ := distilled.Payload["session_id"].(string)
 	userID, _ := distilled.Payload["user_id"].(string)
 	tenantID, _ := distilled.Payload["tenant_id"].(string)
 	if tenantID == "" {
@@ -417,37 +415,31 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 
 	// Store memories in experience repository
 	for _, mem := range memories {
-		// Convert Memory to Experience
-		exp := &storageModels.Experience{
-			TenantID:         tenantID,
-			Type:             "distilled",
-			Input:            mem.Metadata["problem"].(string),
-			Output:           mem.Metadata["solution"].(string),
-			Embedding:        mem.Vector,
-			EmbeddingModel:   m.embedder.GetModel(),
-			EmbeddingVersion: 1,
-			Score:            mem.Importance,
-			Success:          true,
-			Metadata: map[string]interface{}{
-				"memory_type":       mem.Metadata["memory_type"],
-				"conversation_id":   mem.Metadata["conversation_id"],
-				"source":            "distillation",
-				"confidence":        mem.Metadata["confidence"],
-				"extraction_method": mem.Metadata["extraction_method"],
-				"task_id":           taskID,
-				"session_id":        sessionID,
-				"user_id":           userID,
-			},
+		// Convert distillation.Memory to distillation.Experience
+		problem, _ := mem.Metadata["problem"].(string)
+		solution, _ := mem.Metadata["solution"].(string)
+		confidence, _ := mem.Metadata["confidence"].(float64)
+		extractionMethodStr, _ := mem.Metadata["extraction_method"].(string)
+
+		// Default extraction method if not set
+		if extractionMethodStr == "" {
+			extractionMethodStr = string(distillation.ExtractionDirect)
 		}
 
-		// TODO: Implement experience repository storage
-		// err = m.expRepo.Create(ctx, exp)
-		// if err != nil {
-		// 	slog.Error("❌ [Memory Distillation] Failed to store experience",
-		// 		"task_id", taskID, "error", err)
-		// 	continue
-		// }
-		_ = exp // Temporary: avoid unused variable error
+		exp := &distillation.Experience{
+			Problem:          problem,
+			Solution:         solution,
+			Confidence:       confidence,
+			ExtractionMethod: distillation.ExtractionMethod(extractionMethodStr),
+		}
+
+		// Store experience in repository
+		err := m.expRepo.Create(ctx, exp)
+		if err != nil {
+			slog.Error("❌ [Memory Distillation] Failed to store experience",
+				"task_id", taskID, "error", err)
+			continue
+		}
 
 		slog.Debug("✅ [Memory Distillation] Memory stored successfully",
 			"task_id", taskID,
@@ -602,28 +594,31 @@ func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string,
 
 	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
 
-	// TODO: Implement vector search in experience repository
-	// experiences, err := m.expRepo.SearchByVector(ctx, queryVector, "default", limit)
-	// if err != nil {
-	// 	slog.Error("❌ [Memory Search] Failed to search experiences", "error", err)
-	// 	return nil, fmt.Errorf("search experiences: %w", err)
-	// }
+	// Search for similar experiences in experience repository
+	experiences, err := m.expRepo.SearchByVector(ctx, queryVector, "default", limit)
+	if err != nil {
+		slog.Error("❌ [Memory Search] Failed to search experiences", "error", err)
+		return nil, fmt.Errorf("search experiences: %w", err)
+	}
 
 	// Convert experiences to tasks
 	tasks := make([]*models.Task, 0, limit)
-
-	// TODO: Implement conversion from experiences to tasks
-	// for _, exp := range experiences {
-	// 	task := &models.Task{
-	// 		TaskID: exp.ID,
-	// 		Payload: map[string]any{
-	// 			"input":   exp.Input,
-	// 			"output":  exp.Output,
-	// 			"context": exp.Metadata,
-	// 		},
-	// 	}
-	// 	tasks = append(tasks, task)
-	// }
+	for i, exp := range experiences {
+		task := &models.Task{
+			TaskID: fmt.Sprintf("exp_%d_search", i),
+			Payload: map[string]any{
+				"input":  exp.Problem,
+				"output": exp.Solution,
+				"context": map[string]interface{}{
+					"confidence":        exp.Confidence,
+					"extraction_method": string(exp.ExtractionMethod),
+					"source":            "experience_repository",
+					"similarity_rank":   i + 1,
+				},
+			},
+		}
+		tasks = append(tasks, task)
+	}
 
 	slog.Info("✅ [Memory Search] Search completed (new method)",
 		"results_count", len(tasks),

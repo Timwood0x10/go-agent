@@ -175,6 +175,25 @@ func (a *experienceRepositoryAdapter) Delete(ctx interface{}, id string) error {
 	return a.apiRepo.Delete(ctxTyped, id)
 }
 
+// Create implements internal ExperienceRepository interface
+func (a *experienceRepositoryAdapter) Create(ctx interface{}, experience *distillation.Experience) error {
+	// Convert interface{} to context.Context if possible
+	ctxTyped, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+
+	// Convert internal experience to API experience
+	apiExperience := &Experience{
+		Problem:          experience.Problem,
+		Solution:         experience.Solution,
+		Confidence:       experience.Confidence,
+		ExtractionMethod: ExtractionMethod(experience.ExtractionMethod),
+	}
+
+	return a.apiRepo.Create(ctxTyped, apiExperience)
+}
+
 // GetDistiller returns the internal distiller instance (for advanced usage).
 func (s *DistillationServiceImpl) GetDistiller() interface{} {
 	return s.distiller

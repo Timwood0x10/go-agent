@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -123,7 +124,49 @@ If a field cannot be extracted, use null or empty array.`, selfIntro)
 		if err == nil {
 			log.Printf("👤 [Profile] LLM extracted profile data: %s", truncateString(response, 100))
 			// Parse JSON response and update profile
-			// TODO: Implement JSON parsing
+			var extractedProfile struct {
+				Name       string   `json:"name"`
+				Profession string   `json:"profession"`
+				Skills     []string `json:"skills"`
+				Interests  []string `json:"interests"`
+				Bio        string   `json:"bio"`
+			}
+
+			// Clean the response - remove markdown code blocks if present
+			cleanResponse := strings.TrimSpace(response)
+			if strings.HasPrefix(cleanResponse, "```json") {
+				cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
+				cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+				cleanResponse = strings.TrimSpace(cleanResponse)
+			} else if strings.HasPrefix(cleanResponse, "```") {
+				cleanResponse = strings.TrimPrefix(cleanResponse, "```")
+				cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+				cleanResponse = strings.TrimSpace(cleanResponse)
+			}
+
+			// Parse JSON
+			if err := json.Unmarshal([]byte(cleanResponse), &extractedProfile); err == nil {
+				// Update profile with extracted data
+				if extractedProfile.Name != "" {
+					profile.Name = cases.Title(language.English).String(extractedProfile.Name)
+				}
+				if extractedProfile.Profession != "" {
+					profile.Profession = cases.Title(language.English).String(extractedProfile.Profession)
+				}
+				if len(extractedProfile.Skills) > 0 {
+					profile.Skills = extractedProfile.Skills
+				}
+				if len(extractedProfile.Interests) > 0 {
+					profile.Interests = extractedProfile.Interests
+				}
+				if extractedProfile.Bio != "" {
+					profile.Bio = extractedProfile.Bio
+				}
+				profile.Confidence = 0.8 // Set confidence for LLM-extracted data
+				log.Printf("✅ [Profile] Successfully parsed and updated profile for user: %s", userID)
+			} else {
+				log.Printf("⚠️  [Profile] Failed to parse JSON response: %v", err)
+			}
 		}
 	}
 
@@ -1697,20 +1740,78 @@ func (a *experienceRepositoryAdapter) SearchByVector(ctx context.Context, vector
 
 // GetByMemoryType implements ExperienceRepository interface
 func (a *experienceRepositoryAdapter) GetByMemoryType(ctx context.Context, tenantID string, memoryType memory.MemoryType) ([]*memory.Experience, error) {
-	// TODO: Implement get by memory type functionality
-	return []*memory.Experience{}, nil
+	// Query distilled memories by memory type
+	memories, err := a.repo.GetByMemoryType(ctx, tenantID, string(memoryType), 100)
+	if err != nil {
+		return nil, fmt.Errorf("get by memory type: %w", err)
+	}
+
+	// Convert DistilledMemory to Experience
+	experiences := make([]*memory.Experience, len(memories))
+	for i, mem := range memories {
+		experiences[i] = &memory.Experience{
+			Problem:    extractProblemFromContent(mem.Content),
+			Solution:   extractSolutionFromContent(mem.Content),
+			Confidence: mem.Importance,
+		}
+	}
+
+	return experiences, nil
 }
 
 // Update implements ExperienceRepository interface
 func (a *experienceRepositoryAdapter) Update(ctx context.Context, experience *memory.Experience) error {
-	// TODO: Implement update functionality
-	return fmt.Errorf("update not implemented")
+	if experience == nil {
+		return fmt.Errorf("experience cannot be nil")
+	}
+
+	// Search for existing memory by content pattern
+	contentPattern := fmt.Sprintf("%s → %s", experience.Problem, experience.Solution)
+
+	// Since DistilledMemoryRepository doesn't have a search by content method,
+	// we need to get all memories and find the matching one
+	// In a production system, this should be optimized with a proper database query
+
+	// For now, we'll use GetByMemoryType to get all interaction memories
+	memories, err := a.repo.GetByMemoryType(ctx, "default", "interaction", 1000)
+	if err != nil {
+		return fmt.Errorf("get memories for update: %w", err)
+	}
+
+	// Find the memory that matches the pattern
+	var foundMemory *repositories.DistilledMemory
+	for _, mem := range memories {
+		if mem.Content == contentPattern {
+			foundMemory = mem
+			break
+		}
+	}
+
+	if foundMemory == nil {
+		return fmt.Errorf("experience not found")
+	}
+
+	// Update the memory with new values
+	foundMemory.Importance = experience.Confidence
+
+	// Add or update extraction method in metadata
+	if foundMemory.Metadata == nil {
+		foundMemory.Metadata = make(map[string]interface{})
+	}
+	foundMemory.Metadata["extraction_method"] = string(experience.ExtractionMethod)
+
+	// Call the repository Update method
+	return a.repo.Update(ctx, foundMemory)
 }
 
 // Delete implements ExperienceRepository interface
 func (a *experienceRepositoryAdapter) Delete(ctx context.Context, id string) error {
-	// TODO: Implement delete functionality
-	return fmt.Errorf("delete not implemented")
+	if id == "" {
+		return fmt.Errorf("id cannot be empty")
+	}
+
+	// Call the repository Delete method
+	return a.repo.Delete(ctx, "default", id)
 }
 
 // Create implements ExperienceRepository interface

@@ -65,4 +65,11 @@ type ExperienceRepository interface {
 
 	// Delete deletes an experience by ID.
 	Delete(ctx interface{}, id string) error
+
+	// Create creates a new experience.
+	// Args:
+	// ctx - operation context.
+	// experience - the experience to create.
+	// Returns error if creation fails.
+	Create(ctx interface{}, experience *Experience) error
 }

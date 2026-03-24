@@ -80,6 +80,11 @@ func (m *MockExperienceRepository) Delete(ctx interface{}, id string) error {
 	return nil
 }
 
+func (m *MockExperienceRepository) Create(ctx interface{}, experience *Experience) error {
+	m.experiences = append(m.experiences, *experience)
+	return nil
+}
+
 func minInt(a, b int) int {
 	if a < b {
 		return a

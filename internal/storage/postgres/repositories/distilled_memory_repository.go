@@ -338,6 +338,73 @@ func (r *DistilledMemoryRepository) UpdateAccessCount(ctx context.Context, id st
 	return nil
 }
 
+// GetByMemoryType retrieves memories by memory type.
+// Args:
+// ctx - database operation context.
+// tenantID - tenant identifier for isolation.
+// memoryType - memory type to filter by.
+// limit - maximum number of results to return.
+// Returns list of memories ordered by importance (descending).
+func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantID, memoryType string, limit int) ([]*DistilledMemory, error) {
+	// Set tenant context for RLS
+	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
+		return nil, fmt.Errorf("set tenant context: %w", err)
+	}
+
+	query := `
+		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
+			   embedding_model, embedding_version, memory_type, importance,
+			   metadata, access_count, last_accessed_at, expires_at, created_at
+		FROM distilled_memories
+		WHERE memory_type = $1
+		  AND expires_at > NOW()
+		ORDER BY importance DESC, created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, memoryType, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get memories by type: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	memories := make([]*DistilledMemory, 0)
+	for rows.Next() {
+		memory := &DistilledMemory{}
+		var embeddingStr string
+		var metadataStr string
+
+		err := rows.Scan(
+			&memory.ID, &memory.TenantID, &memory.UserID, &memory.SessionID,
+			&memory.Content, &embeddingStr, &memory.EmbeddingModel,
+			&memory.EmbeddingVersion, &memory.MemoryType, &memory.Importance,
+			&metadataStr, &memory.AccessCount, &memory.LastAccessedAt,
+			&memory.ExpiresAt, &memory.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan memory: %w", err)
+		}
+
+		// Parse embedding string to float64 array
+		memory.Embedding, err = parseDistilledVectorString(embeddingStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse embedding: %w", err)
+		}
+
+		// Parse metadata JSON string to map
+		if metadataStr != "" {
+			if err := json.Unmarshal([]byte(metadataStr), &memory.Metadata); err != nil {
+				memory.Metadata = make(map[string]interface{})
+			}
+		}
+
+		memories = append(memories, memory)
+	}
+
+	return memories, nil
+}
+
 // DeleteExpired removes expired memories.
 func (r *DistilledMemoryRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	query := `DELETE FROM distilled_memories WHERE expires_at <= NOW()`
@@ -353,6 +420,100 @@ func (r *DistilledMemoryRepository) DeleteExpired(ctx context.Context) (int64, e
 	}
 
 	return rows, nil
+}
+
+// Update updates an existing distilled memory.
+// Args:
+// ctx - database operation context.
+// memory - memory with updated values, ID must be set.
+// Returns error if update operation fails.
+func (r *DistilledMemoryRepository) Update(ctx context.Context, memory *DistilledMemory) error {
+	if memory.ID == "" {
+		return fmt.Errorf("memory ID is required")
+	}
+
+	// Set tenant context for RLS
+	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
+	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	// Convert metadata to JSON for database storage
+	metadataJSON, err := json.Marshal(memory.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Convert embedding to pgvector format
+	embeddingStr := float64ToVectorString(memory.Embedding)
+
+	query := `
+		UPDATE distilled_memories
+		SET content = $2,
+		    embedding = $3::vector,
+		    embedding_model = $4,
+		    embedding_version = $5,
+		    memory_type = $6,
+		    importance = $7,
+		    metadata = $8,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query,
+		memory.ID, memory.Content, embeddingStr, memory.EmbeddingModel,
+		memory.EmbeddingVersion, memory.MemoryType, memory.Importance, metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("update distilled memory: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("memory not found")
+	}
+
+	return nil
+}
+
+// Delete removes a distilled memory by its ID.
+// Args:
+// ctx - database operation context.
+// tenantID - tenant identifier for isolation.
+// id - memory identifier.
+// Returns error if delete operation fails.
+func (r *DistilledMemoryRepository) Delete(ctx context.Context, tenantID, id string) error {
+	if id == "" {
+		return fmt.Errorf("memory ID is required")
+	}
+
+	// Set tenant context for RLS
+	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+
+	query := `DELETE FROM distilled_memories WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("delete distilled memory: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("memory not found")
+	}
+
+	return nil
 }
 
 // truncateString truncates a string to the specified maximum length.
