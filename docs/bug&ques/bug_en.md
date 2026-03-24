@@ -1,5 +1,1132 @@
 # Bug Log
 
+## Bug #8: Registry Filter Method Nil Pointer Issue and Test Case Logic Error
+
+### Date
+2026-03-24
+
+### Severity
+Medium - Causes Filter method to panic when nil parameter is passed, test case logic error leads to incorrect expected behavior
+
+### Affected Files
+- `internal/tools/resources/core/registry.go`
+- `internal/tools/resources/core/registry_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestRegistryFilter/filter_with_nil_filter` test panic: runtime error: invalid memory address or nil pointer dereference
+2. `TestRegistryRegister/register_duplicate_tool` test fails: unexpected error: tool already registered: duplicate_tool
+3. `TestRegistryRegisterDuplicate` test fails: expected ErrToolAlreadyRegistered, got tool already registered: duplicate_tool
+
+#### Error Messages
+```
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x10448566c]
+
+goroutine 122 [running]:
+goagent/internal/tools/resources/core.(*Registry).Filter(0x2cb030286580, 0x0)
+        /Users/scc/go/src/goagent/internal/tools/resources/core/registry.go:111 +0x1ac
+```
+
+### Root Cause Analysis
+
+#### Issue 1: Filter method doesn't check nil parameter
+
+##### Incorrect Code
+```go
+// Filter returns tools that match the given filter criteria.
+func (r *Registry) Filter(filter *ToolFilter) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	filtered := NewRegistry()
+
+	for name, tool := range r.tools {
+		// Check if tool is in enabled list
+		if len(filter.Enabled) > 0 && !containsString(filter.Enabled, name) {  // ← Nil pointer dereference
+			continue
+		}
+		// ...
+	}
+
+	return filtered
+}
+```
+
+##### Issue Analysis
+1. **Missing nil check**:
+   - Filter method directly accesses `filter.Enabled` without checking if `filter` is nil
+   - When nil parameter is passed, accessing `filter.Enabled` causes nil pointer dereference
+   - Triggers panic, program crashes
+
+2. **Impact scope**:
+   - Any code calling `Filter(nil)` will panic
+   - Nil filter test cases in tests will fail
+   - Affects code robustness and stability
+
+3. **Why it wasn't discovered before**:
+   - Normal usage rarely passes nil parameters
+   - Only discovered during boundary condition testing
+   - Previous tests didn't cover nil filter scenario
+
+#### Issue 2: Test case logic error
+
+##### Incorrect Code
+```go
+// TestRegistryRegister test case
+{
+	name: "register duplicate tool",
+	tool: &MockTool{
+		name:        "duplicate_tool",
+		description: "First registration",
+		category:    CategoryCore,
+	},
+	wantErr: false,  // ← Error: expecting no error
+},
+
+// Test logic
+if tt.name == "register duplicate tool" {
+	firstTool := &MockTool{
+		name:        "duplicate_tool",
+		description: "First registration",
+		category:    CategoryCore,
+	}
+	err := registry.Register(firstTool)  // ← Register first
+	if err != nil {
+		t.Fatalf("first registration failed: %v", err)
+	}
+}
+
+err := registry.Register(tt.tool)  // ← Register same name again, should fail
+
+if tt.wantErr {  // ← But wantErr is false, so this doesn't execute
+	// ...
+} else {
+	if err != nil {  // ← Error detected here, test fails
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+```
+
+##### Issue Analysis
+1. **Contradictory test logic**:
+   - Test case registers a tool first, then registers another tool with same name
+   - This inevitably causes second registration to fail, returning error
+   - But `wantErr` is set to `false`, expecting no error
+   - Test logic is self-contradictory
+
+2. **Correct test intent**:
+   - Should test error handling during duplicate registration
+   - Should set `wantErr: true`
+   - Should set `errType: ErrToolAlreadyRegistered`
+
+#### Issue 3: Incorrect error comparison logic
+
+##### Incorrect Code
+```go
+// TestRegistryRegisterDuplicate test
+err = registry.Register(tool)
+if err != ErrToolAlreadyRegistered {  // ← Direct comparison of wrapped error
+	t.Errorf("expected ErrToolAlreadyRegistered, got %v", err)
+}
+```
+
+##### Issue Analysis
+1. **Error wrapping**:
+   - Register method uses `fmt.Errorf("%w: %s", ErrToolAlreadyRegistered, name)` to wrap error
+   - This causes error type to change, no longer `ErrToolAlreadyRegistered` type
+   - Direct comparison `err != ErrToolAlreadyRegistered` fails
+
+2. **Correct comparison method**:
+   - Should use `errors.Is(err, ErrToolAlreadyRegistered)` to check error chain
+   - This correctly identifies wrapped errors
+   - Follows Go error handling best practices
+
+### Solution
+
+#### 1. Fix Filter method, add nil check
+
+```go
+// Filter returns tools that match the given filter criteria.
+func (r *Registry) Filter(filter *ToolFilter) *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// If filter is nil, return all tools
+	if filter == nil {
+		return &Registry{
+			tools: r.tools,
+		}
+	}
+
+	filtered := NewRegistry()
+
+	for name, tool := range r.tools {
+		// Check if tool is in enabled list
+		if len(filter.Enabled) > 0 && !containsString(filter.Enabled, name) {
+			continue
+		}
+
+		// Check if tool is in disabled list - if so, exclude it
+		if len(filter.Disabled) > 0 && containsString(filter.Disabled, name) {
+			continue
+		}
+
+		// Check category filter
+		if len(filter.Categories) > 0 && !containsCategory(filter.Categories, tool.Category()) {
+			continue
+		}
+
+		// Register tool in filtered registry
+		filtered.tools[name] = tool
+	}
+
+	return filtered
+}
+```
+
+Key changes:
+- Add nil check: `if filter == nil`
+- When filter is nil, return new registry with all tools
+- Avoid nil pointer dereference
+
+#### 2. Fix test case logic
+
+```go
+{
+	name: "register duplicate tool",
+	tool: &MockTool{
+		name:        "duplicate_tool",
+		description: "First registration",
+		category:    CategoryCore,
+	},
+	wantErr:  true,  // ← Fix: expect error
+	errType: ErrToolAlreadyRegistered,  // ← Fix: specify error type
+},
+```
+
+Key changes:
+- Changed `wantErr` from `false` to `true`
+- Added `errType: ErrToolAlreadyRegistered`
+- Made test logic consistent with actual behavior
+
+#### 3. Fix error comparison logic
+
+```go
+// TestRegistryRegisterDuplicate test
+err = registry.Register(tool)
+if !errors.Is(err, ErrToolAlreadyRegistered) {  // ← Fix: use errors.Is
+	t.Errorf("expected ErrToolAlreadyRegistered, got %v", err)
+}
+```
+
+And also fix in TestRegistryRegister test:
+```go
+if tt.wantErr {
+	if err == nil {
+		t.Error("expected error but got nil")
+	}
+	if tt.errType != nil && !errors.Is(err, tt.errType) {  // ← Fix: use errors.Is
+		t.Errorf("expected error %v, got %v", tt.errType, err)
+	}
+} else {
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+```
+
+Key changes:
+- Changed `err != tt.errType` to `!errors.Is(err, tt.errType)`
+- Correctly check error chain
+- Follow Go error handling best practices
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+--- FAIL: TestRegistryRegister (0.00s)
+    --- FAIL: TestRegistryRegister/register_duplicate_tool
+        registry_test.go:88: unexpected error: tool already registered: duplicate_tool
+--- FAIL: TestRegistryRegisterDuplicate (0.00s)
+    registry_test.go:118: expected ErrToolAlreadyRegistered, got tool already registered: duplicate_tool
+--- FAIL: TestRegistryFilter (0.00s)
+    --- FAIL: TestRegistryFilter/filter_with_nil_filter
+panic: runtime error: invalid memory address or nil pointer dereference
+```
+
+**After:**
+```
+--- PASS: TestRegistryRegister (0.00s)
+    --- PASS: TestRegistryRegister/register_duplicate_tool
+--- PASS: TestRegistryRegisterDuplicate (0.00s)
+--- PASS: TestRegistryFilter (0.00s)
+    --- PASS: TestRegistryFilter/filter_with_nil_filter
+```
+
+#### Functional verification
+- ✅ Filter(nil) correctly returns registry with all tools
+- ✅ Duplicate registration correctly returns ErrToolAlreadyRegistered error
+- ✅ Using errors.Is correctly identifies wrapped errors
+- ✅ All tests pass
+- ✅ Test coverage: 98.9%
+
+#### Code quality checks
+- ✅ `go test` - All tests pass
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+
+### Lessons Learned
+
+1. **Importance of defensive programming**:
+   - All public methods should check nil parameters
+   - Cannot assume callers always pass valid parameters
+   - Nil checks are effective means to prevent panics
+
+2. **Correctness of test case logic**:
+   - Test cases must clearly express test intent
+   - Cannot have self-contradictory test logic
+   - Test expectations must match actual behavior
+
+3. **Error handling best practices**:
+   - Use `errors.Is` to check error chains
+   - Don't directly compare wrapped errors
+   - Follow Go error handling conventions
+
+4. **Importance of boundary condition testing**:
+   - Must test boundary conditions like nil parameters
+   - Boundary condition testing can discover hidden bugs
+   - Improves code robustness
+
+### Best Practices
+
+1. **Add nil checks**:
+   ```go
+   // Good
+   func (r *Registry) Filter(filter *ToolFilter) *Registry {
+       if filter == nil {
+           return &Registry{tools: r.tools}
+       }
+       // ...
+   }
+
+   // Bad
+   func (r *Registry) Filter(filter *ToolFilter) *Registry {
+       // Directly access filter.Enabled, panics if filter is nil
+       if len(filter.Enabled) > 0 { ... }
+   }
+   ```
+
+2. **Use errors.Is to check errors**:
+   ```go
+   // Good
+   if !errors.Is(err, ErrToolAlreadyRegistered) {
+       t.Errorf("expected ErrToolAlreadyRegistered, got %v", err)
+   }
+
+   // Bad
+   if err != ErrToolAlreadyRegistered {
+       t.Errorf("expected ErrToolAlreadyRegistered, got %v", err)
+   }
+   ```
+
+3. **Write logically correct test cases**:
+   ```go
+   // Good
+   {
+       name:    "register duplicate tool",
+       tool:    duplicateTool,
+       wantErr: true,
+       errType: ErrToolAlreadyRegistered,
+   }
+
+   // Bad
+   {
+       name:    "register duplicate tool",
+       tool:    duplicateTool,
+       wantErr: false,  // Contradicts test logic
+   }
+   ```
+
+4. **Test boundary conditions**:
+   ```go
+   tests := []struct {
+       name   string
+       filter *ToolFilter
+   }{
+       {"normal filter", &ToolFilter{...}},
+       {"empty filter", &ToolFilter{}},
+       {"nil filter", nil},  // ← Must test
+   }
+   ```
+
+---
+
+## Bug #7: Calculator parseAddSub Function Ignores Invalid Characters
+
+### Date
+2026-03-24
+
+### Severity
+Medium - Causes calculator parser to accept expressions with invalid characters, parsing only the valid part and ignoring invalid suffixes
+
+### Affected Files
+- `internal/tools/resources/builtin/math/calculator.go`
+- `internal/tools/resources/builtin/math/calculator_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. Multiple `TestCalculatorExecute_InvalidInput` tests fail
+2. Expression `1+2)` is parsed as `1+2`, ignoring `)`
+3. Expression `1+2a` is parsed as `1+2`, ignoring `a`
+4. Expression `5.` is parsed as `5.0`, instead of rejecting invalid format
+
+#### Error Messages
+```
+calculator_test.go:296: Execute() should fail for invalid expression
+calculator_test.go:300: Execute() Error = "", want 'invalid_expression'
+```
+
+### Root Cause Analysis
+
+#### Issue 1: parseAddSub function ignores invalid characters
+
+##### Incorrect Code
+```go
+// parseAddSub handles + and -
+func parseAddSub(expr string) (float64, error) {
+	left, remaining, err := parseMulDiv(expr)
+	if err != nil {
+		return 0, err
+	}
+
+loop:
+	for len(remaining) > 0 {
+		switch remaining[0] {
+		case '+':
+			right, newRemaining, err := parseMulDiv(remaining[1:])
+			if err != nil {
+				return 0, err
+			}
+			left += right
+			remaining = newRemaining
+		case '-':
+			right, newRemaining, err := parseMulDiv(remaining[1:])
+			if err != nil {
+				return 0, err
+			}
+			left -= right
+			remaining = newRemaining
+		default:
+			break loop  // ← Silently ignores invalid characters
+		}
+	}
+
+	return left, nil
+}
+```
+
+##### Issue Analysis
+1. **Incorrect logic**:
+   - When encountering non-operator characters, code executes `break loop`
+   - At this point, `remaining` may still contain invalid characters
+   - Function returns success, ignoring these invalid characters
+
+2. **Impact scope**:
+   - Expression `1+2)` is parsed as `1+2`, ignoring `)`
+   - Expression `1+2a` is parsed as `1+2`, ignoring `a`
+   - All expressions with invalid suffixes are partially parsed
+
+3. **Why it wasn't discovered before**:
+   - Most user input expressions are valid
+   - Only discovered when input is incorrect
+   - Test cases didn't cover these boundary conditions
+
+#### Issue 2: parseNumber function accepts numbers ending with decimal point
+
+##### Incorrect Code
+```go
+// parseNumber parses a number from the expression
+func parseNumber(expr string) (float64, string, error) {
+	// ... parsing logic ...
+
+	if i == 0 || (i == 1 && expr[0] == '-') {
+		return 0, "", fmt.Errorf("expected number at position %d", i)
+	}
+
+	numStr := expr[:i]
+	value, err := strconv.ParseFloat(numStr, 64)  // ← Go's ParseFloat accepts "5." format
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to parse number '%s': %v", numStr, err)
+	}
+
+	return value, expr[i:], nil
+}
+```
+
+##### Issue Analysis
+1. **Go's ParseFloat behavior**:
+   - `strconv.ParseFloat("5.", 64)` successfully parses to `5.0`
+   - This is Go's standard library expected behavior
+   - But in mathematical expressions, `5.` is usually considered invalid format
+
+2. **Impact scope**:
+   - Expression `5.` is parsed as `5.0`
+   - Expression `5.+3` is parsed as `5.0+3 = 8.0`
+   - All numbers ending with decimal point are accepted
+
+3. **Why it wasn't discovered before**:
+   - Go's ParseFloat behavior conforms to its specification
+   - But doesn't conform to common mathematical expression conventions
+   - Test cases didn't cover this boundary condition
+
+### Solution
+
+#### 1. Fix parseAddSub function, check for invalid characters
+
+```go
+// parseAddSub handles + and -
+func parseAddSub(expr string) (float64, error) {
+	left, remaining, err := parseMulDiv(expr)
+	if err != nil {
+		return 0, err
+	}
+
+	for len(remaining) > 0 {
+		switch remaining[0] {
+		case '+':
+			right, newRemaining, err := parseMulDiv(remaining[1:])
+			if err != nil {
+				return 0, err
+			}
+			left += right
+			remaining = newRemaining
+		case '-':
+			right, newRemaining, err := parseMulDiv(remaining[1:])
+			if err != nil {
+				return 0, err
+			}
+			left -= right
+			remaining = newRemaining
+		default:
+			// Invalid character encountered
+			return 0, fmt.Errorf("invalid character in expression: %c", remaining[0])
+		}
+	}
+
+	return left, nil
+}
+```
+
+Key changes:
+- Changed `break loop` to `return 0, fmt.Errorf(...)`
+- Return error when encountering invalid characters
+- Removed unused `loop` label
+
+#### 2. Fix parseNumber function, reject numbers ending with decimal point
+
+```go
+if i == 0 || (i == 1 && expr[0] == '-') {
+	return 0, "", fmt.Errorf("expected number at position %d", i)
+}
+
+numStr := expr[:i]
+
+// Check if number ends with decimal point
+if numStr[len(numStr)-1] == '.' {
+	return 0, "", fmt.Errorf("invalid number format: ends with decimal point")
+}
+
+value, err := strconv.ParseFloat(numStr, 64)
+if err != nil {
+	return 0, "", fmt.Errorf("failed to parse number '%s': %v", numStr, err)
+}
+
+return value, expr[i:], nil
+```
+
+Key changes:
+- Added check: `if numStr[len(numStr)-1] == '.'`
+- Return error if number ends with decimal point
+- Check before calling ParseFloat
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+--- FAIL: TestCalculatorExecute_InvalidInput (0.00s)
+    --- FAIL: TestCalculatorExecute_InvalidInput/unmatched_closing_parenthesis
+    --- FAIL: TestCalculatorExecute_InvalidInput/invalid_character
+    --- FAIL: TestCalculatorExecute_InvalidInput/decimal_point_without_digits
+```
+
+**After:**
+```
+--- PASS: TestCalculatorExecute_InvalidInput (0.00s)
+    --- PASS: TestCalculatorExecute_InvalidInput/unmatched_closing_parenthesis
+    --- PASS: TestCalculatorExecute_InvalidInput/invalid_character
+    --- PASS: TestCalculatorExecute_InvalidInput/decimal_point_without_digits
+```
+
+#### Functional verification
+- ✅ `1+2)` correctly returns error "invalid character in expression: )"
+- ✅ `1+2a` correctly returns error "invalid character in expression: a"
+- ✅ `5.` correctly returns error "invalid number format: ends with decimal point"
+- ✅ `1+2` correctly returns `3.0`
+- ✅ `100*(100+1)/2` correctly returns `5050.0`
+- ✅ Test coverage: 94.4%
+
+#### Code quality checks
+- ✅ `go test` - All tests pass
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+
+### Lessons Learned
+
+1. **Importance of parser validation**:
+   - Parser must verify that entire input is fully parsed
+   - Cannot silently ignore invalid characters
+   - Must explicitly reject non-compliant input
+
+2. **Understanding standard library behavior**:
+   - Go standard library behavior may not meet specific domain requirements
+   - Need to add additional validation on top of standard library
+   - Cannot assume standard library behavior always meets expectations
+
+3. **Importance of boundary condition testing**:
+   - Need to test all possible boundary conditions
+   - Including invalid input, format errors, etc.
+   - Cannot only test normal paths
+
+4. **Completeness of error handling**:
+   - All error conditions must return clear error messages
+   - Cannot silently fail or partially succeed
+   - Error messages should be detailed enough for debugging
+
+### Best Practices
+
+1. **Complete input validation**:
+   ```go
+   // Good
+   for len(remaining) > 0 {
+       switch remaining[0] {
+       case '+', '-':
+           // Handle operators
+       default:
+           return 0, fmt.Errorf("invalid character: %c", remaining[0])
+       }
+   }
+
+   // Bad
+   for len(remaining) > 0 {
+       switch remaining[0] {
+       case '+', '-':
+           // Handle operators
+       default:
+           break loop  // Silently ignores invalid characters
+       }
+   }
+   ```
+
+2. **Add domain-specific validation**:
+   ```go
+   // Good
+   if numStr[len(numStr)-1] == '.' {
+       return 0, "", fmt.Errorf("invalid number format: ends with decimal point")
+   }
+   value, err := strconv.ParseFloat(numStr, 64)
+
+   // Bad
+   value, err := strconv.ParseFloat(numStr, 64)  // Trusts standard library behavior
+   ```
+
+3. **Test boundary conditions**:
+   ```go
+   tests := []struct {
+       expression string
+       wantError  bool
+   }{
+       {"1+2", false},
+       {"1+2)", true},  // Invalid suffix
+       {"1+2a", true},  // Invalid character
+       {"5.", true},    // Invalid number format
+   }
+   ```
+
+4. **Clear error messages**:
+   ```go
+   // Good
+   return 0, fmt.Errorf("invalid character in expression: %c", remaining[0])
+
+   // Bad
+   return 0, fmt.Errorf("invalid expression")  // Too vague
+   ```
+
+---
+
+## Bug #6: ResultFormatter formatDataValidation Function Missing valid Field Handling Error
+
+### Date
+2026-03-24
+
+### Severity
+Medium - Causes incorrect formatting of data validation results, returns "validation failed" when valid field is missing
+
+### Affected Files
+- `internal/tools/resources/formatter/result_formatter.go`
+- `internal/tools/resources/formatter/result_formatter_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestResultFormatterFormat_DataValidation/validation_without_data` test fails
+2. When data validation result doesn't contain `valid` field, incorrectly returns "数据验证失败：格式不正确"
+3. Should return default message "数据验证 (operation) 执行完成"
+
+#### Error Messages
+```
+result_formatter_test.go:363: Format() = "数据验证失败：格式不正确", want "数据验证 (validate_phone) 执行完成"
+```
+
+### Root Cause Analysis
+
+#### Issue: Type assertion returns zero value, causing incorrect judgment
+
+##### Incorrect Code
+```go
+// formatDataValidation method
+func (rf *ResultFormatter) formatDataValidation(params map[string]interface{}, data interface{}) string {
+	operation, _ := params["operation"].(string)
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
+	}
+
+	valid, _ := dataMap["valid"].(bool)  // ← Incorrect: ignores exists check
+	if valid {
+		return "数据验证通过：格式正确"
+	}
+
+	return "数据验证失败：格式不正确"  // ← When valid field doesn't exist, executes here
+}
+```
+
+##### Issue Analysis
+1. **Type assertion return values**:
+   - `valid, _ := dataMap["valid"].(bool)` returns two values
+   - First value is bool type value, second value is bool type indicating successful assertion
+   - When `valid` field doesn't exist, first value returns `false` (bool's zero value), second value returns `false` (indicating assertion failed)
+
+2. **Incorrect logic**:
+   - Code ignores the second return value (exists)
+   - When field doesn't exist, `valid` variable is `false`
+   - Code thinks validation failed, returns "数据验证失败：格式不正确"
+   - But should return default message, as validation result is unknown
+
+3. **Impact scope**:
+   - All data validation results without `valid` field are incorrectly formatted
+   - Users see incorrect "validation failed" message
+   - Affects user experience of data validation functionality
+
+4. **Why it wasn't discovered before**:
+   - Most data validation tools return `valid` field
+   - Only in specific situations is the field missing
+   - Test cases didn't cover this scenario
+
+### Solution
+
+#### Fix formatDataValidation function, check if valid field exists
+
+```go
+func (rf *ResultFormatter) formatDataValidation(params map[string]interface{}, data interface{}) string {
+	operation, _ := params["operation"].(string)
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
+	}
+
+	valid, exists := dataMap["valid"].(bool)  // ← Fix: check if field exists
+	if !exists {
+		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)  // ← Return default message when field doesn't exist
+	}
+
+	if valid {
+		return "数据验证通过：格式正确"
+	}
+
+	return "数据验证失败：格式不正确"
+}
+```
+
+Key changes:
+- Changed `valid, _ := dataMap["valid"].(bool)` to `valid, exists := dataMap["valid"].(bool)`
+- Added field existence check `if !exists`
+- When field doesn't exist, return default message instead of "validation failed"
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+result_formatter_test.go:363: Format() = "数据验证失败：格式不正确", want "数据验证 (validate_phone) 执行完成"
+```
+
+**After:**
+```
+--- PASS: TestResultFormatterFormat_DataValidation (0.00s)
+    --- PASS: TestResultFormatterFormat_DataValidation/validation_passed
+    --- PASS: TestResultFormatterFormat_DataValidation/validation_failed
+    --- PASS: TestResultFormatterFormat_DataValidation/validation_without_data
+```
+
+#### Functional verification
+- ✅ valid=true returns "数据验证通过：格式正确"
+- ✅ valid=false returns "数据验证失败：格式不正确"
+- ✅ valid field missing returns "数据验证 (operation) 执行完成"
+- ✅ Data type error returns "数据验证 (operation) 执行完成"
+- ✅ Test coverage: 91.5%
+
+#### Code quality checks
+- ✅ `go test` - All tests pass
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+
+### Lessons Learned
+
+1. **Correct use of type assertions**:
+   - Go's type assertion returns two values: value and success flag
+   - Must check second return value to determine if field exists
+   - Cannot rely on first return value, as zero value might be valid
+
+2. **Importance of defensive programming**:
+   - All type assertions should check existence
+   - Cannot assume field always exists
+   - Need to handle all possible edge cases
+
+3. **Completeness of test cases**:
+   - Need to test scenarios where field is missing
+   - Need to test various boundary conditions
+   - Need to test validity of zero values
+
+4. **Code review best practices**:
+   - All type assertions should check exists flag
+   - Cannot ignore second return value of type assertion
+   - Need to explicitly handle missing field cases
+
+### Best Practices
+
+1. **Correct use of type assertions**:
+   ```go
+   // Good
+   value, exists := dataMap["key"].(string)
+   if !exists {
+       // Handle missing key
+   }
+
+   // Bad
+   value := dataMap["key"].(string)  // Panics if key doesn't exist
+   value, _ := dataMap["key"].(string)  // Ignores error, may cause logic error
+   ```
+
+2. **Handle zero value cases**:
+   ```go
+   // Good
+   value, exists := dataMap["flag"].(bool)
+   if !exists {
+       return "unknown"
+   }
+   if value {
+       return "true"
+   }
+   return "false"
+
+   // Bad
+   value, _ := dataMap["flag"].(bool)
+   if value {
+       return "true"
+   }
+   return "false"  // Cannot distinguish false from missing
+   ```
+
+3. **Add boundary condition tests**:
+   ```go
+   // Test missing field
+   result := core.Result{
+       Success: true,
+       Data:    map[string]interface{}{},  // No "valid" field
+   }
+   got := formatter.Format("data_validation", params, result, duration)
+   want := "数据验证 (validate_phone) 执行完成"
+   assert.Equal(t, want, got)
+   ```
+
+4. **Use explicit checks instead of relying on zero values**:
+   ```go
+   // Good
+   if value, ok := dataMap["key"].(string); ok {
+       // Process value
+   }
+
+   // Bad
+   value := dataMap["key"].(string)
+   if value != "" {
+       // Process value
+   }
+   ```
+
+---
+
+## Bug #5: Registry Filter Function Disabled List Logic Error
+
+### Date
+2026-03-24
+
+### Severity
+High - Causes complete failure of tool filtering functionality, Disabled list behavior is opposite of expected
+
+### Affected Files
+- `internal/tools/resources/core/registry.go`
+- `internal/tools/resources/core/registry_test.go`
+
+### Bug Description
+
+#### Symptoms
+1. `TestRegistryFilter` test fails with unexpected tool count
+2. When using Disabled list for filtering, only tools in Disabled list are included instead of excluded
+3. Tool filtering functionality is completely unusable
+
+#### Error Messages
+```
+--- FAIL: TestRegistryFilter (0.00s)
+    registry_test.go:318: Filter with Disabled list should return 3 tools, got 1
+    registry_test.go:327: Filter with multiple criteria should return 2 tools, got 1
+```
+
+### Root Cause Analysis
+
+#### Issue: Incorrect logic for Disabled list in Filter function
+
+##### Incorrect Code
+```go
+// Filter method
+func (r *Registry) Filter(filter *ToolFilter) *Registry {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+
+    filtered := NewRegistry()
+
+    for name, tool := range r.tools {
+        // Check if tool is in enabled list
+        if len(filter.Enabled) > 0 && !containsString(filter.Enabled, name) {
+            continue
+        }
+
+        // Check if tool is in disabled list
+        if len(filter.Disabled) > 0 && !containsString(filter.Disabled, name) {  // ← Incorrect logic
+            continue
+        }
+
+        // Check category filter
+        if len(filter.Categories) > 0 && !containsCategory(filter.Categories, tool.Category()) {
+            continue
+        }
+
+        // Register tool in filtered registry
+        filtered.tools[name] = tool
+    }
+
+    return filtered
+}
+```
+
+##### Issue Analysis
+1. **Current logic (incorrect)**:
+   ```go
+   if len(filter.Disabled) > 0 && !containsString(filter.Disabled, name) {
+       continue
+   }
+   ```
+   - If tool is **NOT** in Disabled list, skip it
+   - This means **only** tools in Disabled list are included
+   - Behavior is completely opposite of expected
+
+2. **Correct logic**:
+   ```go
+   if len(filter.Disabled) > 0 && containsString(filter.Disabled, name) {
+       continue
+   }
+   ```
+   - If tool **IS** in Disabled list, skip it
+   - This means tools in Disabled list are excluded
+   - Matches expected filtering behavior
+
+3. **Impact scope**:
+   - All filtering operations using Disabled list fail
+   - Tool filtering functionality is completely unusable
+   - Users cannot exclude unwanted tools
+
+4. **Why it wasn't discovered before**:
+   - Test cases were incomplete, didn't cover Disabled list usage
+   - Functional code looked similar to Enabled list
+   - Only discovered when actually using the feature
+
+### Solution
+
+#### Fix Disabled list logic in Filter function
+
+```go
+func (r *Registry) Filter(filter *ToolFilter) *Registry {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+
+    filtered := NewRegistry()
+
+    for name, tool := range r.tools {
+        // Check if tool is in enabled list
+        if len(filter.Enabled) > 0 && !containsString(filter.Enabled, name) {
+            continue
+        }
+
+        // Check if tool is in disabled list - if so, exclude it
+        if len(filter.Disabled) > 0 && containsString(filter.Disabled, name) {  // ← Fix: remove ! operator
+            continue
+        }
+
+        // Check category filter
+        if len(filter.Categories) > 0 && !containsCategory(filter.Categories, tool.Category()) {
+            continue
+        }
+
+        // Register tool in filtered registry
+        filtered.tools[name] = tool
+    }
+
+    return filtered
+}
+```
+
+Key changes:
+- Changed `!containsString(filter.Disabled, name)` to `containsString(filter.Disabled, name)`
+- Removed negation operator `!`
+- New logic: if tool is in Disabled list, skip it (exclude it)
+
+### Verification
+
+#### Test Results
+Before and after comparison:
+
+**Before:**
+```
+--- FAIL: TestRegistryFilter (0.00s)
+    registry_test.go:318: Filter with Disabled list should return 3 tools, got 1
+    registry_test.go:327: Filter with multiple criteria should return 2 tools, got 1
+```
+
+**After:**
+```
+--- PASS: TestRegistryFilter (0.00s)
+```
+
+#### Functional verification
+- ✅ Disabled list correctly excludes specified tools
+- ✅ Enabled list correctly includes only specified tools
+- ✅ Category filtering works correctly
+- ✅ Multiple filter conditions work correctly together
+- ✅ Test coverage: 98.9%
+
+#### Code quality checks
+- ✅ `go test` - All tests pass
+- ✅ `go vet` - No warnings
+- ✅ `gofmt` - Formatting correct
+
+### Lessons Learned
+
+1. **Importance of logical operators**:
+   - Incorrect use of negation operator `!` leads to completely opposite behavior
+   - Need to carefully check logic of each conditional statement
+   - Recommend adding comments explaining purpose of each condition
+
+2. **Importance of test cases**:
+   - Complete test cases can quickly discover logic errors
+   - Need to test all combinations of filter conditions
+   - Edge case testing is important (empty lists, single element, etc.)
+
+3. **Code review best practices**:
+   - Code with similar logic needs special attention
+   - Don't ignore details just because code looks similar
+   - Need line-by-line review, especially conditional statements
+
+4. **Importance of naming conventions**:
+   - Disabled list name suggests "exclude" behavior
+   - But code implementation resulted in "include" behavior
+   - Need to ensure code behavior matches naming conventions
+
+### Best Practices
+
+1. **Add comments for conditionals**:
+   ```go
+   // Check if tool is in disabled list - if so, exclude it
+   if len(filter.Disabled) > 0 && containsString(filter.Disabled, name) {
+       continue
+   }
+   ```
+
+2. **Write complete test cases**:
+   ```go
+   // Test Disabled list functionality
+   registry.Register(tool1) // "system_tool"
+   registry.Register(tool2) // "core_tool1"
+   registry.Register(tool3) // "core_tool2"
+   registry.Register(tool4) // "data_tool"
+   
+   // Disable "system_tool", should get 3 tools
+   filtered := registry.Filter(&ToolFilter{
+       Disabled: []string{"system_tool"},
+   })
+   assert.Equal(t, 3, filtered.Count())
+   ```
+
+3. **Use semantic variable names**:
+   ```go
+   // Good
+   shouldExclude := containsString(filter.Disabled, name)
+   if shouldExclude {
+       continue
+   }
+   
+   // Avoid
+   if len(filter.Disabled) > 0 && !containsString(filter.Disabled, name) {
+       continue
+   }
+   ```
+
+4. **Add logic verification tests**:
+   ```go
+   // Test that disabled tools are actually excluded
+   registry.Register(&MockTool{name: "tool1"})
+   registry.Register(&MockTool{name: "tool2"})
+   
+   filtered := registry.Filter(&ToolFilter{Disabled: []string{"tool1"}})
+   
+   _, exists := filtered.Get("tool1")
+   assert.False(t, exists, "Disabled tool should be excluded")
+   
+   _, exists = filtered.Get("tool2")
+   assert.True(t, exists, "Non-disabled tool should be included")
+   ```
+
+---
+
 ## Bug #1: Executor runSteps Function
 
 ### Date

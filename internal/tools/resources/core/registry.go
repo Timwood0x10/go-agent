@@ -104,6 +104,13 @@ func (r *Registry) Filter(filter *ToolFilter) *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// If filter is nil, return all tools
+	if filter == nil {
+		return &Registry{
+			tools: r.tools,
+		}
+	}
+
 	filtered := NewRegistry()
 
 	for name, tool := range r.tools {
@@ -112,8 +119,8 @@ func (r *Registry) Filter(filter *ToolFilter) *Registry {
 			continue
 		}
 
-		// Check if tool is in disabled list
-		if len(filter.Disabled) > 0 && !containsString(filter.Disabled, name) {
+		// Check if tool is in disabled list - if so, exclude it
+		if len(filter.Disabled) > 0 && containsString(filter.Disabled, name) {
 			continue
 		}
 

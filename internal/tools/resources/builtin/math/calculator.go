@@ -81,7 +81,6 @@ func parseAddSub(expr string) (float64, error) {
 		return 0, err
 	}
 
-loop:
 	for len(remaining) > 0 {
 		switch remaining[0] {
 		case '+':
@@ -99,7 +98,8 @@ loop:
 			left -= right
 			remaining = newRemaining
 		default:
-			break loop
+			// Invalid character encountered
+			return 0, fmt.Errorf("invalid character in expression: %c", remaining[0])
 		}
 	}
 
@@ -209,6 +209,12 @@ func parseNumber(expr string) (float64, string, error) {
 	}
 
 	numStr := expr[:i]
+
+	// Check if number ends with decimal point
+	if numStr[len(numStr)-1] == '.' {
+		return 0, "", fmt.Errorf("invalid number format: ends with decimal point")
+	}
+
 	value, err := strconv.ParseFloat(numStr, 64)
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to parse number '%s': %v", numStr, err)
