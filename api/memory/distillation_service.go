@@ -16,6 +16,8 @@ type DistillationServiceImpl struct {
 	distiller *distillation.Distiller
 	config    *DistillationConfig
 	metrics   *DistillationMetrics
+	repo      ExperienceRepository
+	embedder  embedding.EmbeddingService
 }
 
 // NewDistillationService creates a new DistillationService instance.
@@ -62,6 +64,8 @@ func NewDistillationServiceWithEmbedder(config *DistillationConfig, embedder emb
 		distiller: internalDistiller,
 		config:    config,
 		metrics:   &DistillationMetrics{},
+		repo:      repo,
+		embedder:  embedder,
 	}, nil
 }
 
@@ -405,10 +409,40 @@ func (s *DistillationServiceImpl) UpdateMemory(ctx context.Context, memoryID str
 		return nil
 	}
 
+	if s.repo == nil {
+		return ErrMemoryUpdateFailed
+	}
+
 	slog.InfoContext(ctx, "Updating distilled memory", "memory_id", memoryID, "updates", updates)
-	// TODO: Implement actual memory update logic
-	// This would involve calling the repository to update the memory record
-	return fmt.Errorf("memory update not yet implemented")
+
+	// Get the internal repository for advanced operations
+	internalRepo := s.repo.GetInternalRepository()
+	if internalRepo == nil {
+		return ErrMemoryUpdateFailed
+	}
+
+	// Try to update the memory through the internal repository
+	// The internal repository should have methods to update DistilledMemory records
+	// For now, we'll return an error indicating this feature needs the internal repository
+	// to implement the appropriate update methods
+
+	// Check if this is a memory repository (internal implementation)
+	type internalMemoryRepo interface {
+		UpdateMemory(ctx context.Context, memoryID string, updates map[string]interface{}) error
+	}
+
+	if repo, ok := internalRepo.(internalMemoryRepo); ok {
+		err := repo.UpdateMemory(ctx, memoryID, updates)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to update distilled memory", "memory_id", memoryID, "error", err)
+			return fmt.Errorf("update memory: %w", err)
+		}
+
+		slog.InfoContext(ctx, "Distilled memory updated successfully", "memory_id", memoryID)
+		return nil
+	}
+
+	return fmt.Errorf("internal repository does not support memory updates")
 }
 
 // DeleteMemory deletes a distilled memory.
@@ -422,10 +456,20 @@ func (s *DistillationServiceImpl) DeleteMemory(ctx context.Context, memoryID str
 		return ErrInvalidMemoryID
 	}
 
+	if s.repo == nil {
+		return ErrMemoryDeleteFailed
+	}
+
 	slog.InfoContext(ctx, "Deleting distilled memory", "memory_id", memoryID)
-	// TODO: Implement actual memory deletion logic
-	// This would involve calling the repository to delete the memory record
-	return fmt.Errorf("memory deletion not yet implemented")
+
+	err := s.repo.Delete(ctx, memoryID)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to delete distilled memory", "memory_id", memoryID, "error", err)
+		return fmt.Errorf("delete memory: %w", err)
+	}
+
+	slog.InfoContext(ctx, "Distilled memory deleted successfully", "memory_id", memoryID)
+	return nil
 }
 
 // SearchMemories searches for memories by query text (using vector search).
@@ -444,8 +488,44 @@ func (s *DistillationServiceImpl) SearchMemories(ctx context.Context, query stri
 		return nil, ErrInvalidLimit
 	}
 
+	if s.repo == nil || s.embedder == nil {
+		return nil, ErrVectorSearchFailed
+	}
+
 	slog.InfoContext(ctx, "Searching memories", "query", query, "tenant_id", tenantID, "limit", limit)
-	// TODO: Implement actual memory search logic
-	// This would involve calling the repository to search by vector
-	return []*DistilledMemory{}, nil
+
+	// Generate embedding for the query
+	embedding, err := s.embedder.Embed(ctx, query)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to generate embedding for query", "query", query, "error", err)
+		return nil, fmt.Errorf("generate embedding: %w", err)
+	}
+
+	// Search for similar memories
+	experiences, err := s.repo.SearchByVector(ctx, embedding, tenantID, limit)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to search memories", "query", query, "error", err)
+		return nil, fmt.Errorf("search memories: %w", err)
+	}
+
+	// Convert experiences to distilled memories
+	memories := make([]*DistilledMemory, 0, len(experiences))
+	for _, exp := range experiences {
+		memory := &DistilledMemory{
+			ID:         "",              // Experience doesn't have ID field, will be populated by repository
+			Type:       MemoryKnowledge, // Default type
+			Content:    exp.Problem + "\n" + exp.Solution,
+			Importance: exp.Confidence,
+			Source:     "",
+			TenantID:   tenantID,
+			CreatedAt:  time.Now(),
+			Metadata: map[string]interface{}{
+				"extraction_method": string(exp.ExtractionMethod),
+			},
+		}
+		memories = append(memories, memory)
+	}
+
+	slog.InfoContext(ctx, "Memory search completed", "query", query, "results_count", len(memories))
+	return memories, nil
 }
