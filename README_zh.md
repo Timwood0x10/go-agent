@@ -1,722 +1,738 @@
-# GoAgent 框架
+# GoAgent
 
-一个轻量级、高度可配置的多智能体框架，用于在 Go 中构建 AI 应用程序。
+GoAgent 是一个用 Go 实现的通用 AI Agent 开发框架，支持多 Agent 协作、记忆管理、工具调用等核心功能。
 
-## GoAgent 是什么？
+## 架构图
 
-GoAgent 是一个**通用多智能体框架**，允许用户仅通过**配置（YAML）**构建 AI 应用程序。用户只需要：
+```mermaid
+graph TB
 
-1. 编写一个 YAML 配置文件
-2. 编写一个简单的启动脚本（几行代码）
-3. 框架处理所有复杂的逻辑：
+%% =======================
+%% 用户层
+%% =======================
 
-- **用户画像解析** - 从自然语言中提取用户偏好
-- **动态任务规划** - 基于触发器自动拆分和调度任务
-- **工具调度** - 统一的工具管理
-- **结果验证** - 确保输出符合预期的模式
-- **结果聚合** - 合并来自多个智能体的结果
-- **记忆蒸馏** - 自动提取和总结对话中的关键信息
-- **存储** - pgvector 向量存储，用于跨会话持久化
+User[用户输入<br/>我想去东京旅行5天<br/>预算10000]
 
-## 特性
 
-- **多智能体架构**：Leader 智能体编排多个子智能体进行并行任务执行
-- **AHP 协议**：自定义智能体心跳协议，用于智能体间通信
-- **工作流引擎**：基于 DAG 的动态工作流编排，支持热重载
-- **LLM 集成**：统一适配器，支持 OpenAI、Ollama、OpenRouter 等 LLM 提供商
-- **内存系统**：三层内存管理（会话、用户、任务），支持 RAG
-- **优雅关闭**：五阶段关闭机制，支持回调注册
-- **速率限制**：令牌桶、滑动窗口和基于信号量的限流
-- **工具系统**：可扩展的工具注册表，用于智能体能力
-- **结果验证**：JSON Schema 验证，支持自动重试
-- **向量存储**：PostgreSQL + pgvector，用于语义搜索和 RAG
-- **能力层（ACE）**：智能体能力引擎，用于智能工具选择和能力路由
+%% =======================
+%% Agent Runtime
+%% =======================
 
-## 系统要求
+subgraph AgentRuntime["Agent Runtime"]
 
-### 最低要求
-- Go 1.26.1 或更高版本
-- LLM API 访问权限（OpenAI、Ollama 或 OpenRouter）
+    %% Leader
+    subgraph LeaderAgent["Leader Agent"]
+        MemoryManager[MemoryManager<br/>记忆管理]
+        ParseProfile[ParseProfile<br/>LLM解析]
+        TaskPlanner[TaskPlanner<br/>LLM任务规划]
+        Dispatcher[Dispatcher<br/>errgroup并发]
 
-### 可选要求（用于高级功能）
-- PostgreSQL 16+ 及 pgvector 扩展（用于向量存储）
-- Redis（用于缓存）
-- golangci-lint（用于开发）
+        MemoryManager --> TaskPlanner
+        ParseProfile --> TaskPlanner
+        TaskPlanner --> Dispatcher
+    end
 
-### 依赖项
 
-框架使用最少的外部依赖：
-- `github.com/fsnotify/fsnotify` - 文件系统监视器
-- `github.com/google/uuid` - UUID 生成
+    %% Sub Agents
+    subgraph SubAgents["Sub Agents (并行执行)"]
+        DestinationAgent[Destination Agent]
+        FoodAgent[Food Agent]
+        HotelAgent[Hotel Agent]
+        ItineraryAgent[Itinerary Agent]
+    end
+
+
+    %% AHP Protocol
+    subgraph AHP["AHP Protocol (Agent 通信)"]
+
+        MessageQueue[In-Memory Message Queue<br/>channel]
+
+        subgraph Queues["Agent Queues"]
+            LeaderQueue[leader queue]
+            AgentDstQueue[agent_destination]
+            AgentFoodQueue[agent_food]
+            AgentHotelQueue[agent_hotel]
+        end
+
+        MessageQueue --> LeaderQueue
+        MessageQueue --> AgentDstQueue
+        MessageQueue --> AgentFoodQueue
+        MessageQueue --> AgentHotelQueue
+    end
+
+end
+
+
+%% =======================
+%% 核心服务
+%% =======================
+
+subgraph CoreServices["核心服务"]
+
+    %% LLM
+    subgraph LLMSystem["LLM System"]
+        OpenAI[OpenAI]
+        Ollama[Ollama]
+        OpenRouter[OpenRouter]
+    end
+
+    %% Tools
+    subgraph ToolsSystem["Tools System"]
+
+        subgraph Tools["内置工具"]
+            Calculator[calculator]
+            DateTime[datetime]
+            FileTools[file_tools]
+            HTTPRequest[http_request]
+            WebScraper[web_scraper]
+            KnowledgeSearch[knowledge_search]
+        end
+
+    end
+
+
+    %% Workflow
+    subgraph WorkflowEngine["工作流引擎"]
+
+        DAGEngine[DAG 执行引擎<br/>步骤依赖 + 并行控制]
+
+        WorkflowDef[工作流定义<br/>YAML steps<br/>depends_on<br/>variables]
+
+    end
+
+
+    %% Embedding
+    subgraph EmbeddingServer["Embedding 服务"]
+
+        FastAPI[FastAPI 服务]
+
+        subgraph EmbeddingModels["Embedding 模型"]
+            OllamaEmbed[Ollama<br/>qwen3-embedding:0.6b]
+            SentenceTransformers[e5-large]
+        end
+
+        FastAPI --> OllamaEmbed
+        FastAPI --> SentenceTransformers
+
+    end
+
+end
+
+
+%% =======================
+%% 存储层
+%% =======================
+
+subgraph Storage["存储层 (PostgreSQL + pgvector)"]
+
+    %% Memory Tables
+    subgraph MemoryTables["记忆系统"]
+
+        Conversations[conversations<br/>会话记录]
+
+        TaskResults[task_results<br/>任务执行结果]
+
+        DistilledMem[distilled_memories<br/>蒸馏记忆]
+
+    end
+
+
+    %% Knowledge Base
+    subgraph KnowledgeBase["知识库"]
+
+        KnowledgeChunks[knowledge_chunks_1024]
+
+        VectorIndex[向量索引<br/>ivfflat]
+
+        KnowledgeChunks --> VectorIndex
+
+    end
+
+
+    %% Storage Features
+    subgraph StorageFeatures["存储特性"]
+
+        ConnectionPool[连接池<br/>Max 25 / Idle 10]
+
+        TenantIsolation[RLS 租户隔离<br/>SET app.tenant_id]
+
+        WriteBuffer[批量写入缓冲]
+
+        RetrievalGuard[检索限流<br/>100 req/s]
+
+        Timeout[查询超时<br/>30s]
+
+    end
+
+end
+
+
+%% =======================
+%% 连接
+%% =======================
+
+User --> LeaderAgent
+
+LeaderAgent --> AHP
+AHP --> SubAgents
+SubAgents --> AHP
+
+AgentRuntime --> CoreServices
+
+CoreServices --> Storage
+EmbeddingServer --> Storage
+WorkflowEngine --> Storage
+
+
+%% =======================
+%% 样式
+%% =======================
+
+classDef user fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+classDef runtime fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+classDef services fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+classDef storage fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+
+class User user
+class AgentRuntime runtime
+class CoreServices services
+class Storage storage
+```
+
+
+### Embedding Gateway Service (FastAPI)
+
+Embedding Service 是 GoAgent 的独立向量嵌入服务，支持多种后端：
+
+
+```mermaid
+graph LR
+
+%% ======================
+%% Client
+%% ======================
+
+subgraph Client["Client"]
+    Agent[GoAgent Runtime]
+end
+
+
+%% ======================
+%% Embedding Service
+%% ======================
+
+subgraph EmbeddingService["Embedding Service (FastAPI)"]
+
+    API[REST API<br/>/embed]
+
+    Normalizer[Text Normalization<br/>Unicode · Lowercase · Trim]
+
+    Cache[Redis Cache<br/>TTL: 24h]
+
+    ModelEngine[Embedding Engine]
+
+    API --> Normalizer
+    Normalizer --> Cache
+    Cache -->|Cache Miss| ModelEngine
+    Cache -->|Cache Hit| API
+    ModelEngine --> Cache
+    ModelEngine --> API
+
+end
+
+
+%% ======================
+%% Embedding Providers
+%% ======================
+
+subgraph Providers["Embedding Providers"]
+
+    Ollama[Ollama<br/>qwen3-embedding:0.6b<br/>Local]
+
+    SentenceTransformer[SentenceTransformers<br/>e5-large<br/>Remote]
+
+end
+
+ModelEngine --> Ollama
+ModelEngine --> SentenceTransformer
+
+
+%% ======================
+%% System Capabilities
+%% ======================
+
+subgraph Capabilities["Service Capabilities"]
+
+    Batch[Batch Embedding]
+
+    Health[Health Check]
+
+    VectorNorm[Vector Normalization]
+
+    AutoNorm[Automatic Text Normalization]
+
+end
+
+
+API --> Capabilities
+
+
+%% ======================
+%% Connections
+%% ======================
+
+Agent -->|HTTP REST| API
+
+
+%% ======================
+%% Styles
+%% ======================
+
+classDef client fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+classDef server fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+classDef backend fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+classDef feature fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+
+class Client client
+class EmbeddingService server
+class Providers backend
+class Capabilities feature
+```
+
+**Embedding Service 特性**:
+- **高性能**: 支持 Ollama 本地部署和 SentenceTransformers 云端部署
+- **智能缓存**: Redis 缓存 + 文本规范化，避免缓存失效
+- **批量处理**: 支持批量向量生成，提升效率
+- **自动归一化**: 向量自动归一化为单位向量，确保余弦相似度准确
+- **健康检查**: 内置健康检查端点
+
+**配置文件**: `services/embedding/.env`
+```env
+BACKEND_TYPE=ollama              # 后端类型: ollama / transformers
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3-embedding:0.6b
+MODEL_NAME=qwen3-embedding:0.6b
+EMBEDDING_DIM=1024
+REDIS_URL=redis://localhost:6379
+CACHE_TTL=86400
+HOST=0.0.0.0
+PORT=8000
+```
+
+**代码位置**: 
+- `services/embedding/app.py` - 服务主程序
+- `services/embedding/config.py` - 配置管理
+- `internal/storage/postgres/embedding/client.go` - Go 客户端
+
+
+### Memory Distillation model
+
+```mermaid
+
+graph TB
+
+%% ======================
+%% Conversation Source
+%% ======================
+
+subgraph Conversation["Conversation Layer"]
+
+    UserInput[User Message]
+
+    AgentReply[Agent Response]
+
+    ConversationBuffer[Conversation Buffer<br/>Session Memory]
+
+    UserInput --> ConversationBuffer
+    AgentReply --> ConversationBuffer
+
+end
+
+
+%% ======================
+%% Distillation Trigger
+%% ======================
+
+subgraph Trigger["Distillation Trigger"]
+
+    RoundTrigger[N-Round Trigger<br/>默认配置]
+
+    ConfigTrigger[YAML Config Trigger]
+
+    ManualTrigger[Manual Trigger<br/>用户触发]
+
+end
+
+
+ConversationBuffer --> Trigger
+
+
+%% ======================
+%% Distillation Engine
+%% ======================
+
+subgraph DistillationEngine["Memory Distillation Engine"]
+
+    Extractor[Key Information Extractor<br/>LLM]
+
+    Simplifier[Sentence Simplification<br/>去定语/去冗余]
+
+    MemoryBuilder[Distilled Memory Builder<br/>结构化记忆]
+
+    Extractor --> Simplifier
+    Simplifier --> MemoryBuilder
+
+end
+
+
+Trigger --> Extractor
+
+
+%% ======================
+%% Embedding Pipeline
+%% ======================
+
+subgraph EmbeddingPipeline["Embedding Pipeline"]
+
+    Queue[Embedding Queue<br/>异步任务]
+
+    EmbeddingWorker[Embedding Worker]
+
+end
+
+
+MemoryBuilder --> Queue
+Queue --> EmbeddingWorker
+
+
+%% ======================
+%% Storage
+%% ======================
+
+subgraph Storage["PostgreSQL + pgvector"]
+
+    DistilledTable[distilled_memories]
+
+    VectorIndex[pgvector index]
+
+    DistilledTable --> VectorIndex
+
+end
+
+
+EmbeddingWorker --> DistilledTable
+
+
+%% ======================
+%% Retrieval
+%% ======================
+
+subgraph Retrieval["Memory Retrieval"]
+
+    QueryEmbedding[Query Embedding]
+
+    VectorSearch[Vector Search]
+
+    MemoryRanking[Memory Ranking]
+
+end
+
+
+QueryEmbedding --> VectorSearch
+VectorSearch --> MemoryRanking
+VectorIndex --> VectorSearch
+
+
+%% ======================
+%% Agent Usage
+%% ======================
+
+subgraph AgentRuntime["Agent Runtime"]
+
+    MemoryManager[MemoryManager]
+
+end
+
+
+MemoryRanking --> MemoryManager
+
+
+%% ======================
+%% Styles
+%% ======================
+
+classDef convo fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+classDef trigger fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+classDef distill fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+classDef embed fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+classDef storage fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+
+class Conversation convo
+class Trigger trigger
+class DistillationEngine distill
+class EmbeddingPipeline embed
+class Storage storage
+```
+
+
+
+## 技术栈
+
+### 核心技术
+- **语言**: Go 1.21+
+- **数据库**: PostgreSQL 15+ with pgvector 扩展
+- **并发**: errgroup, sync
+- **协议**: 自定义 AHP 协议
+- **Embedding 服务**: FastAPI + Ollama/SentenceTransformers
+- **缓存**: Redis
+
+### 主要组件
+| 组件 | 作用 | 实现位置 |
+|------|------|----------|
+| **Agent 系统** | Leader/Sub Agent 协作 | `internal/agents/` |
+| **协议层** | Agent 间通信和心跳 | `internal/protocol/ahp/` |
+| **记忆系统** | 会话、任务、蒸馏记忆 | `internal/memory/` |
+| **存储层** | PostgreSQL + pgvector | `internal/storage/postgres/` |
+| **工具系统** | 工具注册和调用 | `internal/tools/` |
+| **工作流引擎** | DAG 工作流编排 | `internal/workflow/engine/` |
+| **Embedding 服务** | 向量嵌入生成 | `services/embedding/` |
+
+### 依赖库
 - `github.com/lib/pq` - PostgreSQL 驱动
+- `github.com/google/uuid` - UUID 生成
 - `github.com/stretchr/testify` - 测试框架
-- `golang.org/x/*` - 标准 Go 扩展库
+- `golang.org/x/sync` - 并发扩展
 - `gopkg.in/yaml.v3` - YAML 解析
+- `fastapi` - Embedding 服务框架
+- `redis` - 缓存支持
 
-没有繁重的第三方框架依赖。
+## 配置说明
 
-## 快速开始
+### 1. LLM 配置
 
-### 运行旅行规划示例
-
-```bash
-cd /goagent
-
-# 设置 API 密钥
-export OPENROUTER_API_KEY="your-api-key"
-
-# 运行
-go run ./examples/travel/main.go
-```
-
-### 尝试知识库示例
-
-```bash
-cd goagent
-
-# 启动 PostgreSQL + pgvector
-docker run -d \
-  --name postgres-pgvector \
-  -p 5433:5432 \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=goagent \
-  pgvector/pgvector:pg16
-
-# 导入文档
-cd examples/knowledge-base
-go run main.go --save example.md
-
-# 提问
-go run main.go --chat
-```
-
-## 配置参考
-
-所有配置都在 YAML 中。以下是您可以配置的内容：
-
-### LLM 设置
+**配置文件**: `examples/travel/config.yaml`
 
 ```yaml
 llm:
-  provider: "openrouter"      # "openai", "ollama", "openrouter"
-  api_key: ""                 # 使用环境变量：OPENROUTER_API_KEY
-  base_url: "https://openrouter.ai/api/v1"
-  model: "meta-llama/llama-3.1-8b-instruct"
-  timeout: 60                 # 秒
-  max_tokens: 4096           # 最大响应令牌数
+  provider: openrouter        # LLM 提供商: openai / ollama / openrouter
+  api_key: ""                  # API Key（建议使用环境变量 OPENROUTER_API_KEY）
+  base_url: https://openrouter.ai/api/v1
+  model: meta-llama/llama-3.1-8b-instruct
+  timeout: 60                  # 请求超时时间（秒）
+  max_tokens: 2048              # 最大响应 token 数
 ```
 
-### 智能体设置
+**代码位置**: `internal/llm/client.go:80-100`
+
+### 2. Agent 配置
 
 ```yaml
 agents:
   leader:
-    id: "leader-travel"
-    max_steps: 10
-    max_parallel_tasks: 4
-    max_validation_retry: 3
-    enable_cache: true
+    id: leader-travel
+    max_steps: 10              # 最大执行步数
+    max_parallel_tasks: 4      # 最大并行任务数
+    enable_cache: true          # 启用缓存
 
   sub:
-    - id: "agent-destination"
-      type: "destination"
-      category: "destination"
-      triggers: ["destination"]    # 触发此智能体的关键词
-      max_retries: 3
-      timeout: 30
-      model: "..."               # 可选：每个智能体的模型
-      provider: "..."            # 可选：每个智能体的提供商
+    - id: agent-destination
+      type: destination         # Agent 类型: destination/food/hotel/itinerary
+      triggers: [destination]   # 触发关键词
+      max_retries: 3             # 最大重试次数
+      timeout: 30                # 超时时间（秒）
 ```
 
-### 提示词模板
+**代码位置**: `internal/agents/leader/agent.go:30-50`
 
-通过 YAML 模板自定义智能体行为：
-
-```yaml
-prompts:
-  # 用户画像提取 - 将用户输入解析为结构化数据
-  profile_extraction: |
-    你是一位旅行助手。请从用户的输入中提取旅行偏好信息。
-    用户输入: {{.input}}
-    ...
-
-  # 推荐 - 生成推荐
-  recommendation: |
-    请根据以下信息推荐 {{.Category}}：
-    目的地: {{index . "destination"}}
-    预算: {{index . "budget"}}
-    ...
-```
-
-**模板变量：**
-
-| 变量 | 描述 |
-|------|------|
-| `{{.input}}` | 原始用户输入（profile_extraction） |
-| `{{.Category}}` | 智能体类型（recommendation） |
-| `{{index . "key"}}` | 访问画像字段 |
-
-### 输出设置
-
-```yaml
-output:
-  format: "table"  # "table", "json", "simple"
-  item_template: "{{.Name}} - {{.Price}}"
-  summary_template: "获得 {{.Count}} 个项目"
-```
-
-### 验证设置
-
-使用 JSON Schema 配置结果验证：
-
-```yaml
-validation:
-  enabled: true           # 启用/禁用验证
-  schema_type: "travel"  # "fashion", "travel", "custom"
-  retry_on_fail: true    # 验证失败时重试 LLM 调用
-  max_retries: 3         # 最大重试次数
-  strict_mode: false     # 如果为 true，验证失败时返回错误
-```
-
-### 存储设置（可选）
+### 3. 数据库配置
 
 ```yaml
 storage:
-  enabled: false            # 启用 PostgreSQL 存储
-  type: "postgres"
-  host: "localhost"
-  port: 5432
-  username: "postgres"
-  password: "postgres"
-  database: "goagent"
-  ssl_mode: "disable"
+  enabled: true               # 启用 PostgreSQL 存储
+  type: postgres
+  host: localhost
+  port: 5433                # Docker 默认端口是 5433
+  user: postgres
+  password: postgres
+  database: goagent
+  
   pgvector:
-    enabled: false          # 启用 pgvector 进行向量搜索
-    dimension: 1536         # 嵌入维度
-    table_name: "embeddings"
+    enabled: true             # 启用 pgvector
+    dimension: 1024           # 向量维度
 ```
 
-### 内存设置（可选）
+**代码位置**: `internal/storage/postgres/pool.go:35-50`
+
+### 4. Embedding 服务配置
+
+```yaml
+embedding:
+  service_url: http://localhost:8000    # Embedding 服务地址
+  model: qwen3-embedding:0.6b          # 模型名称
+  dimension: 1024                       # 向量维度
+  timeout: 30                           # 请求超时（秒）
+```
+
+**代码位置**: `internal/storage/postgres/embedding/client.go:30-50`
+
+### 5. 记忆配置
 
 ```yaml
 memory:
-  enabled: false            # 启用内存系统
-  session:
-    enabled: true
-    max_history: 50         # 最大对话轮数
-  user_profile:
-    enabled: false          # 启用持久化用户画像
-    storage: "memory"       # "memory" 或 "postgres"
-    vector_db: false         # 将画像存储为向量
-  task_distillation:
-    enabled: false          # 启用任务蒸馏
-    storage: "memory"       # "memory" 或 "postgres"
-    vector_store: false     # 在 pgvector 中存储蒸馏结果
-    prompt: "请简洁总结以下任务的关键信息，包括：用户需求、偏好、预算范围。"
+  enabled: true               # 启用记忆系统
+  enable_distillation: true   # 启用记忆蒸馏
+  distillation_threshold: 3   # 每 N 轮对话触发一次蒸馏
 ```
 
-### 检索策略（可选）
+**代码位置**: `examples/knowledge-base/main.go:750-760`
 
-框架为不同用例提供两种检索服务：
+### 6. 检索配置
 
-| 用例 | 推荐服务 | 描述 |
-|------|---------|------|
-| **单知识库检索**（RAG、问答、文档搜索） | ✅ SimpleRetrievalService | 纯向量相似性搜索，无复杂权重。最适合单源语义搜索场景。 |
-| **精确匹配查询**（如 "a = x"，配置查找） | ✅ SimpleRetrievalService | 精确模式：精确匹配 → 关键词 → 向量（提前返回）。非常适合需要确定性匹配的精确查询。 |
-| **多源融合检索**（知识+经验+工具） | ✅ RetrievalService | 具有多源融合、查询重写和时间衰减的混合搜索。用于复杂企业系统。 |
-| **复杂企业系统**（时间衰减、权重控制） | ✅ RetrievalService | 高级功能，包括查询权重、源权重、基于时间的评分和结果重新排序。 |
-
-**SimpleRetrievalService 特性：**
-- 纯向量相似性搜索（1 - cosine_distance）
-- 精确模式：精确匹配 → 关键词 → 向量（提前返回）
-- 无复杂权重计算
-- 无时间衰减
-- 无查询重写
-- 简单有效，适用于单知识库场景
-
-**RetrievalService 特性：**
-- 多源搜索（知识+经验+工具）
-- 查询重写，权重控制（original=1.0, rule=0.7, llm=0.5）
-- 源权重配置
-- 基于时间的评分衰减
-- 结果合并和重新排序
-- 复杂的企业级功能
-
-## 架构
-
+```yaml
+knowledge:
+  chunk_size: 1000             # 文档分块大小
+  chunk_overlap: 100            # 分块重叠大小
+  top_k: 10                    # 返回前 K 个结果
+  min_score: 0.6               # 最小相似度阈值
 ```
-用户输入
-    │
-    ▼
-┌─────────────────┐
-│ Leader 智能体  │ ── 解析画像（LLM）
-│                │ ── 规划任务（基于触发器）
-└────────┬────────┘
-         │ 并行调度
-         ▼
-┌────────┴────────┐
-│ 子智能体         │
-│ （并行）         │
-└────────┬────────┘
-         │ 结果
-         ▼
-┌─────────────────┐
-│ 验证            │ ── JSON Schema 检查
-│ (Schema)        │ ── 失败时自动重试（可选）
-└────────┬────────┘
-         │ 已验证
-         ▼
-┌─────────────────┐
-│ 聚合            │
-└─────────────────┘
+
+**代码位置**: `internal/storage/postgres/repositories/knowledge_repository.go:100-120`
+
+## 快速开始
+
+### 1. 设置环境
+
+```bash
+# 设置 API Key（推荐使用环境变量）
+export OPENROUTER_API_KEY="your-api-key"
+
+# 或者在配置文件中设置（不推荐）
+```
+
+### 2. 启动数据库（可选，用于持久化）
+
+```bash
+# 使用 Docker 快速启动 PostgreSQL + pgvector
+docker run -d \
+  --name goagent-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=goagent \
+  -p 5433:5432 \
+  pgvector/pgvector:pg15
+
+# 验证连接
+docker exec -it goagent-db psql -U postgres -d goagent -c "SELECT version();"
+```
+
+### 3. 启动 Embedding 服务（用于向量检索）
+
+```bash
+# 进入 embedding 服务目录
+cd services/embedding
+
+# 运行设置脚本（安装依赖和模型）
+./setup.sh
+
+# 启动服务
+./start.sh
+
+# 验证服务
+curl http://localhost:8000/health
+```
+
+### 4. 运行示例
+
+```bash
+# 旅行规划示例
+cd examples/travel
+go run main.go
+
+# 知识库问答示例（需要数据库 + embedding 服务）
+cd examples/knowledge-base
+go run main.go --save README.md  # 导入文档
+go run main.go --chat             # 开始问答
 ```
 
 ## 项目结构
 
 ```
-
 goagent/
-
-├── cmd/                  # 应用程序入口点
-
-│   ├── server/          # 主服务器应用程序
-
-│   ├── migrate_goagent/ # 数据库迁移工具
-
-│   └── setup_test_db/   # 测试数据库设置
-
-├── configs/              # 配置文件
-
-├── docs/                 # 架构文档
-
-├── examples/
-
-│   ├── travel/          # 旅行规划示例
-
-│   ├── simple/           # 简单示例
-
-│   ├── knowledge-base/   # 知识库示例
-
-│   ├── openrouter/       # OpenRouter 示例
-
-│   └── devagent/         # 开发智能体
-
-├── internal/
-
-│   ├── agents/
-
-│   │   ├── base/        # 基础接口
-
-│   │   ├── leader/      # Leader 智能体
-
-│   │   └── sub/          # 子智能体
-
-│   ├── config/          # 配置管理
-
-│   ├── core/
-
-│   │   ├── errors/       # 错误处理
-
-│   │   ├── models/       # 数据模型
-
-│   │   └── registry/     # 组件注册表
-
-│   ├── llm/
-
-│   │   └── output/       # LLM 适配器
-
-│   ├── memory/           # 内存系统
-
-│   ├── observability/    # 日志和跟踪
-
-│   ├── protocol/          # AHP 协议
-
-│   ├── ratelimit/        # 速率限制
-
-│   ├── security/         # 安全工具
-
-│   ├── shutdown/          # 优雅关闭
-
-│   ├── storage/
-
-│   │   └── postgres/     # PostgreSQL + pgvector
-
-│   ├── tools/            # 工具系统
-
-│   └── workflow/         # 工作流引擎
-
-├── knowledge/            # 知识库数据（Python 脚本）
-
-├── services/             # 服务配置
-
-│   └── embedding/        # 嵌入服务
-
-└── pkg/                  # 工具
-
+├── examples/               # 示例应用
+│   ├── travel/              # 旅行规划
+│   ├── knowledge-base/       # 知识库问答
+│   └── simple/              # 简单示例
+├── internal/                # 核心实现
+│   ├── agents/              # Agent 系统
+│   │   ├── base/            # Agent 基础接口
+│   │   ├── leader/          # Leader Agent
+│   │   └── sub/             # Sub Agent
+│   ├── protocol/             # AHP 协议
+│   ├── storage/              # PostgreSQL + pgvector
+│   ├── memory/               # 记忆系统
+│   └── workflow/             # 工作流引擎
+├── services/                # 独立服务
+│   └── embedding/           # Embedding 服务
+│       ├── app.py           # FastAPI 服务
+│       ├── config.py        # 配置管理
+│       └── requirements.txt # Python 依赖
+├── api/                     # API 层
+│   ├── service/             # 服务接口
+│   └── client/              # 客户端
+└── docs/                    # 文档
 ```
-
-## 能力层（ACE）
-
-**智能体能力引擎（ACE）**为智能体提供智能工具选择和能力路由。它解决了多智能体系统中工具选择稳定性和准确性的问题。
-
-### 问题陈述
-
-没有 ACE：
-- LLM 看到所有可用工具（例如 12-22 个工具）
-- 工具选择变得不稳定和不准确
-- 更高的令牌使用和更慢的响应
-- LLM 可能选择不合适的工具
-
-有 ACE：
-- LLM 只看到相关工具（2-4 个工具）
-- 更好的工具选择准确性
-- 减少令牌使用和更快的响应
-- 跨查询的一致工具匹配
-
-### 能力
-
-能力是工具提供的高级抽象。系统支持 8 种核心能力：
-
-| 能力 | 描述 | 英文关键词 | 中文关键词 |
-|------------|-------------|------------------|------------------|
-| `math` | 数学计算 | calculate, sum, multiply, divide, compute | 计算, 求和, 乘, 除, 加, 减, 数字, 公式, 数学 |
-| `knowledge` | 知识检索 | what, who, explain, search, find | 什么, 谁, 解释, 信息, 搜索, 查找, 查询, 知识 |
-| `memory` | 内存访问/存储 | remember, store, recall, history | 记住, 存储, 回忆, 历史, 记忆, 保存 |
-| `text` | 文本处理 | parse, format, validate, transform | 解析, 格式, 验证, 转换, 文本, 提取, 分析, 处理 |
-| `network` | 网络/API 请求 | api, request, fetch, http, url | 请求, 获取, 下载, 网络, 网页, 网址 |
-| `time` | 日期/时间操作 | time, date, schedule, timestamp | 时间, 日期, 时刻, 时间戳, 日历, 持续, 何时, 几点, 现在, 当前 |
-| `file` | 文件系统操作 | file, read, write, delete, list | 文件, 目录, 读取, 写入, 删除, 列出, 保存, 加载, 路径, 文件夹 |
-| `external` | 外部系统交互 | execute, run, command, script | 外部, 系统, 执行, 运行, 命令, 脚本 |
-
-### ACE 工作流程
-
-```
-用户查询
-    │
-    ▼
-┌─────────────────────┐
-│ LLM 意图分析       │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│ 能力检测           │  ← 关键词匹配（英文 + 中文）
-│ - math             │
-│ - knowledge        │
-│ - memory           │
-│ - text             │
-│ - network          │
-│ - time             │
-│ - file             │
-│ - external         │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   工具过滤          │  ← 将能力映射到工具
-│ - math → calculator │
-│ - time → datetime   │
-│ - file → file_tools │
-│ - network → http,   │
-│           scraper   │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   工具排序          │  ← 优先考虑相关工具
-│ - 相关性评分       │
-│ - 类别匹配         │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  LLM 使用 2-4 工具  │  ← 专注的工具集
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  工具执行           │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  结果格式化        │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  用户响应          │
-└─────────────────────┘
-```
-
-### 工具分类
-
-#### 数学工具
-- `calculator`: 数学表达式计算，支持复杂公式
-- `datetime`: 日期和时间操作
-
-**示例:**
-```bash
-> Calculate 100*(100+1)/2
-[TOOL:calculator {"expression": "100*(100+1)/2"}]
-Result: 5050
-
-> 计算 1 到 100 的和
-[TOOL:calculator {"expression": "100*(100+1)/2"}]
-Result: 5050
-```
-
-#### 网络工具
-- `http_request`: HTTP 请求（GET/POST/PUT/DELETE）
-- `web_scraper`: 网页内容提取和解析
-
-**示例:**
-```bash
-> Fetch data from https://httpbin.org/get
-[TOOL:http_request {"url": "https://httpbin.org/get"}]
-Result: {"args": {}, "headers": {...}}
-
-> Extract content from https://example.com
-[TOOL:web_scraper {"url": "https://example.com"}]
-Result: {"title": "Example Domain", "content": "..."}
-```
-
-#### 文件工具
-- `file_tools`: 文件系统操作（读取、写入、列表）
-
-**示例:**
-```bash
-> List files in current directory
-[TOOL:file_tools {"operation": "list", "directory_path": "."}]
-Result: 
-目录: .
-  📁 bin
-  📁 config
-  📄 main.go (12345 bytes)
-
-> 列出当前目录下的文件
-[TOOL:file_tools {"operation": "list", "directory_path": "."}]
-Result: 目录: . 📁 bin 📁 config 📄 main.go (12345 bytes)
-```
-
-#### 文本工具
-- `text_processor`: 文本处理（计数、转换、分割）
-- `json_tools`: JSON 解析和转换
-- `data_validation`: 数据验证
-- `data_transform`: 数据转换
-- `regex_tool`: 正则表达式匹配
-- `log_analyzer`: 日志分析
-
-#### 知识工具
-- `knowledge_search`: 知识库搜索
-- `knowledge_add`: 添加知识
-- `knowledge_update`: 更新知识
-- `knowledge_delete`: 删除知识
-- `correct_knowledge`: 纠正知识
-
-#### 内存工具
-- `memory_search`: 搜索对话历史
-- `user_profile`: 用户画像管理
-- `distilled_memory_search`: 蒸馏内存搜索
-
-#### 系统工具
-- `id_generator`: ID 生成（UUID、短ID）
-
-#### 执行工具
-- `code_runner`: 代码执行（Python、JavaScript）
-
-#### 规划工具
-- `task_planner`: 任务规划
-
-### 关键特性
-
-1. **自动能力检测**：查询中的关键词与能力匹配（英文 + 中文）
-2. **动态工具过滤**：只向 LLM 显示相关工具（2-4 个工具，而不是 12-22 个）
-3. **减少令牌使用**：提示令牌减少 60-80%
-4. **更好的准确性**：专注的工具选择提高可靠性
-5. **可扩展性**：易于添加新能力和工具
-6. **中文支持**：所有能力的完整中文关键词支持
-7. **相对路径处理**：自动将相对路径转换为绝对路径
-8. **文件名建议**：文件未找到时的智能建议
-9. **提示溢出防护**：提示超过限制时回退到核心工具
-
-### 使用示例
-
-```go
-// 使用 ACE 创建智能体
-toolCfg := &agent.AgentToolConfig{
-    Enabled: nil, // 启用所有工具
-}
-
-agent, err := NewCapabilityDemoAgent(
-    "demo-agent-1",
-    "Demo Agent",
-    "Demonstrates ACE workflow",
-    toolCfg,
-    llmClient,
-    systemPrompt,
-)
-
-// 使用 ACE 处理用户查询
-resp, err := agent.Process(ctx, "Calculate 1 to 100 sum")
-// ACE 自动：
-// 1. 检测 [math] 能力
-// 2. 匹配 [calculator] 工具
-// 3. 执行计算
-// 4. 返回格式化结果
-```
-
-### 试用演示
-
-```bash
-cd examples/capability-demo
-go run main.go
-
-# 尝试这些查询：
-> Calculate 1 to 100 sum
-> What time is it?
-> List files in current directory
-> 搜索信息
-> 计算 1+2
-> 列出当前目录下的文件
-```
-
-### 实现细节
-
-- **核心实现**：`internal/tools/resources/core/capability.go`
-- **工具实现**：`internal/tools/resources/builtin/`
-- **演示应用程序**：`examples/capability-demo/`
-- **设计文档**：`/plan/CapabilityLayer.md`
-
-## 示例
-
-### 1. 旅行规划智能体 (`examples/travel/`)
-多智能体旅行助手，展示：
-- 从自然语言解析用户画像
-- 基于触发器的动态任务规划
-- 并行子智能体执行
-- 结果聚合
-
-**运行：**
-```bash
-export OPENROUTER_API_KEY="your-api-key"
-go run ./examples/travel/main.go
-```
-
-### 2. 知识库 (`examples/knowledge-base/`)
-本地文档检索和问答系统，展示：
-- 带分块的文档导入
-- 向量相似性搜索（pgvector）
-- 多租户隔离
-- 交互式聊天界面
-
-**运行：**
-```bash
-cd examples/knowledge-base
-go run main.go --save example.md
-go run main.go --chat
-```
-
-### 3. 简单智能体 (`examples/simple/`)
-基础多智能体示例，包含时尚推荐。
-
-**运行：**
-```bash
-go run ./examples/simple/main.go
-```
-
-查看各个示例的 README 获取详细配置。
-
-## 开发
-
-### 前置要求
-- Go 1.26.1+
-- golangci-lint: `brew install golangci-lint`
-- staticcheck: `go install honnef.co/go/tools/cmd/staticcheck@latest`
-- goimports: `go install golang.org/x/tools/cmd/goimports@latest`
-
-### 命令
-
-```bash
-# 安装依赖
-make install
-
-# 格式化代码
-make fmt
-
-# 运行所有检查（lint + test）
-make check
-
-# 运行测试并生成覆盖率
-make test
-
-# 运行竞态检测测试
-make test-race
-
-# 运行代码检查
-make lint
-
-# 运行 CI 检查（install, fmt, lint, test-race）
-make ci
-
-# 构建二进制文件
-make build
-
-# 构建所有二进制文件
-make build-all
-
-# 清理构建产物
-make clean
-
-# 显示帮助
-make help
-```
-
-运行 `make check-all` 以验证所有覆盖率要求。
-
-## 贡献
-
-欢迎贡献！请遵循以下准则：
-
-1. **代码风格**
-   - 提交前运行 `make fmt`
-   - 通过 `make lint` 检查
-   - 为新功能添加测试
-
-2. **测试**
-   - 所有测试必须通过：`make test`
-   - 维护覆盖率要求
-   - 为新功能添加集成测试
-
-3. **文档**
-   - 为新示例更新 README
-   - 为复杂逻辑添加内联注释
-   - 为结构更改更新架构文档
-
-4. **Pull 请求**
-   - 在 PR 描述中描述更改
-   - 引用相关问题
-   - 确保 CI 检查通过
-
-## 许可证
-
-MIT 许可证
 
 ## 文档
 
-- [架构](docs/arch.md) - 系统架构概述
-- [智能体](docs/agents/) - 智能体设计和定义
-- [核心](docs/core/) - 核心组件（错误、模型、注册表）
-- [引擎](docs/engine/) - 工作流引擎设计
-- [LLM](docs/llm/) - LLM 集成和查询重写
-- [内存](docs/memory/) - 内存系统设计
-- [协议](docs/protocol/) - AHP 协议规范
-- [速率限制](docs/ratelimit/) - 速率限制策略
-- [关闭](docs/shutdown/) - 优雅关闭机制
-- [存储](docs/storage/) - PostgreSQL 存储和 pgvector
-- [工具](docs/tools/) - 工具系统设计
-- [检索策略](docs/retrieval-strategy.md) - 知识检索策略
+- [快速开始](docs/quick_start.md) - 详细安装和配置指南
+- [常见问题](docs/faq.md) - 常见问题和解决方案
+- [架构文档](docs/arch.md) - 完整架构设计
+- [Embedding 服务文档](services/embedding/README.md) - Embedding 服务详细说明
+- [集成指南](docs/integration_guide.md) - 如何集成到现有项目
 
-## 许可证
+## 示例
 
-MIT 许可证
+- [旅行规划](examples/travel/) - 多 Agent 协作
+- [知识库问答](examples/knowledge-base/) - 向量检索
+- [简单示例](examples/simple/) - 基础用法
+- [能力演示](examples/capability-demo/) - 完整功能展示
+
+## 开发指南
+
+### 运行测试
+
+```bash
+# 运行所有测试
+go test ./...
+
+# 运行特定包的测试
+go test ./internal/agents/...
+
+# 运行测试并显示覆盖率
+go test -cover ./...
+```
+
+### 构建项目
+
+```bash
+# 构建主程序
+go build -o bin/goagent ./cmd/server
+
+# 构建示例
+go build -o bin/travel ./examples/travel
+```
+
+### 代码规范
+
+```bash
+# 格式化代码
+go fmt ./...
+
+# 运行 linter
+golangci-lint run
+```
+
+---
+
+**最后更新**: 2026-03-23  
+**适用版本**: v1.0.0  
+**代码基准**: 基于 go-agent 实际代码分析

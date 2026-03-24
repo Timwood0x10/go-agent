@@ -2,6 +2,47 @@
 
 A fashion recommendation system with multi-agent orchestration using DAG-based workflow.
 
+## Tech Stack and Components
+
+### Technologies Used
+- **Language**: Go 1.21+
+- **LLM Provider**: Ollama (llama3.2) or other OpenAI API-compatible services
+- **Configuration Format**: YAML
+- **Workflow Orchestration**: DAG (Directed Acyclic Graph)
+- **Template Engine**: Go template syntax
+- **Concurrency Control**: errgroup
+
+### Core Components Used
+
+| Component | Purpose | Code Location |
+|-----------|---------|---------------|
+| **Workflow Engine** | DAG workflow orchestration | `internal/workflow/engine/executor.go` |
+| **Leader Agent** | Workflow startup and coordination | `internal/agents/leader/` |
+| **Sub Agents** | Task execution (fashion recommendations) | `internal/agents/sub/` |
+| **AHP Protocol** | Inter-agent communication | `internal/protocol/ahp/` |
+| **LLM Client** | LLM interaction | `internal/llm/client.go` |
+| **Template Renderer** | Template variable substitution | `internal/workflow/engine/template.go` |
+
+### Workflow Step Configuration
+
+| Step | Agent Type | Dependencies | Code Location |
+|------|-----------|---------------|---------------|
+| **extract-profile** | top | None | `examples/simple_newapi/config/workflow.yaml:15-25` |
+| **recommend-tops** | top | extract-profile | `examples/simple_newapi/config/workflow.yaml:30-40` |
+| **recommend-bottoms** | bottom | extract-profile | `examples/simple_newapi/config/workflow.yaml:45-55` |
+| **recommend-shoes** | shoes | extract-profile | `examples/simple_newapi/config/workflow.yaml:60-70` |
+| **aggregate** | leader | All recommendation steps | `examples/simple_newapi/config/workflow.yaml:75-85` |
+
+### Key Feature Implementations
+
+**Code Location References**:
+- DAG construction: `internal/workflow/engine/executor.go:80-120`
+- Topological sort: `internal/workflow/engine/executor.go:150-200`
+- Parallel execution: `internal/workflow/engine/executor.go:250-300`
+- Template variable parsing: `internal/workflow/engine/template.go:50-100`
+- Step dependency management: `internal/workflow/engine/types.go:30-80`
+- Result aggregation: `examples/simple_newapi/main.go:150-200`
+
 ## Quick Start
 
 ### 1. Configure your LLM

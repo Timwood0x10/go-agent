@@ -9,3 +9,5 @@ bin/
 /**/.venv/
 
 **/.env
+
+*.excalidraw

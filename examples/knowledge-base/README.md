@@ -2,6 +2,45 @@
 
 This is a local knowledge base example based on the goagent storage module. It demonstrates how to quickly build a fully functional document retrieval and Q&A system using the high-level APIs of the storage module.
 
+## Tech Stack and Components
+
+### Technologies Used
+- **Language**: Go 1.21+
+- **Database**: PostgreSQL 16 + pgvector extension
+- **Embedding Service**: Ollama (qwen3-embedding:0.6b) or Custom Python Service
+- **LLM**: Ollama (llama3.2:latest) for answer generation
+- **Configuration Format**: YAML
+- **Retrieval Algorithms**: 
+  - Vector similarity search (pgvector)
+  - BM25 full-text search
+  - Hybrid retrieval (Vector + BM25)
+  - Precision Mode (Exact Match → Keyword → Vector)
+  - Smart RAG Detection
+- **Cache**: Redis (optional)
+
+### Core Components Used
+
+| Component | Purpose | Code Location |
+|-----------|---------|---------------|
+| **KnowledgeBase API** | High-level knowledge base interface | `api/service/knowledge/service.go` |
+| **KnowledgeRepository** | Knowledge base data access | `internal/storage/postgres/repositories/knowledge_repository.go` |
+| **RetrievalService** | Intelligent retrieval service | `api/retrieval/service.go` |
+| **EmbeddingClient** | Vector embedding client | `internal/storage/postgres/embedding/client.go` |
+| **LLM Client** | LLM interaction client | `internal/llm/client.go` |
+| **MemoryManager** | Memory management and distillation | `internal/memory/production_manager.go` |
+| **TenantGuard** | Tenant isolation | `internal/storage/postgres/tenant_guard.go` |
+| **RetrievalGuard** | Retrieval rate limiting | `internal/storage/postgres/retrieval_guard.go` |
+
+### Key Feature Implementations
+
+**Code Location References**:
+- Document import and chunking: `examples/knowledge-base/main.go:150-200`
+- Vector storage: `internal/storage/postgres/repositories/knowledge_repository.go:80-120`
+- Hybrid retrieval: `api/retrieval/service.go:100-150`
+- RAG detection: `examples/knowledge-base/main.go:250-300`
+- Memory distillation: `internal/memory/distillation/service.go:50-100`
+- Intent detection: `examples/knowledge-base/main.go:350-400`
+
 ## Features
 
 ### Core Features
