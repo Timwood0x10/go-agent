@@ -2,6 +2,46 @@
 
 This example demonstrates the **Agent Capability Engine (ACE)** workflow, which provides a structured approach to tool selection in agent systems.
 
+## Tech Stack and Components
+
+### Technologies Used
+- **Language**: Go 1.21+
+- **LLM Provider**: Ollama (llama3.2) or other OpenAI API-compatible services
+- **Configuration Format**: YAML
+- **Capability Detection**: Keyword matching + LLM intent analysis
+
+### Core Components Used
+
+| Component | Purpose | Code Location |
+|-----------|---------|---------------|
+| **CapabilityEngine** | Capability detection and tool matching | `internal/tools/resources/core/capability.go` |
+| **AgentTools** | Tool registration and management | `internal/tools/resources/core/agent_tools.go` |
+| **Tool Interface** | Unified tool interface | `api/core/types.go:Tool` |
+| **Built-in Tools** | Built-in tool collection | `internal/tools/resources/builtin/` |
+| **LLM Client** | Intent analysis | `internal/llm/client.go` |
+
+### Supported Capability Types
+
+| Capability | Description | Keywords | Corresponding Tools |
+|------------|-------------|----------|-------------------|
+| **math** | Mathematical calculations | calculate, sum, multiply, divide, compute | calculator |
+| **knowledge** | Knowledge retrieval | what, who, explain, search, find | knowledge_search |
+| **memory** | Memory access/storage | remember, store, recall, history | memory_read, memory_write |
+| **text** | Text processing | parse, format, validate, transform | text_parse, text_format |
+| **network** | Network/API requests | api, request, fetch, http, url | http_request |
+| **time** | Date/time operations | time, date, schedule, timestamp | datetime |
+| **file** | File system operations | file, read, write, delete, list | file_read, file_write |
+| **external** | External system interaction | execute, run, command, script | shell_execute |
+
+### Key Feature Implementations
+
+**Code Location References**:
+- Capability definitions: `internal/tools/resources/core/capability.go:20-50`
+- Tool-to-capability mapping: `internal/tools/resources/core/agent_tools.go:80-120`
+- Built-in tool implementations: `internal/tools/resources/builtin/calculator.go`
+- LLM intent analysis: `examples/capability-demo/main.go:100-150`
+- Tool filtering and ranking: `internal/tools/resources/core/agent_tools.go:200-250`
+
 ## ACE Workflow
 
 ```

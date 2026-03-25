@@ -611,3 +611,38 @@ func (r *ExperienceRepository) GetStatistics(ctx context.Context, tenantID strin
 
 	return stats, nil
 }
+
+// IncrementUsageCount increments the usage count of an experience.
+// This is used as a reinforcement signal when an experience is successfully used.
+// Args:
+// ctx - database operation context.
+// id - experience identifier.
+// Returns error if update operation fails.
+func (r *ExperienceRepository) IncrementUsageCount(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.ErrInvalidArgument
+	}
+
+	query := `
+		UPDATE experiences_1024
+		SET usage_count = COALESCE(usage_count, 0) + 1,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("increment usage count: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return errors.ErrRecordNotFound
+	}
+
+	return nil
+}

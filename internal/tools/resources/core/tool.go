@@ -39,6 +39,9 @@ type ParameterSchema struct {
 
 // GetType returns the parameter type.
 func (p *ParameterSchema) GetType() string {
+	if p == nil {
+		return ""
+	}
 	return p.Type
 }
 

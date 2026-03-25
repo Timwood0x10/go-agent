@@ -2,6 +2,33 @@
 
 A multi-agent travel assistant powered by LLMs, built on the GoAgent framework.
 
+## Tech Stack and Components
+
+### Technologies Used
+- **Language**: Go 1.21+
+- **LLM Provider**: OpenRouter (supports OpenAI, Ollama, OpenRouter)
+- **Configuration Format**: YAML
+- **Concurrency Control**: errgroup
+
+### Core Components Used
+
+| Component | Purpose | Code Location |
+|-----------|---------|---------------|
+| **Leader Agent** | Task analysis, config parsing, sub-agent coordination | `internal/agents/leader/` |
+| **Sub Agents** | Parallel execution of specific tasks (destination, food, hotel, itinerary) | `internal/agents/sub/` |
+| **AHP Protocol** | Inter-agent communication (message queue) | `internal/protocol/ahp/` |
+| **LLM Client** | LLM service interaction | `internal/llm/client.go` |
+| **Configuration Management** | YAML config file parsing | `internal/config/config.go` |
+| **Template Engine** | Prompt template rendering | `internal/llm/template.go` |
+
+### Key Feature Implementations
+
+**Code Location References**:
+- Agent configuration loading: `examples/travel/main.go:45-80`
+- Profile parsing template: `examples/travel/config/server.yaml:30-50`
+- Recommendation prompt template: `examples/travel/config/server.yaml:52-80`
+- Parallel task dispatch: `internal/agents/leader/agent.go:120-150`
+
 ## What is this?
 
 This is a **demo application** showcasing the GoAgent multi-agent framework. It demonstrates:

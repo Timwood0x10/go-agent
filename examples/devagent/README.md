@@ -2,6 +2,48 @@
 
 A command-line developer assistant that uses multi-agent orchestration to help with code generation, review, testing, and documentation. **Creates actual files** - not just text output!
 
+## Tech Stack and Components
+
+### Technologies Used
+- **Language**: Go 1.26+
+- **LLM Provider**: OpenRouter API (multi-model support)
+- **Configuration Format**: YAML
+- **Workflow Orchestration**: DAG (Directed Acyclic Graph)
+- **Concurrency Control**: errgroup
+- **File Operations**: Go standard library `os`, `io`, `filepath`
+
+### Core Components Used
+
+| Component | Purpose | Code Location |
+|-----------|---------|---------------|
+| **Leader Agent** | Task analysis, decomposition, coordination | `internal/agents/leader/` |
+| **Sub Agents** | Specialized task execution (code, test, docs, review) | `internal/agents/sub/` |
+| **Workflow Engine** | DAG workflow orchestration and execution | `internal/workflow/engine/executor.go` |
+| **AHP Protocol** | Inter-agent communication | `internal/protocol/ahp/` |
+| **LLM Client** | Multi-model LLM interaction | `internal/llm/client.go` |
+| **Memory System** | Task history and user profile | `internal/memory/production_manager.go` |
+| **File Generator** | Automatic file generation | `examples/devagent/main.go:300-400` |
+
+### Agent Model Configuration
+
+| Agent | Model | Purpose | Code Location |
+|-------|-------|---------|---------------|
+| **Leader** | meta-llama/llama-3.1-8b-instruct | Task analysis and coordination | `examples/devagent/config/server.yaml:10-20` |
+| **Code** | allenai/olmo-3.1-32b-think | Code generation | `examples/devagent/config/server.yaml:30-40` |
+| **Review** | google/gemini-3.1-flash-lite-preview | Code review | `examples/devagent/config/server.yaml:50-60` |
+| **Test** | google/gemini-3.1-flash-lite-preview | Test generation | `examples/devagent/config/server.yaml:70-80` |
+| **Docs** | google/gemini-3.1-flash-lite-preview | Documentation generation | `examples/devagent/config/server.yaml:90-100` |
+
+### Key Feature Implementations
+
+**Code Location References**:
+- DAG workflow definition: `examples/devagent/config/workflow.yaml:10-50`
+- Parallel task dispatch: `internal/workflow/engine/executor.go:100-150`
+- Agent message queue: `internal/protocol/ahp/queue.go:50-100`
+- Automatic file generation: `examples/devagent/main.go:350-450`
+- Task dependency management: `internal/workflow/engine/types.go:30-80`
+- Memory distillation: `internal/memory/distillation/service.go:50-100`
+
 ## Features
 
 - **Multi-Agent Orchestration**: Leader agent coordinates specialized sub-agents

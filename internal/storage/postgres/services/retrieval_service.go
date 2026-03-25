@@ -19,7 +19,10 @@ import (
 	"goagent/internal/llm"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
+	storage_models "goagent/internal/storage/postgres/models"
 	"goagent/internal/storage/postgres/repositories"
+
+	"goagent/api/experience"
 )
 
 // SearchRequest represents a search request with configuration.
@@ -98,6 +101,11 @@ type RetrievalPlan struct {
 	EnableTimeDecay     bool `json:"enable_time_decay"`     // Enable time-based scoring decay
 
 	TopK int `json:"top_k"` // Maximum results per source
+
+	// Experience-specific configuration
+	ExperienceRankingEnabled  bool `json:"experience_ranking_enabled"`  // Enable experience ranking
+	ExperienceConflictResolve bool `json:"experience_conflict_resolve"` // Enable conflict resolution
+	ExperienceTopK            int  `json:"experience_top_k"`            // Experience recall count (default 20)
 }
 
 // RetrievalTrace contains debugging information for retrieval operations.
@@ -129,6 +137,11 @@ type RetrievalService struct {
 	embeddingCache   map[string][]float64
 	embeddingCacheMu sync.RWMutex
 	synonymRules     map[string][]string
+
+	// Experience-specific services
+	distillationService *experience.DistillationService
+	rankingService      *experience.RankingService
+	conflictResolver    *experience.ConflictResolver
 }
 
 // NewRetrievalService creates a new RetrievalService instance.
@@ -168,6 +181,21 @@ func NewRetrievalService(
 	}
 }
 
+// SetExperienceServices sets the experience-specific services.
+// Args:
+// distillationService - experience distillation service.
+// rankingService - experience ranking service.
+// conflictResolver - experience conflict resolver.
+func (s *RetrievalService) SetExperienceServices(
+	distillationService *experience.DistillationService,
+	rankingService *experience.RankingService,
+	conflictResolver *experience.ConflictResolver,
+) {
+	s.distillationService = distillationService
+	s.rankingService = rankingService
+	s.conflictResolver = conflictResolver
+}
+
 // DefaultQueryPriorityConfig returns the default query priority configuration.
 func DefaultQueryPriorityConfig() *QueryPriorityConfig {
 	return &QueryPriorityConfig{
@@ -181,18 +209,21 @@ func DefaultQueryPriorityConfig() *QueryPriorityConfig {
 // DefaultRetrievalPlan returns the default retrieval plan.
 func DefaultRetrievalPlan() *RetrievalPlan {
 	return &RetrievalPlan{
-		SearchKnowledge:     true,
-		SearchExperience:    true,
-		SearchTools:         true,
-		SearchTaskResults:   false,
-		KnowledgeWeight:     0.4,
-		ExperienceWeight:    0.3,
-		ToolsWeight:         0.2,
-		TaskResultsWeight:   0.1,
-		EnableQueryRewrite:  true,
-		EnableKeywordSearch: true,
-		EnableTimeDecay:     true,
-		TopK:                10,
+		SearchKnowledge:           true,
+		SearchExperience:          true,
+		SearchTools:               true,
+		SearchTaskResults:         false,
+		KnowledgeWeight:           0.4,
+		ExperienceWeight:          0.3,
+		ToolsWeight:               0.2,
+		TaskResultsWeight:         0.1,
+		EnableQueryRewrite:        true,
+		EnableKeywordSearch:       true,
+		EnableTimeDecay:           true,
+		TopK:                      10,
+		ExperienceRankingEnabled:  true,
+		ExperienceConflictResolve: true,
+		ExperienceTopK:            20,
 	}
 }
 
@@ -1083,6 +1114,7 @@ func (s *RetrievalService) searchKnowledgeVector(ctx context.Context, embedding 
 
 // searchExperienceVector performs vector search on experiences using pgvector.
 // This uses cosine similarity to find the most relevant agent experiences.
+// Supports ranking and conflict resolution if enabled in the plan.
 func (s *RetrievalService) searchExperienceVector(ctx context.Context, embedding []float64, req *SearchRequest) []*SearchResult {
 	if len(embedding) == 0 {
 		return []*SearchResult{}
@@ -1093,14 +1125,102 @@ func (s *RetrievalService) searchExperienceVector(ctx context.Context, embedding
 		return []*SearchResult{}
 	}
 
+	// Determine topK for vector search (default 20 for ranking)
+	topK := req.Plan.TopK
+	if req.Plan.ExperienceTopK > 0 {
+		topK = req.Plan.ExperienceTopK
+	}
+
 	// Use Repository layer to search experiences
-	experiences, err := s.expRepo.SearchByVector(ctx, embedding, req.TenantID, req.Plan.TopK)
+	experiences, err := s.expRepo.SearchByVector(ctx, embedding, req.TenantID, topK)
 	if err != nil {
 		s.logger.Error("Experience vector search failed", "error", err)
 		return []*SearchResult{}
 	}
 
-	// Convert Experience to SearchResult
+	// If ranking is enabled, apply ranking and conflict resolution
+	if req.Plan.ExperienceRankingEnabled && s.rankingService != nil {
+		return s.applyExperienceRanking(ctx, experiences, req)
+	}
+
+	// Otherwise, convert directly to SearchResult
+	return s.convertExperiencesToResults(experiences)
+}
+
+// applyExperienceRanking applies ranking and conflict resolution to experiences.
+// Args:
+// ctx - operation context.
+// experiences - experiences to rank and resolve.
+// req - search request containing configuration.
+// Returns ranked and resolved search results.
+func (s *RetrievalService) applyExperienceRanking(ctx context.Context, experiences []*storage_models.Experience, req *SearchRequest) []*SearchResult {
+	if len(experiences) == 0 {
+		return []*SearchResult{}
+	}
+
+	// Extract base semantic scores from metadata
+	baseScores := make([]float64, len(experiences))
+	apiExperiences := make([]*experience.Experience, len(experiences))
+
+	for i, exp := range experiences {
+		// Get semantic similarity from metadata (stored by SearchByVector)
+		semanticScore := 0.5 // default score
+		if exp.Metadata != nil {
+			if score, ok := exp.Metadata["similarity"].(float64); ok {
+				semanticScore = score
+			}
+		}
+		baseScores[i] = semanticScore
+
+		// Convert to API model
+		apiExperiences[i] = &experience.Experience{
+			ID:               exp.ID,
+			TenantID:         exp.TenantID,
+			Type:             exp.Type,
+			Problem:          exp.Problem,
+			Solution:         exp.Solution,
+			Constraints:      exp.Constraints,
+			Embedding:        exp.Embedding,
+			EmbeddingModel:   exp.EmbeddingModel,
+			EmbeddingVersion: exp.EmbeddingVersion,
+			Score:            exp.Score,
+			Success:          exp.Success,
+			AgentID:          exp.AgentID,
+			UsageCount:       exp.UsageCount,
+			DecayAt:          exp.DecayAt,
+			CreatedAt:        exp.CreatedAt,
+		}
+	}
+
+	// Apply ranking
+	ranked := s.rankingService.Rank(ctx, apiExperiences, baseScores)
+
+	// Apply conflict resolution if enabled
+	var resolved []*experience.Experience
+	if req.Plan.ExperienceConflictResolve && s.conflictResolver != nil {
+		resolved = s.conflictResolver.Resolve(ctx, ranked)
+	} else {
+		// Extract experiences from ranked results
+		resolved = make([]*experience.Experience, len(ranked))
+		for i, r := range ranked {
+			resolved[i] = r.Experience
+		}
+	}
+
+	// Limit to TopK results
+	if len(resolved) > req.Plan.TopK {
+		resolved = resolved[:req.Plan.TopK]
+	}
+
+	// Convert to SearchResult
+	return s.convertAPIExperiencesToResults(resolved)
+}
+
+// convertExperiencesToResults converts storage model experiences to search results.
+// Args:
+// experiences - storage model experiences.
+// Returns search results.
+func (s *RetrievalService) convertExperiencesToResults(experiences []*storage_models.Experience) []*SearchResult {
 	results := make([]*SearchResult, 0, len(experiences))
 	for _, exp := range experiences {
 		result := &SearchResult{
@@ -1109,20 +1229,45 @@ func (s *RetrievalService) searchExperienceVector(ctx context.Context, embedding
 			Source:    "experience",
 			SubSource: "vector",
 			Type:      "experience",
-			Metadata: map[string]interface{}{
-				"task_type":  exp.Type,
-				"success":    exp.Success,
-				"agent_id":   exp.AgentID,
-				"created_at": exp.CreatedAt,
-			},
+			Metadata:  exp.Metadata,
 			CreatedAt: exp.CreatedAt,
 		}
 
 		// Extract similarity score from metadata if available
-		if similarity, ok := exp.Metadata["similarity"].(float64); ok {
-			result.Score = similarity
-		} else {
-			result.Score = exp.Score
+		if exp.Metadata != nil {
+			if similarity, ok := exp.Metadata["similarity"].(float64); ok {
+				result.Score = similarity
+			}
+		}
+
+		results = append(results, result)
+	}
+
+	return results
+}
+
+// convertAPIExperiencesToResults converts API model experiences to search results.
+// Args:
+// experiences - API model experiences.
+// Returns search results with ranking scores.
+func (s *RetrievalService) convertAPIExperiencesToResults(experiences []*experience.Experience) []*SearchResult {
+	results := make([]*SearchResult, 0, len(experiences))
+	for _, exp := range experiences {
+		result := &SearchResult{
+			ID:        exp.ID,
+			Content:   exp.Solution,
+			Source:    "experience",
+			SubSource: "vector",
+			Type:      "experience",
+			Metadata: map[string]interface{}{
+				"problem":     exp.Problem,
+				"constraints": exp.Constraints,
+				"usage_count": exp.UsageCount,
+				"success":     exp.Success,
+				"agent_id":    exp.AgentID,
+			},
+			CreatedAt: exp.CreatedAt,
+			Score:     exp.Score, // Use ranked score
 		}
 
 		results = append(results, result)

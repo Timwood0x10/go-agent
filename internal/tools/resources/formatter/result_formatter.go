@@ -244,7 +244,11 @@ func (rf *ResultFormatter) formatDataValidation(params map[string]interface{}, d
 		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
 	}
 
-	valid, _ := dataMap["valid"].(bool)
+	valid, exists := dataMap["valid"].(bool)
+	if !exists {
+		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
+	}
+
 	if valid {
 		return "数据验证通过：格式正确"
 	}
