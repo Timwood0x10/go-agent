@@ -1,0 +1,27 @@
+# Experience Distillation Demo Configuration
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: goagent
+  sslmode: disable
+
+llm:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  model: gpt-4
+  api_key: ${OPENAI_API_KEY}
+  timeout: 30s
+  max_retries: 3
+
+embedding:
+  base_url: http://localhost:8080
+  model: text-embedding-ada-002
+  timeout: 30s
+
+observability:
+  enable: true
+  level: info
+  format: json

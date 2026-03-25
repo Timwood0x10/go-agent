@@ -199,6 +199,82 @@ similarChunks, err := repo.SearchByVector(ctx, queryEmbedding, "tenant-1", 5)
 | `SearchByVector(ctx, embedding, tenantID, limit)` | 向量相似性搜索 |
 | `GetSuccessRate(ctx, agentID, tenantID)` | 获取成功率统计 |
 | `UpdateEmbedding(ctx, id, embedding, model, version)` | 更新经验嵌入 |
+| `IncrementUsageCount(ctx, id)` | 增加经验使用次数 |
+
+#### 使用示例
+
+```go
+repo := repositories.NewExperienceRepository(db)
+
+// 创建经验记录
+experience := &storage_models.Experience{
+    TenantID:         "tenant-1",
+    Type:             storage_models.ExperienceTypeSuccess,
+    Problem:          "PostgreSQL query slow with large dataset",
+    Solution:         "Add composite index on frequently queried columns",
+    Constraints:      "Must maintain backward compatibility",
+    Input:            "PostgreSQL query slow with large dataset",
+    Output:           "Add composite index on frequently queried columns",
+    Embedding:        createTestEmbedding(),
+    EmbeddingModel:   "e5-large",
+    EmbeddingVersion: 1,
+    Score:            0.85,
+    Success:          true,
+    AgentID:          "agent-1",
+    UsageCount:       0,
+    CreatedAt:        time.Now(),
+}
+err := repo.Create(ctx, experience)
+
+// 向量搜索
+similarExperiences, err := repo.SearchByVector(ctx, queryEmbedding, "tenant-1", 20)
+
+// 增加使用次数（强化学习）
+err = repo.IncrementUsageCount(ctx, experience.ID)
+
+// 列出指定代理的经验
+agentExperiences, err := repo.ListByAgent(ctx, "agent-1", "tenant-1", 100)
+
+// 根据类型列出经验
+successExperiences, err := repo.ListByType(ctx, storage_models.ExperienceTypeSuccess, "tenant-1", 100)
+```
+
+#### 数据模型
+
+```go
+type Experience struct {
+    ID               string                 `json:"id"`
+    TenantID         string                 `json:"tenant_id"`
+    Type             string                 `json:"type"`          // "success" or "failure"
+    Problem          string                 `json:"problem"`       // 问题抽象（核心字段）
+    Solution         string                 `json:"solution"`      // 解决方案（核心字段）
+    Constraints      string                 `json:"constraints"`   // 约束条件（核心字段）
+    Input            string                 `json:"input"`         // 存储问题（向后兼容）
+    Output           string                 `json:"output"`        // 存储解决方案（向后兼容）
+    Embedding        []float64              `json:"embedding"`     // 基于 Problem 的 embedding
+    EmbeddingModel   string                 `json:"embedding_model"`
+    EmbeddingVersion int                    `json:"embedding_version"`
+    Score            float64                `json:"score"`         // 综合评分
+    Success          bool                   `json:"success"`       // 是否成功
+    AgentID          string                 `json:"agent_id"`
+    UsageCount       int                    `json:"usage_count"`   // 使用次数（强化信号）
+    Metadata         map[string]interface{} `json:"metadata"`      // 存储约束和使用次数
+    DecayAt          time.Time              `json:"decay_at"`
+    CreatedAt        time.Time              `json:"created_at"`
+    UpdatedAt        time.Time              `json:"updated_at"`
+}
+```
+
+#### 核心特性
+
+- **Experience = Distilled Knowledge**：不是 execution logs，而是抽象的问题和解决方案
+- **Embedding 基于 Problem**：检索时使用 User Query，与 Problem 语义更匹配
+- **UsageCount 作为强化信号**：只有在 agent 使用成功后才增加
+- **支持向量搜索**：使用 pgvector 进行语义相似度检索
+- **租户隔离**：所有操作都支持 tenant_id 隔离
+- **时间衰减**：支持通过 decay_at 字段自动过期
+
+| `UpdateEmbedding(ctx, id, embedding, model, version)` | 更新经验嵌入 |
 
 #### 使用示例
 
