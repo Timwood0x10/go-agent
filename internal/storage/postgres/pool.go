@@ -4,13 +4,13 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // Pool represents a database connection pool with "get usage release" pattern.
@@ -27,12 +27,12 @@ type Pool struct {
 // NewPool creates a new database connection pool.
 func NewPool(cfg *Config) (*Pool, error) {
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errors.Wrap(err, "invalid config")
 	}
 
 	db, err := sql.Open("postgres", cfg.DSN())
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, errors.Wrap(err, "failed to open database")
 	}
 
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -41,7 +41,7 @@ func NewPool(cfg *Config) (*Pool, error) {
 	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, errors.Wrap(err, "failed to ping database")
 	}
 
 	return &Pool{
@@ -58,7 +58,7 @@ func (p *Pool) Get(ctx context.Context) (*sql.Conn, error) {
 
 	conn, err := p.db.Conn(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get connection: %w", err)
+		return nil, errors.Wrap(err, "failed to get connection")
 	}
 
 	p.mu.Lock()
@@ -246,4 +246,4 @@ func (p *Pool) Begin(ctx context.Context) (*sql.Tx, error) {
 // NOTE: This module uses the standard library's database/sql package
 // which already implements a connection pool. The Pool wrapper provides
 // additional statistics and the "get usage release" pattern.
-var _ = errors.ErrDBConnectionFailed
+var _ = coreerrors.ErrDBConnectionFailed

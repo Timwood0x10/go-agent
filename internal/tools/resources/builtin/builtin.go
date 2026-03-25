@@ -1,9 +1,9 @@
 package builtin
 
 import (
-	"fmt"
 	"time"
 
+	"goagent/internal/errors"
 	builtin_execution "goagent/internal/tools/resources/builtin/execution"
 	builtin_file "goagent/internal/tools/resources/builtin/file"
 	builtin_knowledge "goagent/internal/tools/resources/builtin/knowledge"
@@ -64,7 +64,7 @@ func RegisterGeneralTools() error {
 
 	for _, tool := range tools {
 		if err := core.Register(tool); err != nil {
-			return fmt.Errorf("failed to register tool: %w", err)
+			return errors.Wrap(err, "failed to register tool")
 		}
 	}
 

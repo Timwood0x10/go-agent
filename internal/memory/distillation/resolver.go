@@ -3,8 +3,9 @@ package distillation
 
 import (
 	"context"
-	"fmt"
 	"math"
+
+	"goagent/internal/errors"
 )
 
 // ConflictResolver detects and resolves memory conflicts.
@@ -85,7 +86,7 @@ func (r *ConflictResolver) DetectConflict(ctx context.Context, memory *Experienc
 	// generated before calling this method
 	similar, err := r.repo.SearchByVector(ctx, nil, tenantID, r.searchLimit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search for similar memories: %w", err)
+		return nil, errors.Wrap(err, "failed to search for similar memories")
 	}
 
 	// Check if any similar memory exceeds the conflict threshold

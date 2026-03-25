@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // OpenRouterAdapter implements LLMAdapter for OpenRouter.
@@ -48,13 +48,13 @@ func (a *OpenRouterAdapter) Generate(ctx context.Context, prompt string) (string
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		a.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -64,18 +64,18 @@ func (a *OpenRouterAdapter) Generate(ctx context.Context, prompt string) (string
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", errors.Wrap(err, "send request")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("openrouter error: %s", respBody)
+		return "", errors.Newf("openrouter error: %s", respBody)
 	}
 
 	var result OpenAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", errors.Wrap(err, "decode response")
 	}
 
 	if len(result.Choices) == 0 {
@@ -106,13 +106,13 @@ func (a *OpenRouterAdapter) GenerateStructured(ctx context.Context, prompt strin
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		a.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -122,18 +122,18 @@ func (a *OpenRouterAdapter) GenerateStructured(ctx context.Context, prompt strin
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, errors.Wrap(err, "send request")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("openrouter error: %s", respBody)
+		return nil, errors.Newf("openrouter error: %s", respBody)
 	}
 
 	var result OpenAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, errors.Wrap(err, "decode response")
 	}
 
 	if len(result.Choices) == 0 {

@@ -4,11 +4,11 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"math"
 	"strings"
 
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres/embedding"
 	"goagent/internal/storage/postgres/repositories"
 )
@@ -88,7 +88,7 @@ func (s *SimpleRetrievalService) Search(ctx context.Context, tenantID, query str
 	queryEmbedding, err := s.embedding.EmbedWithPrefix(ctx, fullQuery, s.config.QueryPrefix)
 	if err != nil {
 		slog.Error("Failed to embed query", "error", err)
-		return nil, fmt.Errorf("embed query: %w", err)
+		return nil, errors.Wrap(err, "embed query")
 	}
 
 	slog.Debug("Query embedding generated", "dimension", len(queryEmbedding))
@@ -99,7 +99,7 @@ func (s *SimpleRetrievalService) Search(ctx context.Context, tenantID, query str
 	chunks, err := s.repo.SearchByVector(ctx, queryEmbedding, tenantID, s.config.TopK*5)
 	if err != nil {
 		slog.Error("Vector search failed", "error", err)
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 
 	slog.Debug("Raw chunks retrieved", "count", len(chunks))
@@ -202,7 +202,7 @@ func (s *SimpleRetrievalService) searchExact(ctx context.Context, tenantID, quer
 	chunks, err := s.repo.SearchBySubstring(ctx, query, tenantID, 5)
 	if err != nil {
 		slog.Error("Exact match search failed", "error", err)
-		return nil, fmt.Errorf("exact match search: %w", err)
+		return nil, errors.Wrap(err, "exact match search")
 	}
 
 	if len(chunks) == 0 {
@@ -228,7 +228,7 @@ func (s *SimpleRetrievalService) searchKeyword(ctx context.Context, tenantID, qu
 	chunks, err := s.repo.SearchByKeyword(ctx, query, tenantID, s.config.TopK)
 	if err != nil {
 		slog.Error("Keyword search failed", "error", err)
-		return nil, fmt.Errorf("keyword search: %w", err)
+		return nil, errors.Wrap(err, "keyword search")
 	}
 
 	if len(chunks) == 0 {
@@ -267,13 +267,13 @@ func (s *SimpleRetrievalService) searchVector(ctx context.Context, tenantID, que
 	queryEmbedding, err := s.embedding.EmbedWithPrefix(ctx, fullQuery, s.config.QueryPrefix)
 	if err != nil {
 		slog.Error("Failed to embed query", "error", err)
-		return nil, fmt.Errorf("embed query: %w", err)
+		return nil, errors.Wrap(err, "embed query")
 	}
 
 	chunks, err := s.repo.SearchByVector(ctx, queryEmbedding, tenantID, s.config.TopK)
 	if err != nil {
 		slog.Error("Vector search failed", "error", err)
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 
 	if len(chunks) == 0 {

@@ -7,6 +7,8 @@ import (
 	"log"
 	"testing"
 
+	"goagent/internal/errors"
+
 	_ "github.com/lib/pq"
 )
 
@@ -46,7 +48,7 @@ func getTestDB(t *testing.T) *sql.DB {
 func createTestTables(t *testing.T, db *sql.DB) error {
 	// Enable pgvector extension if not already enabled
 	if _, err := db.Exec("CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
-		return fmt.Errorf("failed to create pgvector extension: %w", err)
+		return errors.Wrap(err, "failed to create pgvector extension")
 	}
 
 	// Create knowledge_chunks_1024 table
@@ -75,7 +77,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(knowledgeTableSQL); err != nil {
-		return fmt.Errorf("failed to create knowledge_chunks_1024 table: %w", err)
+		return errors.Wrap(err, "failed to create knowledge_chunks_1024 table")
 	}
 
 	// Create experiences_1024 table
@@ -98,7 +100,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(experiencesTableSQL); err != nil {
-		return fmt.Errorf("failed to create experiences_1024 table: %w", err)
+		return errors.Wrap(err, "failed to create experiences_1024 table")
 	}
 
 	// Create tools table
@@ -123,7 +125,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(toolsTableSQL); err != nil {
-		return fmt.Errorf("failed to create tools table: %w", err)
+		return errors.Wrap(err, "failed to create tools table")
 	}
 
 	// Create conversations table
@@ -141,7 +143,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(conversationsTableSQL); err != nil {
-		return fmt.Errorf("failed to create conversations table: %w", err)
+		return errors.Wrap(err, "failed to create conversations table")
 	}
 
 	// Create task_results_1024 table
@@ -165,7 +167,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(taskResultsTableSQL); err != nil {
-		return fmt.Errorf("failed to create task_results_1024 table: %w", err)
+		return errors.Wrap(err, "failed to create task_results_1024 table")
 	}
 
 	// Create secrets table
@@ -186,7 +188,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 		)`
 
 	if _, err := db.Exec(secretsTableSQL); err != nil {
-		return fmt.Errorf("failed to create secrets table: %w", err)
+		return errors.Wrap(err, "failed to create secrets table")
 	}
 
 	return nil

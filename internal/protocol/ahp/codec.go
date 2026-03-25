@@ -3,6 +3,8 @@ package ahp
 import (
 	"encoding/json"
 	"fmt"
+
+	"goagent/internal/errors"
 )
 
 // Codec handles serialization and deserialization of AHP messages.
@@ -32,12 +34,12 @@ func (c *JSONCodec) Encode(msg *AHPMessage) ([]byte, error) {
 // Decode decodes JSON bytes to a message.
 func (c *JSONCodec) Decode(data []byte) (*AHPMessage, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("empty data")
+		return nil, errors.New("empty data")
 	}
 
 	msg := &AHPMessage{}
 	if err := json.Unmarshal(data, msg); err != nil {
-		return nil, fmt.Errorf("decode failed: %w", err)
+		return nil, errors.Wrap(err, "decode failed")
 	}
 	return msg, nil
 }
@@ -53,12 +55,12 @@ func (c *JSONCodec) EncodeMultiple(msgs []*AHPMessage) ([]byte, error) {
 // DecodeMultiple decodes JSON bytes to multiple messages.
 func (c *JSONCodec) DecodeMultiple(data []byte) ([]*AHPMessage, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("empty data")
+		return nil, errors.New("empty data")
 	}
 
 	var msgs []*AHPMessage
 	if err := json.Unmarshal(data, &msgs); err != nil {
-		return nil, fmt.Errorf("decode failed: %w", err)
+		return nil, errors.Wrap(err, "decode failed")
 	}
 	return msgs, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	memctx "goagent/internal/memory/context"
 	"goagent/internal/memory/distillation"
 	"goagent/internal/storage/postgres/embedding"
@@ -165,7 +166,7 @@ func (m *memoryManager) CreateSession(ctx context.Context, userID string) (strin
 	}
 
 	if err := m.sessionMemory.Set(ctx, sessionID, userID, messages); err != nil {
-		return "", fmt.Errorf("create session: %w", err)
+		return "", errors.Wrap(err, "create session")
 	}
 
 	slog.Debug("Session created", "session_id", sessionID, "user_id", userID)
@@ -181,7 +182,7 @@ func (m *memoryManager) AddMessage(ctx context.Context, sessionID, role, content
 	}
 
 	if err := m.sessionMemory.AddMessage(ctx, sessionID, msg); err != nil {
-		return fmt.Errorf("add message: %w", err)
+		return errors.Wrap(err, "add message")
 	}
 
 	slog.Debug("Message added", "session_id", sessionID, "role", role)
@@ -192,7 +193,7 @@ func (m *memoryManager) AddMessage(ctx context.Context, sessionID, role, content
 func (m *memoryManager) GetMessages(ctx context.Context, sessionID string) ([]Message, error) {
 	sessionMemMessages, err := m.sessionMemory.GetMessages(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("get messages: %w", err)
+		return nil, errors.Wrap(err, "get messages")
 	}
 
 	messages := make([]Message, len(sessionMemMessages))
@@ -210,7 +211,7 @@ func (m *memoryManager) GetMessages(ctx context.Context, sessionID string) ([]Me
 // DeleteSession deletes a session and all its messages immediately.
 func (m *memoryManager) DeleteSession(ctx context.Context, sessionID string) error {
 	if err := m.sessionMemory.Delete(ctx, sessionID); err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return errors.Wrap(err, "delete session")
 	}
 
 	slog.Debug("Session deleted", "session_id", sessionID)
@@ -256,7 +257,7 @@ func (m *memoryManager) CreateTask(ctx context.Context, sessionID, userID, input
 	taskID := "task_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	if err := m.taskMemory.Set(ctx, taskID, sessionID, userID, input); err != nil {
-		return "", fmt.Errorf("create task: %w", err)
+		return "", errors.Wrap(err, "create task")
 	}
 
 	slog.Debug("Task created", "task_id", taskID, "session_id", sessionID)
@@ -266,7 +267,7 @@ func (m *memoryManager) CreateTask(ctx context.Context, sessionID, userID, input
 // UpdateTaskOutput updates the task output.
 func (m *memoryManager) UpdateTaskOutput(ctx context.Context, taskID, output string) error {
 	if err := m.taskMemory.UpdateOutput(ctx, taskID, output); err != nil {
-		return fmt.Errorf("update task output: %w", err)
+		return errors.Wrap(err, "update task output")
 	}
 
 	slog.Debug("Task output updated", "task_id", taskID)
@@ -292,7 +293,7 @@ func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*mod
 	if err != nil {
 		slog.Error("❌ [Memory Distillation] Failed to distill task",
 			"task_id", taskID, "error", err)
-		return nil, fmt.Errorf("distill task: %w", err)
+		return nil, errors.Wrap(err, "distill task")
 	}
 
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
@@ -312,7 +313,7 @@ func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*mod
 	if err != nil {
 		slog.Error("❌ [Memory Distillation] Failed to distill task",
 			"task_id", taskID, "error", err)
-		return nil, fmt.Errorf("distill task: %w", err)
+		return nil, errors.Wrap(err, "distill task")
 	}
 
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
@@ -411,7 +412,7 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	if err != nil {
 		slog.Error("❌ [Memory Distillation] Failed to distill conversation",
 			"task_id", taskID, "error", err)
-		return fmt.Errorf("distill conversation: %w", err)
+		return errors.Wrap(err, "distill conversation")
 	}
 
 	// Store memories in experience repository
@@ -590,7 +591,7 @@ func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string,
 	queryVector, err := m.embedder.EmbedWithPrefix(ctx, query, "query:")
 	if err != nil {
 		slog.Error("❌ [Memory Search] Failed to generate query embedding", "error", err)
-		return nil, fmt.Errorf("generate query embedding: %w", err)
+		return nil, errors.Wrap(err, "generate query embedding")
 	}
 
 	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
@@ -599,7 +600,7 @@ func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string,
 	experiences, err := m.expRepo.SearchByVector(ctx, queryVector, "default", limit)
 	if err != nil {
 		slog.Error("❌ [Memory Search] Failed to search experiences", "error", err)
-		return nil, fmt.Errorf("search experiences: %w", err)
+		return nil, errors.Wrap(err, "search experiences")
 	}
 
 	// Convert experiences to tasks

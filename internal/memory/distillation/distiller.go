@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres/embedding"
 )
 
@@ -463,7 +464,7 @@ func (d *Distiller) enforceSolutionCap(ctx context.Context, tenantID string) err
 	// Get current solution count
 	solutions, err := d.repo.GetByMemoryType(ctx, tenantID, MemoryInteraction)
 	if err != nil {
-		return fmt.Errorf("failed to get solution count: %w", err)
+		return errors.Wrap(err, "failed to get solution count")
 	}
 
 	// Check if we need to prune

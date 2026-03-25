@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	gerr "goagent/internal/errors"
 )
 
 // Validation limits for LLM output parsing.
@@ -77,7 +79,7 @@ func NewInputValidatorWithLimits(
 // ValidateInput validates the input length and returns an error if it exceeds limits.
 func (v *InputValidator) ValidateInput(input string) error {
 	if len(input) > v.maxInputLength {
-		return fmt.Errorf("%w: %d bytes (max %d bytes)", ErrInputTooLong, len(input), v.maxInputLength)
+		return gerr.Wrapf(ErrInputTooLong, "%d bytes (max %d bytes)", len(input), v.maxInputLength)
 	}
 	return nil
 }
@@ -85,7 +87,7 @@ func (v *InputValidator) ValidateInput(input string) error {
 // ValidateJSONLength validates the JSON content length.
 func (v *InputValidator) ValidateJSONLength(jsonContent string) error {
 	if len(jsonContent) > v.maxJSONLength {
-		return fmt.Errorf("%w: %d bytes (max %d bytes)", ErrJSONTooLong, len(jsonContent), v.maxJSONLength)
+		return gerr.Wrapf(ErrJSONTooLong, "%d bytes (max %d bytes)", len(jsonContent), v.maxJSONLength)
 	}
 	return nil
 }
@@ -151,7 +153,7 @@ func (v *InputValidator) ValidateJSONDepth(jsonContent string) error {
 // ValidateStringLength validates a string value length.
 func (v *InputValidator) ValidateStringLength(value string) error {
 	if len(value) > v.maxStringLength {
-		return fmt.Errorf("%w: %d chars (max %d chars)", ErrStringTooLong, len(value), v.maxStringLength)
+		return gerr.Wrapf(ErrStringTooLong, "%d chars (max %d chars)", len(value), v.maxStringLength)
 	}
 	return nil
 }
@@ -159,7 +161,7 @@ func (v *InputValidator) ValidateStringLength(value string) error {
 // ValidateArrayLength validates an array length.
 func (v *InputValidator) ValidateArrayLength(length int) error {
 	if length > v.maxArrayLength {
-		return fmt.Errorf("%w: length %d (max %d)", ErrArrayTooLarge, length, v.maxArrayLength)
+		return gerr.Wrapf(ErrArrayTooLarge, "length %d (max %d)", length, v.maxArrayLength)
 	}
 	return nil
 }
@@ -167,7 +169,7 @@ func (v *InputValidator) ValidateArrayLength(length int) error {
 // ValidateObjectKeyLength validates an object key length.
 func (v *InputValidator) ValidateObjectKeyLength(key string) error {
 	if len(key) > v.maxObjectKeyLength {
-		return fmt.Errorf("%w: %d chars (max %d chars)", ErrKeyTooLong, len(key), v.maxObjectKeyLength)
+		return gerr.Wrapf(ErrKeyTooLong, "%d chars (max %d chars)", len(key), v.maxObjectKeyLength)
 	}
 	return nil
 }

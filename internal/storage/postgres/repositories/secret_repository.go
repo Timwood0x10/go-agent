@@ -13,7 +13,8 @@ import (
 	"log/slog"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres/adapters"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -48,7 +49,7 @@ func (r *SecretRepository) Set(ctx context.Context, key, value, tenantID string)
 	// Encrypt the value
 	encrypted, err := r.encrypt([]byte(value))
 	if err != nil {
-		return fmt.Errorf("encrypt secret: %w", err)
+		return errors.Wrap(err, "encrypt secret")
 	}
 
 	query := `
@@ -65,7 +66,7 @@ func (r *SecretRepository) Set(ctx context.Context, key, value, tenantID string)
 	var id string
 	err = r.db.QueryRowContext(ctx, query, tenantID, key, encrypted).Scan(&id)
 	if err != nil {
-		return fmt.Errorf("set secret: %w", err)
+		return errors.Wrap(err, "set secret")
 	}
 
 	return nil
@@ -95,21 +96,21 @@ func (r *SecretRepository) Get(ctx context.Context, key, tenantID string) (strin
 	)
 
 	if err == sql.ErrNoRows {
-		return "", errors.ErrRecordNotFound
+		return "", coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return "", fmt.Errorf("get secret: %w", err)
+		return "", errors.Wrap(err, "get secret")
 	}
 
 	// Check if secret has expired
 	if expiresAt != nil && time.Now().After(*expiresAt) {
-		return "", errors.ErrSecretExpired
+		return "", coreerrors.ErrSecretExpired
 	}
 
 	// Decrypt the value
 	decrypted, err := r.decrypt(encryptedValue)
 	if err != nil {
-		return "", fmt.Errorf("decrypt secret: %w", err)
+		return "", errors.Wrap(err, "decrypt secret")
 	}
 
 	return string(decrypted), nil
@@ -126,16 +127,16 @@ func (r *SecretRepository) Delete(ctx context.Context, key, tenantID string) err
 
 	result, err := r.db.ExecContext(ctx, query, key, tenantID)
 	if err != nil {
-		return fmt.Errorf("delete secret: %w", err)
+		return errors.Wrap(err, "delete secret")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -156,7 +157,7 @@ func (r *SecretRepository) List(ctx context.Context, tenantID string) ([]*storag
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("list secrets: %w", err)
+		return nil, errors.Wrap(err, "list secrets")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -188,7 +189,7 @@ func (r *SecretRepository) SetWithExpiration(ctx context.Context, key, value, te
 	// Encrypt the value
 	encrypted, err := r.encrypt([]byte(value))
 	if err != nil {
-		return fmt.Errorf("encrypt secret: %w", err)
+		return errors.Wrap(err, "encrypt secret")
 	}
 
 	query := `
@@ -206,7 +207,7 @@ func (r *SecretRepository) SetWithExpiration(ctx context.Context, key, value, te
 	var id string
 	err = r.db.QueryRowContext(ctx, query, tenantID, key, encrypted, expiresAt).Scan(&id)
 	if err != nil {
-		return fmt.Errorf("set secret with expiration: %w", err)
+		return errors.Wrap(err, "set secret with expiration")
 	}
 
 	return nil
@@ -222,7 +223,7 @@ func (r *SecretRepository) SetWithExpiration(ctx context.Context, key, value, te
 func (r *SecretRepository) UpdateMetadata(ctx context.Context, key, tenantID string, metadata map[string]interface{}) error {
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	query := `
@@ -233,16 +234,16 @@ func (r *SecretRepository) UpdateMetadata(ctx context.Context, key, tenantID str
 
 	result, err := r.db.ExecContext(ctx, query, key, tenantID, metadataJSON)
 	if err != nil {
-		return fmt.Errorf("update secret metadata: %w", err)
+		return errors.Wrap(err, "update secret metadata")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -260,12 +261,12 @@ func (r *SecretRepository) CleanupExpired(ctx context.Context) (int64, error) {
 
 	result, err := r.db.ExecContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("cleanup expired secrets: %w", err)
+		return 0, errors.Wrap(err, "cleanup expired secrets")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -278,17 +279,17 @@ func (r *SecretRepository) CleanupExpired(ctx context.Context) (int64, error) {
 func (r *SecretRepository) encrypt(plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(r.encryptionKey)
 	if err != nil {
-		return nil, fmt.Errorf("create cipher: %w", err)
+		return nil, errors.Wrap(err, "create cipher")
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("create GCM: %w", err)
+		return nil, errors.Wrap(err, "create GCM")
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("generate nonce: %w", err)
+		return nil, errors.Wrap(err, "generate nonce")
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
@@ -302,12 +303,12 @@ func (r *SecretRepository) encrypt(plaintext []byte) ([]byte, error) {
 func (r *SecretRepository) decrypt(ciphertext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(r.encryptionKey)
 	if err != nil {
-		return nil, fmt.Errorf("create cipher: %w", err)
+		return nil, errors.Wrap(err, "create cipher")
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("create GCM: %w", err)
+		return nil, errors.Wrap(err, "create GCM")
 	}
 
 	nonceSize := gcm.NonceSize()
@@ -318,7 +319,7 @@ func (r *SecretRepository) decrypt(ciphertext []byte) ([]byte, error) {
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt: %w", err)
+		return nil, errors.Wrap(err, "decrypt")
 	}
 
 	return plaintext, nil
@@ -353,7 +354,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	// Start transaction for atomic operation (per design standard)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin transaction: %w", err)
+		return 0, errors.Wrap(err, "begin transaction")
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
@@ -372,7 +373,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 
 	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("fetch secrets for rotation: %w", err)
+		return 0, errors.Wrap(err, "fetch secrets for rotation")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -386,7 +387,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 		var valueBytes []byte
 
 		if err := rows.Scan(&secret.ID, &secret.TenantID, &secret.Key, &valueBytes, &secret.KeyVersion, &secret.Algorithm); err != nil {
-			return 0, fmt.Errorf("scan secret: %w", err)
+			return 0, errors.Wrap(err, "scan secret")
 		}
 
 		secret.Value = valueBytes
@@ -399,13 +400,13 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 		// Decrypt using current encryption key
 		plaintext, err := r.decryptSecret(secret.Value)
 		if err != nil {
-			return 0, fmt.Errorf("decrypt secret %s: %w", secret.Key, err)
+			return 0, errors.Wrapf(err, "decrypt secret %s", secret.Key)
 		}
 
 		// Re-encrypt using new encryption key (AES-256-GCM)
 		encryptedValue, err := r.encryptSecret(plaintext, newKey)
 		if err != nil {
-			return 0, fmt.Errorf("encrypt secret %s with new key: %w", secret.Key, err)
+			return 0, errors.Wrapf(err, "encrypt secret %s with new key", secret.Key)
 		}
 
 		// Update database with new encrypted values (per design standard)
@@ -417,7 +418,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 
 		result, err := tx.ExecContext(ctx, updateQuery, encryptedValue, secret.ID)
 		if err != nil {
-			return 0, fmt.Errorf("update secret %s: %w", secret.Key, err)
+			return 0, errors.Wrapf(err, "update secret %s", secret.Key)
 		}
 
 		rowsAffected, _ := result.RowsAffected()
@@ -426,7 +427,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 
 	// Commit transaction (per design standard)
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit transaction: %w", err)
+		return 0, errors.Wrap(err, "commit transaction")
 	}
 
 	// Add audit logging for key rotation events (per design standard)
@@ -443,12 +444,12 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 func (r *SecretRepository) Export(ctx context.Context, tenantID string) ([]byte, error) {
 	secrets, err := r.List(ctx, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("list secrets: %w", err)
+		return nil, errors.Wrap(err, "list secrets")
 	}
 
 	data, err := json.Marshal(secrets)
 	if err != nil {
-		return nil, fmt.Errorf("marshal secrets: %w", err)
+		return nil, errors.Wrap(err, "marshal secrets")
 	}
 
 	return data, nil
@@ -496,13 +497,13 @@ func (r *SecretRepository) Import(ctx context.Context, tenantID string, data []b
 	adapter := &adapters.SecretAdapter{}
 	jsonData, err := adapter.ParseFrom(data, adapters.SecretFormat(format))
 	if err != nil {
-		return 0, fmt.Errorf("parse input format: %w", err)
+		return 0, errors.Wrap(err, "parse input format")
 	}
 
 	// Parse import items from JSON format
 	items, err := adapter.ParseImportData(jsonData)
 	if err != nil {
-		return 0, fmt.Errorf("parse import items: %w", err)
+		return 0, errors.Wrap(err, "parse import items")
 	}
 
 	if len(items) == 0 {
@@ -512,7 +513,7 @@ func (r *SecretRepository) Import(ctx context.Context, tenantID string, data []b
 	// Start transaction for atomic import operation (per design standard)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin transaction: %w", err)
+		return 0, errors.Wrap(err, "begin transaction")
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
@@ -591,7 +592,7 @@ func (r *SecretRepository) Import(ctx context.Context, tenantID string, data []b
 	// Commit transaction if at least one secret was imported (per design standard)
 	if importedCount > 0 {
 		if err := tx.Commit(); err != nil {
-			return 0, fmt.Errorf("commit transaction: %w", err)
+			return 0, errors.Wrap(err, "commit transaction")
 		}
 
 		// Add audit logging for import events (per design standard)
@@ -622,10 +623,10 @@ func (r *SecretRepository) GetKeyVersion(ctx context.Context, key, tenantID stri
 	var keyVersion int
 	err := r.db.QueryRowContext(ctx, query, key, tenantID).Scan(&keyVersion)
 	if err == sql.ErrNoRows {
-		return 0, errors.ErrRecordNotFound
+		return 0, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return 0, fmt.Errorf("get key version: %w", err)
+		return 0, errors.Wrap(err, "get key version")
 	}
 
 	return keyVersion, nil
@@ -639,17 +640,17 @@ func (r *SecretRepository) GetKeyVersion(ctx context.Context, key, tenantID stri
 func (r *SecretRepository) encryptSecret(plaintext []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("create cipher: %w", err)
+		return nil, errors.Wrap(err, "create cipher")
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("create GCM: %w", err)
+		return nil, errors.Wrap(err, "create GCM")
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("generate nonce: %w", err)
+		return nil, errors.Wrap(err, "generate nonce")
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
@@ -663,12 +664,12 @@ func (r *SecretRepository) encryptSecret(plaintext []byte, key []byte) ([]byte, 
 func (r *SecretRepository) decryptSecret(ciphertext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(r.encryptionKey)
 	if err != nil {
-		return nil, fmt.Errorf("create cipher: %w", err)
+		return nil, errors.Wrap(err, "create cipher")
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("create GCM: %w", err)
+		return nil, errors.Wrap(err, "create GCM")
 	}
 
 	nonceSize := gcm.NonceSize()
@@ -679,7 +680,7 @@ func (r *SecretRepository) decryptSecret(ciphertext []byte) ([]byte, error) {
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt: %w", err)
+		return nil, errors.Wrap(err, "decrypt")
 	}
 
 	return plaintext, nil

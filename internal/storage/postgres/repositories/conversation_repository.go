@@ -4,11 +4,11 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -98,7 +98,7 @@ func (r *ConversationRepository) Create(ctx context.Context, conv *storage_model
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
-		return fmt.Errorf("create conversation: %w", err)
+		return errors.Wrap(err, "create conversation")
 	}
 
 	conv.ID = id
@@ -112,7 +112,7 @@ func (r *ConversationRepository) Create(ctx context.Context, conv *storage_model
 // Returns conversation or error if not found or invalid argument.
 func (r *ConversationRepository) GetByID(ctx context.Context, id string) (*storage_models.Conversation, error) {
 	if id == "" {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -128,10 +128,10 @@ func (r *ConversationRepository) GetByID(ctx context.Context, id string) (*stora
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get conversation by id: %w", err)
+		return nil, errors.Wrap(err, "get conversation by id")
 	}
 
 	return conv, nil
@@ -155,7 +155,7 @@ func (r *ConversationRepository) GetBySession(ctx context.Context, sessionID, te
 
 	rows, err := r.db.QueryContext(ctx, query, sessionID, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("get conversations by session: %w", err)
+		return nil, errors.Wrap(err, "get conversations by session")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -193,12 +193,12 @@ func (r *ConversationRepository) DeleteBySession(ctx context.Context, sessionID,
 
 	result, err := r.db.ExecContext(ctx, query, sessionID, tenantID)
 	if err != nil {
-		return 0, fmt.Errorf("delete conversations by session: %w", err)
+		return 0, errors.Wrap(err, "delete conversations by session")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -214,16 +214,16 @@ func (r *ConversationRepository) Delete(ctx context.Context, id string) error {
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete conversation: %w", err)
+		return errors.Wrap(err, "delete conversation")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -247,7 +247,7 @@ func (r *ConversationRepository) GetByUser(ctx context.Context, userID, tenantID
 
 	rows, err := r.db.QueryContext(ctx, query, userID, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("get conversations by user: %w", err)
+		return nil, errors.Wrap(err, "get conversations by user")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -289,7 +289,7 @@ func (r *ConversationRepository) GetByAgent(ctx context.Context, agentID, tenant
 
 	rows, err := r.db.QueryContext(ctx, query, agentID, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("get conversations by agent: %w", err)
+		return nil, errors.Wrap(err, "get conversations by agent")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -325,12 +325,12 @@ func (r *ConversationRepository) CleanupExpired(ctx context.Context) (int64, err
 
 	result, err := r.db.ExecContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("cleanup expired conversations: %w", err)
+		return 0, errors.Wrap(err, "cleanup expired conversations")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -352,12 +352,12 @@ func (r *ConversationRepository) UpdateExpiresAt(ctx context.Context, sessionID,
 
 	result, err := r.db.ExecContext(ctx, query, expiresAt, sessionID, tenantID)
 	if err != nil {
-		return 0, fmt.Errorf("update expires at: %w", err)
+		return 0, errors.Wrap(err, "update expires at")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -379,7 +379,7 @@ func (r *ConversationRepository) CountBySession(ctx context.Context, sessionID, 
 	var count int64
 	err := r.db.QueryRowContext(ctx, query, sessionID, tenantID).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("count messages in session: %w", err)
+		return 0, errors.Wrap(err, "count messages in session")
 	}
 
 	return count, nil
@@ -403,7 +403,7 @@ func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("get recent sessions: %w", err)
+		return nil, errors.Wrap(err, "get recent sessions")
 	}
 	defer func() { _ = rows.Close() }()
 

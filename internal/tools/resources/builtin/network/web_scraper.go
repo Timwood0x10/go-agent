@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/tools/resources/base"
 	"goagent/internal/tools/resources/core"
 )
@@ -111,7 +112,7 @@ func (t *WebScraper) Execute(ctx context.Context, params map[string]interface{})
 	html, err := t.getter.Get(ctx, url)
 	if err != nil {
 		slog.Error("Failed to fetch page", "url", url, "error", err)
-		return core.Result{}, fmt.Errorf("failed to fetch page: %w", err)
+		return core.Result{}, errors.Wrap(err, "failed to fetch page")
 	}
 
 	duration := time.Since(startTime)

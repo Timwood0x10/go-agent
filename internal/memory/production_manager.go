@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
@@ -179,7 +180,7 @@ func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 
 	// Start write buffer (write backpressure layer per design standard)
 	if err := m.writeBuffer.Start(ctx); err != nil {
-		return fmt.Errorf("start write buffer: %w", err)
+		return errors.Wrap(err, "start write buffer")
 	}
 
 	// Start background cleanup if needed
@@ -275,7 +276,7 @@ func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, rol
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	// Create conversation record (NO vector embedding per design standard)
@@ -306,7 +307,7 @@ func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, rol
 	}
 
 	if err := m.conversationRepository.Create(ctx, conv); err != nil {
-		return fmt.Errorf("create conversation: %w", err)
+		return errors.Wrap(err, "create conversation")
 	}
 
 	// Update session cache
@@ -328,19 +329,19 @@ func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, rol
 // Returns list of messages or error if retrieval fails.
 func (m *ProductionMemoryManager) GetMessages(ctx context.Context, sessionID string) ([]Message, error) {
 	if sessionID == "" {
-		return nil, fmt.Errorf("session ID cannot be empty")
+		return nil, errors.New("session ID cannot be empty")
 	}
 
 	// Set tenant context
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 
 	// Retrieve conversations from database
 	conversations, err := m.conversationRepository.GetBySession(ctx, tenantID, sessionID, m.config.MaxHistory)
 	if err != nil {
-		return nil, fmt.Errorf("get conversations: %w", err)
+		return nil, errors.Wrap(err, "get conversations")
 	}
 
 	// Convert to Message format
@@ -363,19 +364,19 @@ func (m *ProductionMemoryManager) GetMessages(ctx context.Context, sessionID str
 // Returns error if deletion fails.
 func (m *ProductionMemoryManager) DeleteSession(ctx context.Context, sessionID string) error {
 	if sessionID == "" {
-		return fmt.Errorf("session ID cannot be empty")
+		return errors.New("session ID cannot be empty")
 	}
 
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	// Delete all conversations for this session
 	deletedCount, err := m.conversationRepository.DeleteBySession(ctx, sessionID, tenantID)
 	if err != nil {
-		return fmt.Errorf("delete conversations: %w", err)
+		return errors.Wrap(err, "delete conversations")
 	}
 
 	// Remove from cache
@@ -441,7 +442,7 @@ func (m *ProductionMemoryManager) CreateTask(ctx context.Context, sessionID, use
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return "", fmt.Errorf("set tenant context: %w", err)
+		return "", errors.Wrap(err, "set tenant context")
 	}
 
 	// Create task result record (NO embedding, only for execution history)
@@ -461,7 +462,7 @@ func (m *ProductionMemoryManager) CreateTask(ctx context.Context, sessionID, use
 	}
 
 	if err := m.taskResultRepository.Create(ctx, taskResult); err != nil {
-		return "", fmt.Errorf("create task result: %w", err)
+		return "", errors.Wrap(err, "create task result")
 	}
 
 	slog.Debug("Task created", "task_id", taskID, "session_id", sessionID)
@@ -476,19 +477,19 @@ func (m *ProductionMemoryManager) CreateTask(ctx context.Context, sessionID, use
 // Returns error if update fails.
 func (m *ProductionMemoryManager) UpdateTaskOutput(ctx context.Context, taskID, output string) error {
 	if taskID == "" {
-		return fmt.Errorf("task ID cannot be empty")
+		return errors.New("task ID cannot be empty")
 	}
 
 	// Set tenant context
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	// Get existing task
 	task, err := m.taskResultRepository.GetByID(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("get task result: %w", err)
+		return errors.Wrap(err, "get task result")
 	}
 
 	// Update task
@@ -497,7 +498,7 @@ func (m *ProductionMemoryManager) UpdateTaskOutput(ctx context.Context, taskID, 
 	task.LatencyMs = int(time.Since(task.CreatedAt).Milliseconds())
 
 	if err := m.taskResultRepository.Update(ctx, task); err != nil {
-		return fmt.Errorf("update task result: %w", err)
+		return errors.Wrap(err, "update task result")
 	}
 
 	slog.Debug("Task output updated", "task_id", taskID)
@@ -514,13 +515,13 @@ func (m *ProductionMemoryManager) DistillTask(ctx context.Context, taskID string
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 
 	// Get task result
 	taskResult, err := m.taskResultRepository.GetByID(ctx, taskID)
 	if err != nil {
-		return nil, fmt.Errorf("get task result: %w", err)
+		return nil, errors.Wrap(err, "get task result")
 	}
 
 	// Convert to models.Task format
@@ -549,13 +550,13 @@ func (m *ProductionMemoryManager) DistillTask(ctx context.Context, taskID string
 // 4. Worker updates DB with embedding and status = 'completed'
 func (m *ProductionMemoryManager) StoreDistilledTask(ctx context.Context, taskID string, distilled *models.Task) error {
 	if distilled == nil {
-		return fmt.Errorf("distilled task cannot be nil")
+		return errors.New("distilled task cannot be nil")
 	}
 
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	// Use write buffer for async embedding chain (write backpressure layer per design standard)
@@ -571,7 +572,7 @@ func (m *ProductionMemoryManager) StoreDistilledTask(ctx context.Context, taskID
 	}
 
 	if err := m.writeBuffer.Write(ctx, writeItem); err != nil {
-		return fmt.Errorf("write to buffer: %w", err)
+		return errors.Wrap(err, "write to buffer")
 	}
 
 	slog.Debug("Distilled task queued for async embedding", "task_id", taskID)
@@ -587,13 +588,13 @@ func (m *ProductionMemoryManager) StoreDistilledTask(ctx context.Context, taskID
 // Note: This returns experiences (agent knowledge) rather than execution tasks.
 func (m *ProductionMemoryManager) SearchSimilarTasks(ctx context.Context, query string, limit int) ([]*models.Task, error) {
 	if query == "" {
-		return nil, fmt.Errorf("query cannot be empty")
+		return nil, errors.New("query cannot be empty")
 	}
 
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()
 	if err := m.tenantGuard.SetTenantContext(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 
 	// Create search request
@@ -613,7 +614,7 @@ func (m *ProductionMemoryManager) SearchSimilarTasks(ctx context.Context, query 
 	// Execute search with fallback (per design standard)
 	results, err := m.retrievalService.Search(ctx, searchRequest)
 	if err != nil {
-		return nil, fmt.Errorf("search similar tasks: %w", err)
+		return nil, errors.Wrap(err, "search similar tasks")
 	}
 
 	// Convert experiences to models.Task format

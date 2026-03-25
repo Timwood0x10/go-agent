@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/tools/resources/builtin"
 	"goagent/internal/tools/resources/core"
 	"goagent/internal/tools/resources/formatter"
@@ -238,7 +239,7 @@ func (ace *AgentCapabilityExport) String() string {
 // This is a convenience function that should be called during agent initialization.
 func RegisterBuiltinToolsForAgent() error {
 	if err := builtin.RegisterGeneralTools(); err != nil {
-		return fmt.Errorf("failed to register general tools: %w", err)
+		return errors.Wrap(err, "failed to register general tools")
 	}
 
 	slog.Info("Builtin tools registered for agent")

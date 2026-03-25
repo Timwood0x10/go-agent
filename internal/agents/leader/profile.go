@@ -7,6 +7,7 @@ import (
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/llm/output"
 )
 
@@ -83,19 +84,19 @@ func (p *profileParser) parseOnce(ctx context.Context, input string) (*models.Us
 		"input": input,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", apperrors.ErrPromptRenderFailed, err)
+		return nil, errors.WrapError(apperrors.ErrPromptRenderFailed, err)
 	}
 
 	// Call LLM
 	response, err := p.llmAdapter.Generate(ctx, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", apperrors.ErrLLMGenerateFailed, err)
+		return nil, errors.WrapError(apperrors.ErrLLMGenerateFailed, err)
 	}
 
 	// Parse response
 	profile, err := p.parseResponse(response)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", apperrors.ErrProfileParsingFailed, err)
+		return nil, errors.WrapError(apperrors.ErrProfileParsingFailed, err)
 	}
 
 	return profile, nil
@@ -109,7 +110,7 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 	parser := output.NewParser()
 	data, err := parser.ParseJSON(response)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", apperrors.ErrLLMParserFailed, err)
+		return nil, errors.WrapError(apperrors.ErrLLMParserFailed, err)
 	}
 
 	// Debug: print parsed data keys

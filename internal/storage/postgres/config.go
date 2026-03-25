@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"goagent/internal/errors"
 )
 
 // Config represents the database configuration.
@@ -133,7 +135,7 @@ func (c *Config) Validate() error {
 		c.Embedding = DefaultEmbeddingConfig()
 	}
 	if err := c.Embedding.Validate(); err != nil {
-		return fmt.Errorf("invalid embedding config: %w", err)
+		return errors.Wrap(err, "invalid embedding config")
 	}
 	return nil
 }

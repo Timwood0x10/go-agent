@@ -11,6 +11,8 @@ import (
 	"sort"
 	"time"
 
+	gerr "goagent/internal/errors"
+
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -102,7 +104,7 @@ func (c *QueryCache) Set(ctx context.Context, req *SearchRequest, results []*Sea
 	// Serialize results
 	data, err := c.serializeResults(results)
 	if err != nil {
-		return fmt.Errorf("serialize results: %w", err)
+		return gerr.Wrap(err, "serialize results")
 	}
 
 	// Try to store in Redis

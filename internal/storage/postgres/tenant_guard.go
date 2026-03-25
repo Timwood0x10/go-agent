@@ -5,7 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // TenantGuard provides physical isolation for multi-tenant data access.
@@ -27,7 +28,7 @@ func NewTenantGuard(pool *Pool) *TenantGuard {
 // Returns error if setting tenant context fails.
 func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) error {
 	if tenantID == "" {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 
 	// SET statement does not support parameterized queries, need to concatenate string directly
@@ -35,7 +36,7 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 	query := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	_, err := g.db.Exec(ctx, query)
 	if err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	return nil
@@ -50,7 +51,7 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 // error - if tenant context setup fails.
 func (g *TenantGuard) MustSetTenantContext(ctx context.Context, tenantID string) error {
 	if err := g.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("failed to set tenant context: %w", err)
+		return errors.Wrap(err, "failed to set tenant context")
 	}
 	return nil
 }
@@ -64,7 +65,7 @@ func (g *TenantGuard) MustSetTenantContext(ctx context.Context, tenantID string)
 // Returns error if tenant context setup or function execution fails.
 func (g *TenantGuard) WithTenant(ctx context.Context, tenantID string, fn func(context.Context) error) error {
 	if err := g.SetTenantContext(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	return fn(ctx)
@@ -78,7 +79,7 @@ func (g *TenantGuard) WithTenant(ctx context.Context, tenantID string, fn func(c
 func (g *TenantGuard) ClearTenantContext(ctx context.Context) error {
 	_, err := g.db.Exec(ctx, "SET app.tenant_id TO DEFAULT")
 	if err != nil {
-		return fmt.Errorf("clear tenant context: %w", err)
+		return errors.Wrap(err, "clear tenant context")
 	}
 
 	return nil

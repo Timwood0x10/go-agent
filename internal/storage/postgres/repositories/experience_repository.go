@@ -5,9 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -36,7 +36,7 @@ func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.E
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(exp.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -117,7 +117,7 @@ func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.E
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
-		return fmt.Errorf("create experience: %w", err)
+		return errors.Wrap(err, "create experience")
 	}
 
 	exp.ID = id
@@ -131,7 +131,7 @@ func (r *ExperienceRepository) Create(ctx context.Context, exp *storage_models.E
 // Returns experience or error if not found or invalid argument.
 func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage_models.Experience, error) {
 	if id == "" {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -151,22 +151,22 @@ func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get experience by id: %w", err)
+		return nil, errors.Wrap(err, "get experience by id")
 	}
 
 	// Parse embedding string to float64 array
 	exp.Embedding, err = parseVectorString(embeddingStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse embedding: %w", err)
+		return nil, errors.Wrap(err, "parse embedding")
 	}
 
 	// Parse metadata JSON string to map
 	if metadataStr != "" {
 		if err := json.Unmarshal([]byte(metadataStr), &exp.Metadata); err != nil {
-			return nil, fmt.Errorf("parse metadata: %w", err)
+			return nil, errors.Wrap(err, "parse metadata")
 		}
 	}
 
@@ -182,7 +182,7 @@ func (r *ExperienceRepository) Update(ctx context.Context, exp *storage_models.E
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(exp.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -202,16 +202,16 @@ func (r *ExperienceRepository) Update(ctx context.Context, exp *storage_models.E
 		exp.Success, exp.AgentID, metadataJSON,
 	)
 	if err != nil {
-		return fmt.Errorf("update experience: %w", err)
+		return errors.Wrap(err, "update experience")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -227,16 +227,16 @@ func (r *ExperienceRepository) Delete(ctx context.Context, id string) error {
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete experience: %w", err)
+		return errors.Wrap(err, "delete experience")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -266,7 +266,7 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 
 	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -336,7 +336,7 @@ func (r *ExperienceRepository) SearchByKeyword(ctx context.Context, query, tenan
 
 	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("keyword search: %w", err)
+		return nil, errors.Wrap(err, "keyword search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -394,7 +394,7 @@ func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID
 
 	rows, err := r.db.QueryContext(ctx, query, expType, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list experiences by type: %w", err)
+		return nil, errors.Wrap(err, "list experiences by type")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -446,16 +446,16 @@ func (r *ExperienceRepository) UpdateScore(ctx context.Context, id string, score
 
 	result, err := r.db.ExecContext(ctx, query, id, score)
 	if err != nil {
-		return fmt.Errorf("update experience score: %w", err)
+		return errors.Wrap(err, "update experience score")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -482,7 +482,7 @@ func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantI
 
 	rows, err := r.db.QueryContext(ctx, query, agentID, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list experiences by agent: %w", err)
+		return nil, errors.Wrap(err, "list experiences by agent")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -539,16 +539,16 @@ func (r *ExperienceRepository) UpdateEmbedding(ctx context.Context, id string, e
 
 	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
-		return fmt.Errorf("update embedding: %w", err)
+		return errors.Wrap(err, "update embedding")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -566,12 +566,12 @@ func (r *ExperienceRepository) CleanupExpired(ctx context.Context) (int64, error
 
 	result, err := r.db.ExecContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("cleanup expired experiences: %w", err)
+		return 0, errors.Wrap(err, "cleanup expired experiences")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -595,7 +595,7 @@ func (r *ExperienceRepository) GetStatistics(ctx context.Context, tenantID strin
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("get experience statistics: %w", err)
+		return nil, errors.Wrap(err, "get experience statistics")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -620,7 +620,7 @@ func (r *ExperienceRepository) GetStatistics(ctx context.Context, tenantID strin
 // Returns error if update operation fails.
 func (r *ExperienceRepository) IncrementUsageCount(ctx context.Context, id string) error {
 	if id == "" {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -632,16 +632,16 @@ func (r *ExperienceRepository) IncrementUsageCount(ctx context.Context, id strin
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("increment usage count: %w", err)
+		return errors.Wrap(err, "increment usage count")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil

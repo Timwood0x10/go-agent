@@ -5,11 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
 	"github.com/lib/pq"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -38,7 +38,7 @@ func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) 
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(tool.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -152,7 +152,7 @@ func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) 
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
-		return fmt.Errorf("create tool: %w", err)
+		return errors.Wrap(err, "create tool")
 	}
 
 	tool.ID = id
@@ -166,7 +166,7 @@ func (r *ToolRepository) Create(ctx context.Context, tool *storage_models.Tool) 
 // Returns tool or error if not found or invalid argument.
 func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_models.Tool, error) {
 	if id == "" {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -186,22 +186,22 @@ func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_model
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get tool by id: %w", err)
+		return nil, errors.Wrap(err, "get tool by id")
 	}
 
 	// Parse embedding string to float64 array
 	tool.Embedding, err = parseVectorString(embeddingStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse embedding: %w", err)
+		return nil, errors.Wrap(err, "parse embedding")
 	}
 
 	// Parse metadata JSON string to map
 	if metadataStr != "" {
 		if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
-			return nil, fmt.Errorf("parse metadata: %w", err)
+			return nil, errors.Wrap(err, "parse metadata")
 		}
 	}
 
@@ -232,22 +232,22 @@ func (r *ToolRepository) GetByName(ctx context.Context, name, tenantID string) (
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get tool by name: %w", err)
+		return nil, errors.Wrap(err, "get tool by name")
 	}
 
 	// Parse embedding string to float64 array
 	tool.Embedding, err = parseVectorString(embeddingStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse embedding: %w", err)
+		return nil, errors.Wrap(err, "parse embedding")
 	}
 
 	// Parse metadata JSON string to map
 	if metadataStr != "" {
 		if err := json.Unmarshal([]byte(metadataStr), &tool.Metadata); err != nil {
-			return nil, fmt.Errorf("parse metadata: %w", err)
+			return nil, errors.Wrap(err, "parse metadata")
 		}
 	}
 
@@ -263,7 +263,7 @@ func (r *ToolRepository) Update(ctx context.Context, tool *storage_models.Tool) 
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(tool.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -282,16 +282,16 @@ func (r *ToolRepository) Update(ctx context.Context, tool *storage_models.Tool) 
 		tool.Tags, metadataJSON,
 	)
 	if err != nil {
-		return fmt.Errorf("update tool: %w", err)
+		return errors.Wrap(err, "update tool")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -307,16 +307,16 @@ func (r *ToolRepository) Delete(ctx context.Context, id string) error {
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete tool: %w", err)
+		return errors.Wrap(err, "delete tool")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -344,7 +344,7 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 
 	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -408,7 +408,7 @@ func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID st
 
 	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("keyword search: %w", err)
+		return nil, errors.Wrap(err, "keyword search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -463,7 +463,7 @@ func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list tools: %w", err)
+		return nil, errors.Wrap(err, "list tools")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -519,7 +519,7 @@ func (r *ToolRepository) ListByAgentType(ctx context.Context, agentType, tenantI
 
 	rows, err := r.db.QueryContext(ctx, query, agentType, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list tools by agent type: %w", err)
+		return nil, errors.Wrap(err, "list tools by agent type")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -576,16 +576,16 @@ func (r *ToolRepository) UpdateUsage(ctx context.Context, id string, success boo
 
 	result, err := r.db.ExecContext(ctx, query, id, success)
 	if err != nil {
-		return fmt.Errorf("update tool usage: %w", err)
+		return errors.Wrap(err, "update tool usage")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -609,16 +609,16 @@ func (r *ToolRepository) UpdateEmbedding(ctx context.Context, id string, embeddi
 
 	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
-		return fmt.Errorf("update embedding: %w", err)
+		return errors.Wrap(err, "update embedding")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -644,7 +644,7 @@ func (r *ToolRepository) ListByTags(ctx context.Context, tags []string, tenantID
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID, tags, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list tools by tags: %w", err)
+		return nil, errors.Wrap(err, "list tools by tags")
 	}
 	defer func() { _ = rows.Close() }()
 

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"goagent/internal/errors"
 )
 
 // Phase represents a shutdown phase.
@@ -129,9 +131,8 @@ func (m *Manager) StartShutdown(ctx context.Context) error {
 		m.mu.Unlock()
 
 		if err := m.executePhase(ctx, phase); err != nil {
-			return fmt.Errorf("phase %s failed: %w", phase, err)
-		}
-	}
+				return errors.Wrapf(err, "phase %s failed", phase)
+			}	}
 
 	return nil
 }

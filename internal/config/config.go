@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"goagent/internal/errors"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -235,7 +237,7 @@ func Load(path string) (*Config, error) {
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("configuration validation failed: %w", err)
+		return nil, errors.Wrap(err, "configuration validation failed")
 	}
 
 	return &cfg, nil

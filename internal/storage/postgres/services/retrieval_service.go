@@ -15,7 +15,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/llm"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
@@ -254,7 +255,7 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 
 	// Apply tenant isolation
 	if err := s.tenantGuard.SetTenantContext(ctx, req.TenantID); err != nil {
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 
 	// Check rate limiting and circuit breaker
@@ -314,13 +315,13 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 // validateRequest validates the search request.
 func (s *RetrievalService) validateRequest(req *SearchRequest) error {
 	if req == nil {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 	if req.Query == "" {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 	if req.TenantID == "" {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 	if req.TopK <= 0 {
 		req.TopK = 10
@@ -392,7 +393,7 @@ func (s *RetrievalService) searchExact(ctx context.Context, req *SearchRequest) 
 	chunks, err := s.kbRepo.SearchBySubstring(ctx, req.Query, req.TenantID, 5)
 	if err != nil {
 		s.logger.Error("Exact match search failed", "error", err)
-		return nil, fmt.Errorf("exact match search: %w", err)
+		return nil, errors.Wrap(err, "exact match search")
 	}
 
 	if len(chunks) == 0 {
@@ -421,7 +422,7 @@ func (s *RetrievalService) searchKeyword(ctx context.Context, req *SearchRequest
 	chunks, err := s.kbRepo.SearchByKeyword(ctx, req.Query, req.TenantID, req.TopK)
 	if err != nil {
 		s.logger.Error("Keyword search failed", "error", err)
-		return nil, fmt.Errorf("keyword search: %w", err)
+		return nil, errors.Wrap(err, "keyword search")
 	}
 
 	if len(chunks) == 0 {
@@ -463,7 +464,7 @@ func (s *RetrievalService) searchVector(ctx context.Context, req *SearchRequest)
 	chunks, err := s.kbRepo.SearchByVector(ctx, embedding, req.TenantID, req.TopK)
 	if err != nil {
 		s.logger.Error("Vector search failed", "error", err)
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 
 	if len(chunks) == 0 {

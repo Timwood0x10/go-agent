@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // WriteBuffer provides write batching to reduce database and embedding load.
@@ -73,7 +74,7 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 			// Flush remaining items on shutdown
 			if len(batch) > 0 {
 				if err := b.flushBatch(ctx, batch); err != nil {
-					return fmt.Errorf("flush final batch: %w", err)
+					return errors.Wrap(err, "flush final batch")
 				}
 			}
 			return nil
@@ -109,11 +110,11 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 // Returns error if buffer is stopped, item is invalid, or buffer is full.
 func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 	if b.stopped {
-		return errors.ErrServiceUnavailable
+		return coreerrors.ErrServiceUnavailable
 	}
 
 	if item == nil {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 
 	select {
@@ -124,7 +125,7 @@ func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 	default:
 		// Buffer is full, return error immediately
 		// This prevents goroutine leaks and provides backpressure
-		return errors.ErrBufferFull
+		return coreerrors.ErrBufferFull
 	}
 }
 
@@ -141,7 +142,7 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 	// Start transaction
 	tx, err := b.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return errors.Wrap(err, "begin transaction")
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
@@ -168,7 +169,7 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 			`, item.TenantID, item.Content, contentHash, make([]float64, 1024),
 				b.embeddingConfig.DefaultModel, b.embeddingConfig.DefaultVersion, item.Metadata)
 			if err != nil {
-				return fmt.Errorf("insert knowledge chunk: %w", err)
+				return errors.Wrap(err, "insert knowledge chunk")
 			}
 
 		case "experiences_1024":
@@ -180,7 +181,7 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 			`, item.TenantID, item.Content, item.Metadata["output"], make([]float64, 1024),
 				b.embeddingConfig.DefaultModel, b.embeddingConfig.DefaultVersion, item.Metadata)
 			if err != nil {
-				return fmt.Errorf("insert experience: %w", err)
+				return errors.Wrap(err, "insert experience")
 			}
 
 		default:
@@ -190,7 +191,7 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return errors.Wrap(err, "commit transaction")
 	}
 
 	// Enqueue embedding tasks
