@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"goagent/internal/errors"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,12 +66,12 @@ type RateLimit struct {
 func ParseGraphConfig(data []byte) (*GraphConfig, error) {
 	var config GraphConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, errors.Wrap(err, "failed to parse YAML")
 	}
 
 	// Validate configuration
 	if err := validateGraphConfig(&config); err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
 	return &config, nil

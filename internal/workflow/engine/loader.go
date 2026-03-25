@@ -3,9 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
+
+	"goagent/internal/errors"
 
 	"gopkg.in/yaml.v3"
 )
@@ -62,7 +63,7 @@ func NewYAMLFileLoader() *FileLoader {
 func (l *FileLoader) Load(ctx context.Context, source string) (*Workflow, error) {
 	data, err := os.ReadFile(source)
 	if err != nil {
-		return nil, fmt.Errorf("read workflow file %s: %w", source, err)
+		return nil, errors.Wrapf(err, "read workflow file %s", source)
 	}
 
 	return l.Parse(ctx, data, source)
@@ -72,7 +73,7 @@ func (l *FileLoader) Load(ctx context.Context, source string) (*Workflow, error)
 func (l *FileLoader) Parse(ctx context.Context, data []byte, source string) (*Workflow, error) {
 	var workflow WorkflowFile
 	if err := l.decoder.Decode(data, &workflow); err != nil {
-		return nil, fmt.Errorf("decode workflow %s: %w", source, err)
+		return nil, errors.Wrapf(err, "decode workflow %s", source)
 	}
 
 	return l.convert(&workflow, source)
@@ -86,7 +87,7 @@ func (l *FileLoader) convert(f *WorkflowFile, source string) (*Workflow, error) 
 	for i, stepFile := range f.Steps {
 		step, err := convertStep(stepFile)
 		if err != nil {
-			return nil, fmt.Errorf("convert step %d: %w", i, err)
+			return nil, errors.Wrapf(err, "convert step %d", i)
 		}
 		steps = append(steps, step)
 	}
@@ -186,7 +187,7 @@ func NewDirectoryLoader(fileLoader *FileLoader) *DirectoryLoader {
 func (l *DirectoryLoader) LoadAll(ctx context.Context, dir string) (map[string]*Workflow, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("read directory %s: %w", dir, err)
+		return nil, errors.Wrapf(err, "read directory %s", dir)
 	}
 
 	workflows := make(map[string]*Workflow)
@@ -204,7 +205,7 @@ func (l *DirectoryLoader) LoadAll(ctx context.Context, dir string) (map[string]*
 		path := dir + "/" + entry.Name()
 		workflow, err := l.fileLoader.Load(ctx, path)
 		if err != nil {
-			return nil, fmt.Errorf("load workflow %s: %w", path, err)
+			return nil, errors.Wrapf(err, "load workflow %s", path)
 		}
 
 		if _, exists := workflows[workflow.ID]; exists {

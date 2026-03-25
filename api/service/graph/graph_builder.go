@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"goagent/internal/agents/base"
+	"goagent/internal/errors"
 	"goagent/internal/observability"
 	wfgraph "goagent/internal/workflow/graph"
 )
@@ -60,7 +61,7 @@ func (b *GraphBuilder) Build(config *GraphConfig) (*wfgraph.Graph, error) {
 	for _, nodeConfig := range gdef.Nodes {
 		node, err := b.buildNode(nodeConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to build node '%s': %w", nodeConfig.ID, err)
+			return nil, errors.Wrapf(err, "failed to build node '%s'", nodeConfig.ID)
 		}
 		g.Node(nodeConfig.ID, node)
 	}
@@ -188,13 +189,13 @@ func BuildWithService(configYAML []byte, builder *GraphBuilder) (*Service, *wfgr
 	// Parse configuration.
 	graphConfig, err := ParseGraphConfig(configYAML)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse configuration: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to parse configuration")
 	}
 
 	// Build graph.
 	g, err := builder.Build(graphConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build graph: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to build graph")
 	}
 
 	// Create service.
@@ -205,7 +206,7 @@ func BuildWithService(configYAML []byte, builder *GraphBuilder) (*Service, *wfgr
 
 	service, err := NewService(serviceConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create service: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to create service")
 	}
 
 	return service, g, nil

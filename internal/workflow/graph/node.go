@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"goagent/internal/agents/base"
+	"goagent/internal/errors"
 	"goagent/internal/tools/resources/core"
 )
 
@@ -40,7 +41,7 @@ func (n *AgentNode) Execute(ctx context.Context, state *State) error {
 	input, _ := state.Get("input")
 	result, err := n.agent.Process(ctx, input)
 	if err != nil {
-		return fmt.Errorf("agent %s execution failed: %w", n.ID(), err)
+		return errors.Wrapf(err, "agent %s execution failed", n.ID())
 	}
 
 	state.Set("node."+n.ID(), result)
@@ -77,7 +78,7 @@ func (n *ToolNode) Execute(ctx context.Context, state *State) error {
 	params := state.ToParams()
 	result, err := n.tool.Execute(ctx, params)
 	if err != nil {
-		return fmt.Errorf("tool %s execution failed: %w", n.ID(), err)
+		return errors.Wrapf(err, "tool %s execution failed", n.ID())
 	}
 
 	if result.Success {
@@ -121,7 +122,7 @@ func (n *FuncNode) Execute(ctx context.Context, state *State) error {
 
 	err := n.fn(ctx, state)
 	if err != nil {
-		return fmt.Errorf("function %s execution failed: %w", n.ID(), err)
+		return errors.Wrapf(err, "function %s execution failed", n.ID())
 	}
 
 	return nil

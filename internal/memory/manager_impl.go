@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -252,7 +253,7 @@ func (m *memoryManager) BuildContext(ctx context.Context, input string, sessionI
 
 // CreateTask creates a new task and returns the task ID.
 func (m *memoryManager) CreateTask(ctx context.Context, sessionID, userID, input string) (string, error) {
-	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
+	taskID := "task_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	if err := m.taskMemory.Set(ctx, taskID, sessionID, userID, input); err != nil {
 		return "", fmt.Errorf("create task: %w", err)

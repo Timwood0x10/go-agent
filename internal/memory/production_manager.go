@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -435,7 +436,7 @@ func (m *ProductionMemoryManager) BuildContext(ctx context.Context, input string
 // Note: This creates task_result WITHOUT embedding (embedding only for experiences).
 // task_results table stores execution history, experiences store reusable knowledge.
 func (m *ProductionMemoryManager) CreateTask(ctx context.Context, sessionID, userID, input string) (string, error) {
-	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
+	taskID := "task_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	// Set tenant context (MUST be called for every tenant-specific operation)
 	tenantID := m.getCurrentTenantID()

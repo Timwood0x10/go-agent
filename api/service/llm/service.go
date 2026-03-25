@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"goagent/api/core"
+	"goagent/internal/errors"
 	"goagent/internal/llm"
 )
 
@@ -64,7 +65,7 @@ func NewService(config *Config) (*Service, error) {
 
 	client, err := llm.NewClient(internalConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create LLM client: %w", err)
+		return nil, errors.Wrap(err, "create LLM client")
 	}
 
 	return &Service{
@@ -96,7 +97,7 @@ func (s *Service) Generate(ctx context.Context, request *core.GenerateRequest) (
 	// Generate text
 	content, err := s.client.Generate(ctx, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("generate text: %w", err)
+		return nil, errors.Wrap(err, "generate text")
 	}
 
 	response := &core.GenerateResponse{
@@ -135,7 +136,7 @@ func (s *Service) GenerateSimple(ctx context.Context, prompt string) (string, er
 
 	content, err := s.client.Generate(ctx, prompt)
 	if err != nil {
-		return "", fmt.Errorf("generate text: %w", err)
+		return "", errors.Wrap(err, "generate text")
 	}
 
 	return content, nil
@@ -167,7 +168,7 @@ func (s *Service) GenerateEmbedding(ctx context.Context, request *core.Embedding
 			// Generate embedding using the embedding service
 			embeddingFloat64, err := embedder.Embed(ctx, request.Input)
 			if err != nil {
-				return nil, fmt.Errorf("generate embedding: %w", err)
+				return nil, errors.Wrap(err, "generate embedding")
 			}
 
 			// Convert float64 to float32

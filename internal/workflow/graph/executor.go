@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/observability"
 )
 
@@ -25,7 +26,7 @@ func (g *Graph) Execute(ctx context.Context, state *State) (*Result, error) {
 	// Apply rate limiting if configured
 	if g.limiter != nil {
 		if err := g.limiter.Wait(ctx); err != nil {
-			return nil, fmt.Errorf("rate limit: %w", err)
+			return nil, errors.Wrap(err, "rate limit")
 		}
 	}
 
@@ -66,14 +67,14 @@ func (g *Graph) Execute(ctx context.Context, state *State) (*Result, error) {
 		// Check if context is cancelled
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("execution cancelled: %w", ctx.Err())
+			return nil, errors.Wrap(ctx.Err(), "execution cancelled")
 		default:
 		}
 
 		// Execute node
 		err := node.Execute(ctx, state)
 		if err != nil {
-			return nil, fmt.Errorf("node %s execution failed: %w", nodeID, err)
+			return nil, errors.Wrapf(err, "node %s execution failed", nodeID)
 		}
 
 		// Mark as executed

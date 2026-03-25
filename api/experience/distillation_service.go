@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/llm"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
@@ -69,7 +70,7 @@ func (s *DistillationService) Distill(ctx context.Context, task *TaskResult) (*E
 
 	extracted, err := s.extractExperience(ctx, task)
 	if err != nil {
-		return nil, fmt.Errorf("extract experience: %w", err)
+		return nil, errors.Wrap(err, "extract experience")
 	}
 
 	if extracted.Problem == "" || extracted.Solution == "" {
@@ -78,7 +79,7 @@ func (s *DistillationService) Distill(ctx context.Context, task *TaskResult) (*E
 
 	embedding, err := s.embeddingClient.Embed(ctx, extracted.Problem)
 	if err != nil {
-		return nil, fmt.Errorf("generate embedding: %w", err)
+		return nil, errors.Wrap(err, "generate embedding")
 	}
 
 	expType := ExperienceTypeFailure
@@ -107,7 +108,7 @@ func (s *DistillationService) Distill(ctx context.Context, task *TaskResult) (*E
 
 	err = s.experienceRepo.Create(ctx, exp)
 	if err != nil {
-		return nil, fmt.Errorf("store experience: %w", err)
+		return nil, errors.Wrap(err, "store experience")
 	}
 
 	return &Experience{
@@ -163,7 +164,7 @@ func (s *DistillationService) extractExperience(ctx context.Context, task *TaskR
 
 	response, err := s.llmClient.Generate(timeoutCtx, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("LLM generation failed: %w", err)
+		return nil, errors.Wrap(err, "LLM generation failed")
 	}
 
 	return s.parseExtractionResponse(response)

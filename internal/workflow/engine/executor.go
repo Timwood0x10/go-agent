@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // Executor executes workflows based on DAG ordering.
@@ -32,12 +33,12 @@ func NewExecutor(registry *AgentRegistry, outputStore *OutputStore) *Executor {
 func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput string) (*WorkflowResult, error) {
 	dag, err := NewDAG(workflow.Steps)
 	if err != nil {
-		return nil, fmt.Errorf("create DAG: %w", err)
+		return nil, errors.Wrap(err, "create DAG")
 	}
 
 	executionOrder, err := dag.GetExecutionOrder()
 	if err != nil {
-		return nil, fmt.Errorf("get execution order: %w", err)
+		return nil, errors.Wrap(err, "get execution order")
 	}
 
 	execution := &WorkflowExecution{
