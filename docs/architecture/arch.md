@@ -217,138 +217,16 @@
 
 ---
 
-## 核心组件实现
+## Actor 模型对应关系
 
-### Leader Agent
-
-Leader Agent 负责任务分解、分发和结果聚合。
-
-**代码位置**: `internal/agents/leader/agent.go`
-
-```go
-type LeaderAgent struct {
-    id               string
-    maxSteps         int
-    maxParallelTasks int
-    subAgents        map[string]*SubAgent
-    llmClient        *llm.Client
-}
-
-func (l *LeaderAgent) Process(ctx context.Context, input string) (string, error) {
-    // 1. 解析用户输入
-    parsed, err := l.parseInput(ctx, input)
-    if err != nil {
-        return "", err
-    }
-
-    // 2. 生成任务计划
-    tasks, err := l.planTasks(ctx, parsed)
-    if err != nil {
-        return "", err
-    }
-
-    // 3. 并行执行任务
-    results, err := l.executeTasks(ctx, tasks)
-    if err != nil {
-        return "", err
-    }
-
-    // 4. 聚合结果
-    return l.aggregateResults(ctx, results)
-}
-```
-
-### Sub Agent
-
-Sub Agent 负责执行具体任务。
-
-**代码位置**: `internal/agents/sub/agent.go`
-
-```go
-type SubAgent struct {
-    id        string
-    agentType string
-    triggers  []string
-    llmClient *llm.Client
-    tools     []Tool
-}
-
-func (s *SubAgent) Execute(ctx context.Context, task *Task) (*TaskResult, error) {
-    // 1. 检查触发条件
-    if !s.shouldExecute(task) {
-        return nil, nil
-    }
-
-    // 2. 执行工具
-    toolResults, err := s.executeTools(ctx, task)
-    if err != nil {
-        return nil, err
-    }
-
-    // 3. LLM 生成响应
-    response, err := s.llmClient.Generate(ctx, s.buildPrompt(task, toolResults))
-    if err != nil {
-        return nil, err
-    }
-
-    return &TaskResult{
-        AgentID: s.id,
-        Result:  response,
-    }, nil
-}
-```
-
-### LLM Client
-
-支持多个 LLM 提供商的统一客户端。
-
-**代码位置**: `internal/llm/client.go`
-
-```go
-type Client struct {
-    config     *Config
-    httpClient *http.Client
-}
-
-func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
-    switch ProviderType(c.config.Provider) {
-    case ProviderOpenRouter:
-        return c.generateOpenRouter(ctx, prompt)
-    case ProviderOllama:
-        return c.generateOllama(ctx, prompt)
-    default:
-        return "", fmt.Errorf("unsupported provider: %s", c.config.Provider)
-    }
-}
-```
-
-### Storage Pool
-
-PostgreSQL 连接池实现"获取-使用-释放"模式。
-
-**代码位置**: `internal/storage/postgres/pool.go`
-
-```go
-type Pool struct {
-    cfg          *Config
-    db           *sql.DB
-    mu           sync.RWMutex
-    openCount    int
-    idleCount    int
-    waitCount    int
-    waitDuration time.Duration
-}
-
-func (p *Pool) WithConnection(ctx context.Context, fn func(*sql.Conn) error) error {
-    conn, err := p.Get(ctx)
-    if err != nil {
-        return err
-    }
-    defer p.Release(conn)
-
-    return fn(conn)
-}
-```
+| Actor 模型概念 | iFlow 实现 |
+|----------------|-----------|
+| Actor | `LeaderAgent`, `OutfitSubAgent` |
+| Mailbox | `MessageQueue` (In-Memory) |
+| Message | `AHPMessage` (TASK/RESULT/PROGRESS/ACK) |
+| Behavior | Agent 内部的 `_handle_task()`, `_recommend()` |
+| Supervisor | `LeaderAgent` 协调多个 Sub Agent |
+| Failure Handling | DLQ (Dead Letter Queue) |
 
 ---
 
