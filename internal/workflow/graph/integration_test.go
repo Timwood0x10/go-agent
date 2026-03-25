@@ -72,8 +72,8 @@ func TestGraphWithObservability(t *testing.T) {
 func TestGraphWithRateLimit(t *testing.T) {
 	// Test that graph execution respects rate limiting
 	limiter := ratelimit.NewTokenBucketLimiter(&ratelimit.LimiterConfig{
-		Rate:    10.0,  // 10 requests per second
-		Burst:   1,     // burst size of 1
+		Rate:    10.0, // 10 requests per second
+		Burst:   1,    // burst size of 1
 		Timeout: 5 * time.Second,
 	})
 
@@ -157,7 +157,7 @@ func TestGraphWithBothObservabilityAndRateLimit(t *testing.T) {
 	}
 
 	limiter := ratelimit.NewTokenBucketLimiter(&ratelimit.LimiterConfig{
-		Rate:    5.0,  // 5 requests per second
+		Rate:    5.0, // 5 requests per second
 		Burst:   1,
 		Timeout: 5 * time.Second,
 	})

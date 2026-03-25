@@ -47,9 +47,9 @@ func (m *mockTool) Parameters() *core.ParameterSchema {
 
 // mockAgent is a simple mock agent for testing.
 type mockAgent struct {
-	id         string
-	agentType  models.AgentType
-	processFn  func(context.Context, any) (any, error)
+	id        string
+	agentType models.AgentType
+	processFn func(context.Context, any) (any, error)
 }
 
 func (m *mockAgent) ID() string {

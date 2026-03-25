@@ -3,12 +3,13 @@
 package graph
 
 import (
-    "context"
-    "fmt"
-    "time"
+	"context"
+	"fmt"
+	"time"
 
-    "goagent/internal/observability"
+	"goagent/internal/observability"
 )
+
 // Execute runs the graph with the given state.
 func (g *Graph) Execute(ctx context.Context, state *State) (*Result, error) {
 	if g == nil {
@@ -18,22 +19,22 @@ func (g *Graph) Execute(ctx context.Context, state *State) (*Result, error) {
 		return nil, fmt.Errorf("graph start node is not set")
 	}
 	if _, ok := g.nodes[g.start]; !ok {
-	        return nil, fmt.Errorf("start node %s not found", g.start)
-	    }
-	
-	    // Apply rate limiting if configured
-	    if g.limiter != nil {
-	        if err := g.limiter.Wait(ctx); err != nil {
-	            return nil, fmt.Errorf("rate limit: %w", err)
-	        }
-	    }
-	
-	    // Initialize execution
-	        startTime := time.Now()
-	        executed := make(map[string]bool) // nodes that have been executed
-	        readySet := make(map[string]bool) // nodes ready for execution
-	        readyQueue := []string{g.start}   // ordered queue of ready nodes
-	        readySet[g.start] = true
+		return nil, fmt.Errorf("start node %s not found", g.start)
+	}
+
+	// Apply rate limiting if configured
+	if g.limiter != nil {
+		if err := g.limiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit: %w", err)
+		}
+	}
+
+	// Initialize execution
+	startTime := time.Now()
+	executed := make(map[string]bool) // nodes that have been executed
+	readySet := make(map[string]bool) // nodes ready for execution
+	readyQueue := []string{g.start}   // ordered queue of ready nodes
+	readySet[g.start] = true
 	// Execute graph using BFS with scheduler
 	for len(readyQueue) > 0 {
 		// Select next node using scheduler
@@ -90,20 +91,20 @@ func (g *Graph) Execute(ctx context.Context, state *State) (*Result, error) {
 			}
 		}
 	}
-	
-	    // Record execution trace
-	    if g.tracer != nil {
-	        g.tracer.RecordToolCall(ctx, &observability.ToolCall{
-	            TraceID:  g.tracer.GetTraceID(ctx),
-	            ToolName: g.id,
-	            Input:    state.ToParams(),
-	            Output:   state.ToParams(),
-	            Duration: time.Since(startTime),
-	            Error:    nil,
-	        })
-	    }
-	
-	    return &Result{		GraphID:  g.id,
+
+	// Record execution trace
+	if g.tracer != nil {
+		g.tracer.RecordToolCall(ctx, &observability.ToolCall{
+			TraceID:  g.tracer.GetTraceID(ctx),
+			ToolName: g.id,
+			Input:    state.ToParams(),
+			Output:   state.ToParams(),
+			Duration: time.Since(startTime),
+			Error:    nil,
+		})
+	}
+
+	return &Result{GraphID: g.id,
 		State:    state,
 		Duration: time.Since(startTime),
 	}, nil
