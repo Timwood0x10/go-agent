@@ -47,15 +47,14 @@ func TestState(t *testing.T) {
 
 func TestNewState(t *testing.T) {
 	state := NewState()
-	if state == nil {
-		t.Error("NewState returned nil")
-	}
 	if state.values == nil {
 		t.Error("NewState did not initialize values map")
 	}
 }
 
+//nolint:staticcheck // This test intentionally uses nil state to verify nil-safety
 func TestStateNil(t *testing.T) {
+	// Test nil state behavior - all methods should handle nil safely
 	var state *State
 
 	// Test Get on nil state
