@@ -2,8 +2,8 @@
 package postgres
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -15,14 +15,17 @@ func FormatVector(embedding []float64) string {
 		return "[]"
 	}
 
+	// Pre-allocate capacity: ~8 chars per number + commas + brackets
 	var builder strings.Builder
+	builder.Grow(len(embedding)*8 + 2)
 	builder.WriteString("[")
 
 	for i, v := range embedding {
 		if i > 0 {
 			builder.WriteString(",")
 		}
-		fmt.Fprintf(&builder, "%.6f", v)
+		// Optimization: Use strconv directly instead of fmt.Fprintf for better performance
+		builder.WriteString(strconv.FormatFloat(v, 'f', 6, 64))
 	}
 
 	builder.WriteString("]")

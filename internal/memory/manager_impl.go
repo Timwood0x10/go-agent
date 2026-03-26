@@ -649,7 +649,9 @@ func (m *memoryManager) cosineSimilarity(v1, v2 []float64) float64 {
 		return 0.0
 	}
 
-	return dotProduct / (math.Sqrt(norm1) * math.Sqrt(norm2))
+	// Optimization: Use single sqrt instead of two
+	// math.Sqrt(norm1) * math.Sqrt(norm2) == math.Sqrt(norm1 * norm2)
+	return dotProduct / math.Sqrt(norm1*norm2)
 }
 
 // truncate truncates a string to the maximum length and adds "..." if truncated.
