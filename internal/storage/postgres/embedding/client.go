@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode"
 
+	"goagent/internal/errors"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -250,19 +251,19 @@ func (c *EmbeddingClient) callEmbeddingService(ctx context.Context, text, prefix
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/embed", strings.NewReader(string(jsonData)))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call service: %w", err)
+		return nil, errors.Wrap(err, "call service")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -282,7 +283,7 @@ func (c *EmbeddingClient) callEmbeddingService(ctx context.Context, text, prefix
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, errors.Wrap(err, "decode response")
 	}
 
 	return result.Embedding, nil
@@ -297,19 +298,19 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/embed_batch", strings.NewReader(string(jsonData)))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call service: %w", err)
+		return nil, errors.Wrap(err, "call service")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -329,7 +330,7 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, errors.Wrap(err, "decode response")
 	}
 
 	return result.Embeddings, nil
@@ -343,12 +344,12 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/health", nil)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return errors.Wrap(err, "create request")
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("call service: %w", err)
+		return errors.Wrap(err, "call service")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {

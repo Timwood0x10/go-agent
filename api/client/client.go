@@ -3,7 +3,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"goagent/api/core"
@@ -11,6 +10,7 @@ import (
 	llmSvc "goagent/api/service/llm"
 	memorySvc "goagent/api/service/memory"
 	retrievalSvc "goagent/api/service/retrieval"
+	"goagent/internal/errors"
 )
 
 // Client provides a unified client interface for all GoAgent modules.
@@ -57,7 +57,7 @@ func NewClient(config *Config) (*Client, error) {
 	if config.Agent != nil {
 		agentService, err := agentSvc.NewService(config.Agent)
 		if err != nil {
-			return nil, fmt.Errorf("create agent service: %w", err)
+			return nil, errors.Wrap(err, "create agent service")
 		}
 		client.agentService = agentService
 	}
@@ -65,7 +65,7 @@ func NewClient(config *Config) (*Client, error) {
 	if config.Memory != nil {
 		memoryService, err := memorySvc.NewService(config.Memory)
 		if err != nil {
-			return nil, fmt.Errorf("create memory service: %w", err)
+			return nil, errors.Wrap(err, "create memory service")
 		}
 		client.memoryService = memoryService
 	}
@@ -73,7 +73,7 @@ func NewClient(config *Config) (*Client, error) {
 	if config.Retrieval != nil {
 		retrievalService, err := retrievalSvc.NewService(config.Retrieval)
 		if err != nil {
-			return nil, fmt.Errorf("create retrieval service: %w", err)
+			return nil, errors.Wrap(err, "create retrieval service")
 		}
 		client.retrievalService = retrievalService
 	}
@@ -81,7 +81,7 @@ func NewClient(config *Config) (*Client, error) {
 	if config.LLM != nil {
 		llmService, err := llmSvc.NewService(config.LLM)
 		if err != nil {
-			return nil, fmt.Errorf("create LLM service: %w", err)
+			return nil, errors.Wrap(err, "create LLM service")
 		}
 		client.llmService = llmService
 	}

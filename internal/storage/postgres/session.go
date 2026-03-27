@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/core/models"
 )
 
@@ -30,12 +30,12 @@ func NewSessionRepositoryWithDB(db DBTX) *SessionRepository {
 func (r *SessionRepository) Create(ctx context.Context, session *models.Session) error {
 	profileJSON, err := json.Marshal(session.UserProfile)
 	if err != nil {
-		return fmt.Errorf("marshal profile: %w", err)
+		return errors.Wrap(err, "marshal profile")
 	}
 
 	metadataJSON, err := json.Marshal(session.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	query := `
@@ -55,7 +55,7 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 		session.ExpiredAt,
 	)
 	if err != nil {
-		return fmt.Errorf("insert session: %w", err)
+		return errors.Wrap(err, "insert session")
 	}
 
 	return nil
@@ -83,17 +83,17 @@ func (r *SessionRepository) GetByID(ctx context.Context, sessionID string) (*mod
 		&session.ExpiredAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query session: %w", err)
+		return nil, errors.Wrap(err, "query session")
 	}
 
 	if err := json.Unmarshal(profileJSON, &session.UserProfile); err != nil {
-		return nil, fmt.Errorf("unmarshal profile: %w", err)
+		return nil, errors.Wrap(err, "unmarshal profile")
 	}
 	if err := json.Unmarshal(metadataJSON, &session.Metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		return nil, errors.Wrap(err, "unmarshal metadata")
 	}
 
 	return &session, nil
@@ -103,12 +103,12 @@ func (r *SessionRepository) GetByID(ctx context.Context, sessionID string) (*mod
 func (r *SessionRepository) Update(ctx context.Context, session *models.Session) error {
 	profileJSON, err := json.Marshal(session.UserProfile)
 	if err != nil {
-		return fmt.Errorf("marshal profile: %w", err)
+		return errors.Wrap(err, "marshal profile")
 	}
 
 	metadataJSON, err := json.Marshal(session.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	query := `
@@ -125,15 +125,15 @@ func (r *SessionRepository) Update(ctx context.Context, session *models.Session)
 		session.SessionID,
 	)
 	if err != nil {
-		return fmt.Errorf("update session: %w", err)
+		return errors.Wrap(err, "update session")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
+		return errors.Wrap(err, "rows affected")
 	}
 	if rowsAffected == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -145,15 +145,15 @@ func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error 
 
 	result, err := r.db.ExecContext(ctx, query, sessionID)
 	if err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return errors.Wrap(err, "delete session")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
+		return errors.Wrap(err, "rows affected")
 	}
 	if rowsAffected == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -170,7 +170,7 @@ func (r *SessionRepository) ListByUserID(ctx context.Context, userID string, lim
 
 	rows, err := r.db.QueryContext(ctx, query, userID, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("query sessions: %w", err)
+		return nil, errors.Wrap(err, "query sessions")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -190,14 +190,14 @@ func (r *SessionRepository) ListByUserID(ctx context.Context, userID string, lim
 			&session.UpdatedAt,
 			&session.ExpiredAt,
 		); err != nil {
-			return nil, fmt.Errorf("scan session: %w", err)
+			return nil, errors.Wrap(err, "scan session")
 		}
 
 		if err := json.Unmarshal(profileJSON, &session.UserProfile); err != nil {
-			return nil, fmt.Errorf("unmarshal profile: %w", err)
+			return nil, errors.Wrap(err, "unmarshal profile")
 		}
 		if err := json.Unmarshal(metadataJSON, &session.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+			return nil, errors.Wrap(err, "unmarshal metadata")
 		}
 
 		sessions = append(sessions, &session)
@@ -212,7 +212,7 @@ func (r *SessionRepository) CleanupExpired(ctx context.Context) (int64, error) {
 
 	result, err := r.db.ExecContext(ctx, query, time.Now())
 	if err != nil {
-		return 0, fmt.Errorf("cleanup expired: %w", err)
+		return 0, errors.Wrap(err, "cleanup expired")
 	}
 
 	return result.RowsAffected()

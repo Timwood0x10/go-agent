@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"goagent/api/core"
+	"goagent/internal/errors"
 )
 
 // SimpleClient provides the simplest possible API for GoAgent.
@@ -40,13 +41,13 @@ func NewSimpleClient(configPath string) (*SimpleClient, error) {
 	loader := NewConfigLoader()
 	config, err := loader.Load(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+		return nil, errors.Wrap(err, "load config")
 	}
 
 	// Create underlying client
 	underlyingClient, err := NewClientFromConfigPath(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("create client: %w", err)
+		return nil, errors.Wrap(err, "create client")
 	}
 
 	return &SimpleClient{
@@ -80,12 +81,12 @@ func (s *SimpleClient) Execute(ctx context.Context, query string) (string, error
 	// Use LLM to generate response
 	llmService, err := s.client.LLM()
 	if err != nil {
-		return "", fmt.Errorf("get LLM service: %w", err)
+		return "", errors.Wrap(err, "get LLM service")
 	}
 
 	response, err := llmService.GenerateSimple(ctx, prompt)
 	if err != nil {
-		return "", fmt.Errorf("generate response: %w", err)
+		return "", errors.Wrap(err, "generate response")
 	}
 
 	return response, nil
@@ -119,12 +120,12 @@ func (s *SimpleClient) ExecuteWithAgent(ctx context.Context, agentID, query stri
 	// Use LLM to generate response
 	llmService, err := s.client.LLM()
 	if err != nil {
-		return "", fmt.Errorf("get LLM service: %w", err)
+		return "", errors.Wrap(err, "get LLM service")
 	}
 
 	response, err := llmService.GenerateSimple(ctx, prompt)
 	if err != nil {
-		return "", fmt.Errorf("generate response: %w", err)
+		return "", errors.Wrap(err, "generate response")
 	}
 
 	return response, nil
@@ -162,13 +163,13 @@ func (s *SimpleClient) Chat(ctx context.Context, messages []*core.Message) (stri
 	// Generate response
 	llmService, err := s.client.LLM()
 	if err != nil {
-		return "", fmt.Errorf("get LLM service: %w", err)
+		return "", errors.Wrap(err, "get LLM service")
 	}
 
 	prompt := fmt.Sprintf("Conversation history:\n%s\n\nPlease respond to the last user message.", conversation)
 	response, err := llmService.GenerateSimple(ctx, prompt)
 	if err != nil {
-		return "", fmt.Errorf("generate response: %w", err)
+		return "", errors.Wrap(err, "generate response")
 	}
 
 	return response, nil

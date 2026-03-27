@@ -12,7 +12,8 @@ import (
 	"os"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // ProviderType represents the LLM provider type.
@@ -42,7 +43,7 @@ type Client struct {
 // NewClient creates a new LLM client.
 func NewClient(config *Config) (*Client, error) {
 	if config == nil {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	if config.Timeout <= 0 {
@@ -65,7 +66,7 @@ func NewClient(config *Config) (*Client, error) {
 func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 	// Validate prompt input
 	if prompt == "" {
-		return "", errors.ErrInvalidArgument
+		return "", coreerrors.ErrInvalidArgument
 	}
 
 	// Check if prompt is too long (max 10,000 characters)
@@ -78,7 +79,7 @@ func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 	trimmed := []byte(prompt)
 	trimmed = bytes.TrimSpace(trimmed)
 	if len(trimmed) == 0 {
-		return "", errors.ErrInvalidArgument
+		return "", coreerrors.ErrInvalidArgument
 	}
 
 	switch ProviderType(c.config.Provider) {
@@ -111,12 +112,12 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -127,7 +128,7 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", errors.Wrap(err, "send request")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -149,7 +150,7 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", errors.Wrap(err, "decode response")
 	}
 
 	if len(response.Choices) == 0 {
@@ -173,7 +174,7 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", errors.Wrap(err, "marshal request")
 	}
 
 	baseURL := c.config.BaseURL
@@ -183,14 +184,14 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/generate", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", errors.Wrap(err, "send request")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -208,7 +209,7 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", errors.Wrap(err, "decode response")
 	}
 
 	return response.Response, nil

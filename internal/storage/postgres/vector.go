@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // VectorSearcher handles vector similarity search.
@@ -56,7 +57,7 @@ type SearchResult struct {
 func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []float64, limit int) ([]*SearchResult, error) {
 	// Validate table name to prevent SQL injection
 	if err := sanitizeSQLTable(table); err != nil {
-		return nil, fmt.Errorf("invalid table name: %w", err)
+		return nil, errors.Wrap(err, "invalid table name")
 	}
 
 	// Validate limit to prevent excessive results
@@ -75,12 +76,12 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 
 	embeddingJSON, err := json.Marshal(embedding)
 	if err != nil {
-		return nil, fmt.Errorf("marshal embedding: %w", err)
+		return nil, errors.Wrap(err, "marshal embedding")
 	}
 
 	rows, err := v.db.QueryContext(ctx, query, embeddingJSON, limit)
 	if err != nil {
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -90,18 +91,18 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 		var metadataJSON []byte
 
 		if err := rows.Scan(&result.ID, &result.Score, &metadataJSON); err != nil {
-			return nil, fmt.Errorf("scan result: %w", err)
+			return nil, errors.Wrap(err, "scan result")
 		}
 
 		if err := json.Unmarshal(metadataJSON, &result.Metadata); err != nil {
-			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+			return nil, errors.Wrap(err, "unmarshal metadata")
 		}
 
 		results = append(results, &result)
 	}
 
 	if len(results) == 0 {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 
 	return results, nil
@@ -111,7 +112,7 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, embedding []float64, metadata map[string]any) error {
 	// Validate table name to prevent SQL injection
 	if err := sanitizeSQLTable(table); err != nil {
-		return fmt.Errorf("invalid table name: %w", err)
+		return errors.Wrap(err, "invalid table name")
 	}
 
 	// Validate embedding dimensions
@@ -131,17 +132,17 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 
 	// Validate id
 	if err := validateSQLIdentifier(id); err != nil {
-		return fmt.Errorf("invalid id: %w", err)
+		return errors.Wrap(err, "invalid id")
 	}
 
 	embeddingJSON, err := json.Marshal(embedding)
 	if err != nil {
-		return fmt.Errorf("marshal embedding: %w", err)
+		return errors.Wrap(err, "marshal embedding")
 	}
 
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	query := fmt.Sprintf(`
@@ -151,7 +152,7 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 
 	_, err = v.db.ExecContext(ctx, query, id, embeddingJSON, metadataJSON)
 	if err != nil {
-		return fmt.Errorf("add embedding: %w", err)
+		return errors.Wrap(err, "add embedding")
 	}
 
 	return nil
@@ -161,19 +162,19 @@ func (v *VectorSearcher) AddEmbedding(ctx context.Context, table, id string, emb
 func (v *VectorSearcher) DeleteEmbedding(ctx context.Context, table, id string) error {
 	// Validate table name to prevent SQL injection
 	if err := sanitizeSQLTable(table); err != nil {
-		return fmt.Errorf("invalid table name: %w", err)
+		return errors.Wrap(err, "invalid table name")
 	}
 
 	// Validate id
 	if err := validateSQLIdentifier(id); err != nil {
-		return fmt.Errorf("invalid id: %w", err)
+		return errors.Wrap(err, "invalid id")
 	}
 
 	query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, safeFormatTable(table))
 
 	_, err := v.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete embedding: %w", err)
+		return errors.Wrap(err, "delete embedding")
 	}
 
 	return nil
@@ -184,7 +185,7 @@ func (v *VectorSearcher) DeleteEmbedding(ctx context.Context, table, id string) 
 func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, metadataSchema string) error {
 	// Validate table name to prevent SQL injection
 	if err := sanitizeSQLTable(table); err != nil {
-		return fmt.Errorf("invalid table name: %w", err)
+		return errors.Wrap(err, "invalid table name")
 	}
 
 	// Validate dimension (should be between 1 and 2000)
@@ -207,7 +208,7 @@ func (v *VectorSearcher) CreateVectorTable(ctx context.Context, table string, me
 
 	_, err := v.db.ExecContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("create vector table: %w", err)
+		return errors.Wrap(err, "create vector table")
 	}
 
 	return nil

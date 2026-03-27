@@ -6,12 +6,12 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"goagent/api/agent"
 	"goagent/api/memory"
 	"goagent/api/retrieval"
+	"goagent/internal/errors"
 	internalmemory "goagent/internal/memory"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
@@ -103,7 +103,7 @@ func NewClient(config *Config) (*Client, error) {
 
 	pool, err := postgres.NewPool(dbConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create database pool: %w", err)
+		return nil, errors.Wrap(err, "create database pool")
 	}
 
 	// Initialize memory manager
@@ -113,7 +113,7 @@ func NewClient(config *Config) (*Client, error) {
 		EnablePostgres: config.Memory.EnablePostgres,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create memory manager: %w", err)
+		return nil, errors.Wrap(err, "create memory manager")
 	}
 
 	// Initialize embedding client
@@ -136,7 +136,7 @@ func NewClient(config *Config) (*Client, error) {
 
 	retrievalService, err := retrieval.NewService(pool, embeddingClient, kbRepo, retrievalConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create retrieval service: %w", err)
+		return nil, errors.Wrap(err, "create retrieval service")
 	}
 
 	// Initialize services

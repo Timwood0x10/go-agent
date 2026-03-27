@@ -10,6 +10,7 @@ import (
 	llmSvc "goagent/api/service/llm"
 	"goagent/internal/agents/base"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/workflow/engine"
 )
 
@@ -75,7 +76,7 @@ func (w *WorkflowClient) Execute(ctx context.Context, workflow *engine.Workflow,
 func (w *WorkflowClient) ExecuteFromFile(ctx context.Context, path, input string) (*engine.WorkflowResult, error) {
 	workflow, err := w.LoadWorkflow(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("load workflow: %w", err)
+		return nil, errors.Wrap(err, "load workflow")
 	}
 
 	return w.Execute(ctx, workflow, input)
@@ -234,7 +235,7 @@ func (e *WorkflowAgentExecutor) Process(ctx context.Context, input any) (any, er
 
 	if err != nil {
 
-		return nil, fmt.Errorf("execute agent %s: %w", e.agentID, err)
+		return nil, errors.Wrapf(err, "execute agent %s", e.agentID)
 
 	}
 

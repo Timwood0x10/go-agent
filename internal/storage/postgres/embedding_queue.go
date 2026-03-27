@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // EmbeddingQueue manages async embedding tasks with idempotency and retry logic.
@@ -54,7 +55,7 @@ func NewEmbeddingQueue(pool *Pool, embeddingConfig *EmbeddingConfig) *EmbeddingQ
 // Returns error if enqueue operation fails.
 func (q *EmbeddingQueue) Enqueue(ctx context.Context, task *EmbeddingTask) error {
 	if task == nil {
-		return errors.ErrInvalidArgument
+		return coreerrors.ErrInvalidArgument
 	}
 
 	// Generate dedupe key for idempotency
@@ -68,7 +69,7 @@ func (q *EmbeddingQueue) Enqueue(ctx context.Context, task *EmbeddingTask) error
 	`, task.TaskID, task.Table, task.Content, task.TenantID, task.Model, task.Version, dedupeKey)
 
 	if err != nil {
-		return fmt.Errorf("enqueue embedding task: %w", err)
+		return errors.Wrap(err, "enqueue embedding task")
 	}
 
 	return nil
@@ -105,7 +106,7 @@ func (q *EmbeddingQueue) FetchPendingTasks(ctx context.Context, limit int) ([]*E
 
 	rows, err := q.db.Query(ctx, query, limit)
 	if err != nil {
-		return nil, fmt.Errorf("fetch pending tasks: %w", err)
+		return nil, errors.Wrap(err, "fetch pending tasks")
 	}
 	defer rows.Close()
 	// nolint: errcheck // Rows are closed by defer
@@ -134,7 +135,7 @@ func (q *EmbeddingQueue) MarkProcessing(ctx context.Context, taskID string) erro
 	`, taskID)
 
 	if err != nil {
-		return fmt.Errorf("mark task processing: %w", err)
+		return errors.Wrap(err, "mark task processing")
 	}
 
 	return nil
@@ -153,7 +154,7 @@ func (q *EmbeddingQueue) MarkCompleted(ctx context.Context, taskID string) error
 	`, taskID)
 
 	if err != nil {
-		return fmt.Errorf("mark task completed: %w", err)
+		return errors.Wrap(err, "mark task completed")
 	}
 
 	return nil
@@ -174,7 +175,7 @@ func (q *EmbeddingQueue) MarkFailed(ctx context.Context, taskID string, errMessa
 	`, taskID).Scan(&retryCount)
 
 	if err != nil {
-		return fmt.Errorf("get retry count: %w", err)
+		return errors.Wrap(err, "get retry count")
 	}
 
 	// Use configured max retries
@@ -189,7 +190,7 @@ func (q *EmbeddingQueue) MarkFailed(ctx context.Context, taskID string, errMessa
 		`, errMessage, taskID)
 
 		if err != nil {
-			return fmt.Errorf("move to dead letter: %w", err)
+			return errors.Wrap(err, "move to dead letter")
 		}
 
 		// Delete from main queue
@@ -205,7 +206,7 @@ func (q *EmbeddingQueue) MarkFailed(ctx context.Context, taskID string, errMessa
 	`, errMessage, taskID)
 
 	if err != nil {
-		return fmt.Errorf("mark task failed: %w", err)
+		return errors.Wrap(err, "mark task failed")
 	}
 
 	return nil
@@ -235,7 +236,7 @@ func (q *EmbeddingQueue) Reconcile(ctx context.Context, threshold time.Duration)
 	`, threshold, defaultModel, defaultVersion)
 
 	if err != nil {
-		return fmt.Errorf("reconcile orphaned embeddings: %w", err)
+		return errors.Wrap(err, "reconcile orphaned embeddings")
 	}
 
 	return nil

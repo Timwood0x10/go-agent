@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -69,7 +70,7 @@ func parseVectorString(vecStr string) ([]float64, error) {
 	for i, part := range parts {
 		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
 		if err != nil || val != 1 {
-			return nil, fmt.Errorf("failed to parse vector component: %w", err)
+			return nil, errors.Wrap(err, "failed to parse vector component")
 		}
 	}
 
@@ -85,7 +86,7 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(chunk.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Handle nil or empty embedding
@@ -199,7 +200,7 @@ func (r *KnowledgeRepository) Create(ctx context.Context, chunk *storage_models.
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
-		return fmt.Errorf("create knowledge chunk: %w", err)
+		return errors.Wrap(err, "create knowledge chunk")
 	}
 
 	chunk.ID = id
@@ -218,12 +219,12 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	}
 
 	if r.dbPool == nil {
-		return errors.ErrNoTransaction
+		return coreerrors.ErrNoTransaction
 	}
 
 	tx, err := r.dbPool.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return errors.Wrap(err, "begin transaction")
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
@@ -236,7 +237,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 		// Convert metadata to JSON for database storage
 		metadataJSON, err := json.Marshal(chunk.Metadata)
 		if err != nil {
-			return fmt.Errorf("marshal metadata: %w", err)
+			return errors.Wrap(err, "marshal metadata")
 		}
 
 		// Convert embedding vector to pgvector format
@@ -272,7 +273,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 		).Scan(&id)
 
 		if err != nil {
-			return fmt.Errorf("create knowledge chunk %d: %w", i, err)
+			return errors.Wrapf(err, "create knowledge chunk %d", i)
 		}
 
 		// Fill the ID for the chunk
@@ -280,7 +281,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return errors.Wrap(err, "commit transaction")
 	}
 
 	return nil
@@ -293,7 +294,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 // Returns knowledge chunk or error if not found or invalid argument.
 func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_models.KnowledgeChunk, error) {
 	if id == "" {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -316,22 +317,22 @@ func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get knowledge chunk by id: %w", err)
+		return nil, errors.Wrap(err, "get knowledge chunk by id")
 	}
 
 	// Parse embedding string to float64 array
 	chunk.Embedding, err = parseVectorString(embeddingStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse embedding: %w", err)
+		return nil, errors.Wrap(err, "parse embedding")
 	}
 
 	// Parse metadata JSON string to map
 	if metadataStr != "" {
 		if err := json.Unmarshal([]byte(metadataStr), &chunk.Metadata); err != nil {
-			return nil, fmt.Errorf("parse metadata: %w", err)
+			return nil, errors.Wrap(err, "parse metadata")
 		}
 	}
 
@@ -352,7 +353,7 @@ func (r *KnowledgeRepository) Update(ctx context.Context, chunk *storage_models.
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(chunk.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding vector to pgvector format
@@ -380,16 +381,16 @@ func (r *KnowledgeRepository) Update(ctx context.Context, chunk *storage_models.
 		documentID, chunk.ChunkIndex, chunk.AccessCount,
 	)
 	if err != nil {
-		return fmt.Errorf("update knowledge chunk: %w", err)
+		return errors.Wrap(err, "update knowledge chunk")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -405,16 +406,16 @@ func (r *KnowledgeRepository) Delete(ctx context.Context, id string) error {
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete knowledge chunk: %w", err)
+		return errors.Wrap(err, "delete knowledge chunk")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -456,7 +457,7 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 	rows, err := r.db.QueryContext(ctx, query, vectorStr, tenantID, limit)
 	if err != nil {
 		slog.Error("Vector search query failed", "error", err)
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 
 	slog.Info("Vector search query succeeded")
@@ -541,7 +542,7 @@ func (r *KnowledgeRepository) SearchByKeyword(ctx context.Context, query, tenant
 
 	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("keyword search: %w", err)
+		return nil, errors.Wrap(err, "keyword search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -587,7 +588,7 @@ func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, te
 
 	rows, err := r.db.QueryContext(ctx, query, documentID, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("list chunks by document: %w", err)
+		return nil, errors.Wrap(err, "list chunks by document")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -640,7 +641,7 @@ func (r *KnowledgeRepository) SearchBySubstring(ctx context.Context, query, tena
 
 	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("substring search: %w", err)
+		return nil, errors.Wrap(err, "substring search")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -682,16 +683,16 @@ func (r *KnowledgeRepository) UpdateEmbedding(ctx context.Context, id string, em
 
 	result, err := r.db.ExecContext(ctx, query, id, embedding, model, version)
 	if err != nil {
-		return fmt.Errorf("update embedding: %w", err)
+		return errors.Wrap(err, "update embedding")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -713,16 +714,16 @@ func (r *KnowledgeRepository) UpdateEmbeddingStatus(ctx context.Context, id, sta
 
 	result, err := r.db.ExecContext(ctx, query, id, status, errorMsg)
 	if err != nil {
-		return fmt.Errorf("update embedding status: %w", err)
+		return errors.Wrap(err, "update embedding status")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -742,12 +743,12 @@ func (r *KnowledgeRepository) CleanupExpired(ctx context.Context, olderThan time
 
 	result, err := r.db.ExecContext(ctx, query, olderThan)
 	if err != nil {
-		return 0, fmt.Errorf("cleanup expired chunks: %w", err)
+		return 0, errors.Wrap(err, "cleanup expired chunks")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil

@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
+	gerr "goagent/internal/errors"
 	"goagent/internal/core/models"
 )
 
 // Ollama errors.
 var (
-	ErrInvalidResponse = errors.New("invalid response")
+	ErrInvalidResponse = stderrors.New("invalid response")
 )
 
 // OllamaAdapter implements LLMAdapter for Ollama.
@@ -50,20 +51,20 @@ func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, er
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", gerr.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		a.config.BaseURL+"/api/generate", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", gerr.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", gerr.Wrap(err, "send request")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -78,7 +79,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, er
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", gerr.Wrap(err, "decode response")
 	}
 
 	response, ok := result["response"].(string)

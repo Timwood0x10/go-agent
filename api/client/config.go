@@ -11,6 +11,7 @@ import (
 	llmSvc "goagent/api/service/llm"
 	memorySvc "goagent/api/service/memory"
 	retrievalSvc "goagent/api/service/retrieval"
+	"goagent/internal/errors"
 
 	"gopkg.in/yaml.v3"
 )
@@ -195,19 +196,19 @@ func (l *ConfigLoader) Load(path string) (*ConfigFile, error) {
 	// Determine config file path
 	configPath, err := l.findConfigPath(path)
 	if err != nil {
-		return nil, fmt.Errorf("find config: %w", err)
+		return nil, errors.Wrap(err, "find config")
 	}
 
 	// Read file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("read config file %s: %w", configPath, err)
+		return nil, errors.Wrapf(err, "read config file %s", configPath)
 	}
 
 	// Parse YAML
 	var cfg ConfigFile
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config file %s: %w", configPath, err)
+		return nil, errors.Wrapf(err, "parse config file %s", configPath)
 	}
 
 	// Load environment variables
@@ -218,7 +219,7 @@ func (l *ConfigLoader) Load(path string) (*ConfigFile, error) {
 
 	// Validate configuration
 	if err := cfg.validate(); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+		return nil, errors.Wrap(err, "validate config")
 	}
 
 	return &cfg, nil
@@ -474,7 +475,7 @@ func NewClientFromConfigPath(configPath string) (*Client, error) {
 	// Load configuration
 	cfg, err := loader.Load(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+		return nil, errors.Wrap(err, "load config")
 	}
 
 	// Convert to client config

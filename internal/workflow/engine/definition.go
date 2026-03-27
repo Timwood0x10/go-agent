@@ -3,18 +3,20 @@ package engine
 import (
 	"bufio"
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+
+	"goagent/internal/errors"
 )
 
 // Definition errors.
 var (
-	ErrFieldNotFound            = errors.New("field not found")
-	ErrDuplicateAgentDefinition = errors.New("duplicate agent definition")
+	ErrFieldNotFound            = stderrors.New("field not found")
+	ErrDuplicateAgentDefinition = stderrors.New("duplicate agent definition")
 )
 
 // AgentDefinition represents an agent definition from markdown.
@@ -40,7 +42,7 @@ func NewDefinitionParser() *DefinitionParser {
 func (p *DefinitionParser) Parse(ctx context.Context, r io.Reader) (*AgentDefinition, error) {
 	content, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("read content: %w", err)
+		return nil, errors.Wrap(err, "read content")
 	}
 
 	return p.ParseBytes(ctx, content)
@@ -58,13 +60,13 @@ func (p *DefinitionParser) ParseBytes(ctx context.Context, content []byte) (*Age
 
 	name, err := p.extractField(text, "name")
 	if err != nil {
-		return nil, fmt.Errorf("extract name: %w", err)
+		return nil, errors.Wrap(err, "extract name")
 	}
 	def.Name = name
 
 	agentType, err := p.extractField(text, "type")
 	if err != nil {
-		return nil, fmt.Errorf("extract type: %w", err)
+		return nil, errors.Wrap(err, "extract type")
 	}
 	def.Type = agentType
 
@@ -86,7 +88,7 @@ func (p *DefinitionParser) ParseBytes(ctx context.Context, content []byte) (*Age
 func (p *DefinitionParser) ParseFile(ctx context.Context, path string) (*AgentDefinition, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open file %s: %w", path, err)
+		return nil, errors.Wrapf(err, "open file %s", path)
 	}
 	defer func() { _ = file.Close() }()
 
@@ -227,7 +229,7 @@ func NewDirectoryParser(parser *DefinitionParser) *DirectoryParser {
 func (p *DirectoryParser) ParseAll(ctx context.Context, dir string) (map[string]*AgentDefinition, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("read directory %s: %w", dir, err)
+		return nil, errors.Wrapf(err, "read directory %s", dir)
 	}
 
 	definitions := make(map[string]*AgentDefinition)
@@ -240,7 +242,7 @@ func (p *DirectoryParser) ParseAll(ctx context.Context, dir string) (map[string]
 		path := dir + "/" + entry.Name()
 		def, err := p.parser.ParseFile(ctx, path)
 		if err != nil {
-			return nil, fmt.Errorf("parse file %s: %w", path, err)
+			return nil, errors.Wrapf(err, "parse file %s", path)
 		}
 
 		if _, exists := definitions[def.Name]; exists {

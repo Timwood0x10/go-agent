@@ -7,8 +7,9 @@ import (
 	"sync"
 
 	"goagent/internal/agents/base"
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/memory"
 	"goagent/internal/protocol/ahp"
 
@@ -136,23 +137,23 @@ func (a *leaderAgent) setStatus(status models.AgentStatus) {
 // Start starts the leader agent.
 func (a *leaderAgent) Start(ctx context.Context) error {
 	if a.Status() != models.AgentStatusOffline {
-		return errors.ErrAgentAlreadyStarted
+		return coreerrors.ErrAgentAlreadyStarted
 	}
 
 	a.setStatus(models.AgentStatusStarting)
 
 	// Validate and initialize dependencies
 	if a.parser == nil {
-		return errors.ErrProfileParserNotInitialized
+		return coreerrors.ErrProfileParserNotInitialized
 	}
 	if a.planner == nil {
-		return errors.ErrTaskPlannerNotInitialized
+		return coreerrors.ErrTaskPlannerNotInitialized
 	}
 	if a.dispatcher == nil {
-		return errors.ErrDispatchNotInitialized
+		return coreerrors.ErrDispatchNotInitialized
 	}
 	if a.aggregator == nil {
-		return errors.ErrResultAggNotInitialized
+		return coreerrors.ErrResultAggNotInitialized
 	}
 
 	// Initialize heartbeat monitor if provided
@@ -185,7 +186,7 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 // Stop stops the leader agent.
 func (a *leaderAgent) Stop(ctx context.Context) error {
 	if a.Status() == models.AgentStatusOffline {
-		return errors.ErrAgentNotRunning
+		return coreerrors.ErrAgentNotRunning
 	}
 
 	a.setStatus(models.AgentStatusStopping)
@@ -196,7 +197,7 @@ func (a *leaderAgent) Stop(ctx context.Context) error {
 // Process handles user input and orchestrates the recommendation workflow with automatic memory management.
 func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
-		return nil, errors.ErrAgentNotReady
+		return nil, coreerrors.ErrAgentNotReady
 	}
 
 	if a.Status() == models.AgentStatusOffline {
@@ -224,7 +225,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	case fmt.Stringer:
 		strInput = v.String()
 	default:
-		return nil, fmt.Errorf("%w: expected string, []byte, or fmt.Stringer, got %T", errors.ErrInvalidInput, input)
+		return nil, errors.Wrapf(coreerrors.ErrInvalidInput, "expected string, []byte, or fmt.Stringer, got %T", input)
 	}
 
 	// Memory: Initialize session and add user input
@@ -281,7 +282,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	// Step 1: Parse profile
 	a.stepCount++
 	if a.stepCount > maxSteps {
-		return nil, errors.ErrMaxStepsExceeded
+		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
 	profile, err := a.parser.Parse(ctx, strInput)
@@ -292,7 +293,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	// Step 2: Plan tasks
 	a.stepCount++
 	if a.stepCount > maxSteps {
-		return nil, errors.ErrMaxStepsExceeded
+		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
 	tasks, err := a.planner.Plan(ctx, profile)
@@ -304,7 +305,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	// Step 3: Dispatch tasks
 	a.stepCount++
 	if a.stepCount > maxSteps {
-		return nil, errors.ErrMaxStepsExceeded
+		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
 	slog.Info("Leader dispatching tasks", "module", "leader")
@@ -320,7 +321,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	// Step 4: Aggregate results
 	a.stepCount++
 	if a.stepCount > maxSteps {
-		return nil, errors.ErrMaxStepsExceeded
+		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
 	result, err := a.aggregator.Aggregate(ctx, results)
@@ -366,7 +367,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 // SendMessage sends a message to another agent.
 func (a *leaderAgent) SendMessage(ctx context.Context, msg *ahp.AHPMessage) error {
 	if a.messageQueue == nil {
-		return errors.ErrQueueNotInitialized
+		return coreerrors.ErrQueueNotInitialized
 	}
 	return a.messageQueue.Enqueue(ctx, msg)
 }
@@ -374,7 +375,7 @@ func (a *leaderAgent) SendMessage(ctx context.Context, msg *ahp.AHPMessage) erro
 // ReceiveMessage receives a message from the message queue.
 func (a *leaderAgent) ReceiveMessage(ctx context.Context) (*ahp.AHPMessage, error) {
 	if a.messageQueue == nil {
-		return nil, errors.ErrQueueNotInitialized
+		return nil, coreerrors.ErrQueueNotInitialized
 	}
 	return a.messageQueue.Dequeue(ctx)
 }

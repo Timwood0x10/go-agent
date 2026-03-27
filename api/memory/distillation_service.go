@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/memory/distillation"
 	"goagent/internal/storage/postgres/embedding"
 )
@@ -241,7 +242,7 @@ func (s *DistillationServiceImpl) DistillConversation(ctx context.Context, conve
 		slog.Error("Memory distillation failed",
 			"conversation_id", conversationID,
 			"error", err)
-		return nil, fmt.Errorf("distill conversation: %w", err)
+		return nil, errors.Wrap(err, "distill conversation")
 	}
 
 	// Convert internal memories to API memories
@@ -454,7 +455,7 @@ func (s *DistillationServiceImpl) UpdateMemory(ctx context.Context, memoryID str
 		err := repo.UpdateMemory(ctx, memoryID, updates)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to update distilled memory", "memory_id", memoryID, "error", err)
-			return fmt.Errorf("update memory: %w", err)
+			return errors.Wrap(err, "update memory")
 		}
 
 		slog.InfoContext(ctx, "Distilled memory updated successfully", "memory_id", memoryID)
@@ -484,7 +485,7 @@ func (s *DistillationServiceImpl) DeleteMemory(ctx context.Context, memoryID str
 	err := s.repo.Delete(ctx, memoryID)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to delete distilled memory", "memory_id", memoryID, "error", err)
-		return fmt.Errorf("delete memory: %w", err)
+		return errors.Wrap(err, "delete memory")
 	}
 
 	slog.InfoContext(ctx, "Distilled memory deleted successfully", "memory_id", memoryID)
@@ -517,14 +518,14 @@ func (s *DistillationServiceImpl) SearchMemories(ctx context.Context, query stri
 	embedding, err := s.embedder.Embed(ctx, query)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to generate embedding for query", "query", query, "error", err)
-		return nil, fmt.Errorf("generate embedding: %w", err)
+		return nil, errors.Wrap(err, "generate embedding")
 	}
 
 	// Search for similar memories
 	experiences, err := s.repo.SearchByVector(ctx, embedding, tenantID, limit)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to search memories", "query", query, "error", err)
-		return nil, fmt.Errorf("search memories: %w", err)
+		return nil, errors.Wrap(err, "search memories")
 	}
 
 	// Convert experiences to distilled memories

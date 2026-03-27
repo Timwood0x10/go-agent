@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"goagent/internal/errors"
+
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -61,7 +63,7 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 	if w.watcher != nil {
 		// Add directory to watch
 		if err := w.watcher.Add(dir); err != nil {
-			return fmt.Errorf("watch directory: %w", err)
+			return errors.Wrap(err, "watch directory")
 		}
 
 		// Watch subdirectories for workflow files
@@ -158,7 +160,7 @@ func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
 func (w *FileWatcher) scanAndLoad(ctx context.Context, dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("read directory: %w", err)
+		return errors.Wrap(err, "read directory")
 	}
 
 	newWorkflows := make(map[string]*Workflow)
@@ -280,7 +282,7 @@ func (r *WorkflowReloader) Load(ctx context.Context, dir string) error {
 	dirLoader := NewDirectoryLoader(loader)
 	workflows, err := dirLoader.LoadAll(ctx, dir)
 	if err != nil {
-		return fmt.Errorf("load workflows: %w", err)
+		return errors.Wrap(err, "load workflows")
 	}
 
 	r.mu.Lock()
@@ -300,7 +302,7 @@ func (r *WorkflowReloader) StartWatching(ctx context.Context, dir string) error 
 	dirLoader := NewDirectoryLoader(loader)
 	workflows, err := dirLoader.LoadAll(ctx, dir)
 	if err != nil {
-		return fmt.Errorf("load workflows: %w", err)
+		return errors.Wrap(err, "load workflows")
 	}
 
 	r.mu.Lock()
@@ -312,7 +314,7 @@ func (r *WorkflowReloader) StartWatching(ctx context.Context, dir string) error 
 
 	// Use reloader's cancel context for watching
 	if err := watcher.Watch(r.cancelCtx, dir); err != nil {
-		return fmt.Errorf("start watcher: %w", err)
+		return errors.Wrap(err, "start watcher")
 	}
 
 	r.watcher = watcher

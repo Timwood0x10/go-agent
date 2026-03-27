@@ -3,10 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // DBTX is an interface that both *sql.DB and *sql.Tx satisfy.
@@ -71,7 +71,7 @@ func (r *Repository) Transaction(ctx context.Context, fn func(repo *Repository) 
 
 	if err := fn(txRepo); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
+			return errors.Wrapf(err, "transaction failed: rollback error: %v", rbErr)
 		}
 		return err
 	}
@@ -100,7 +100,7 @@ func (r *Repository) WithTransaction(ctx context.Context) (*Repository, error) {
 // Commit commits the transaction.
 func (r *Repository) Commit() error {
 	if r.tx == nil {
-		return errors.ErrNoTransaction
+		return coreerrors.ErrNoTransaction
 	}
 	return r.tx.Commit()
 }
@@ -138,7 +138,7 @@ func (r *Repository) GetSessionWithResult(ctx context.Context, sessionID string)
 	}
 
 	result, err := r.Recommend.GetBySessionID(ctx, sessionID)
-	if err != nil && err != errors.ErrRecordNotFound {
+	if err != nil && err != coreerrors.ErrRecordNotFound {
 		return nil, nil, err
 	}
 

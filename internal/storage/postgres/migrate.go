@@ -2,9 +2,9 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 )
 
 // Migrate runs database migrations.
@@ -73,7 +73,7 @@ func Migrate(ctx context.Context, pool *Pool) error {
 
 	for i, migration := range migrations {
 		if _, err := pool.Exec(ctx, migration); err != nil {
-			return fmt.Errorf("migration %d failed: %w", i, err)
+			return errors.Wrapf(err, "migration %d failed", i)
 		}
 	}
 
@@ -84,7 +84,7 @@ func Migrate(ctx context.Context, pool *Pool) error {
 func RollbackLast(ctx context.Context, pool *Pool) error {
 	// Note: This is a simplified implementation
 	// In production, use a proper migration tool like golang-migrate
-	return errors.ErrQueryFailed
+	return coreerrors.ErrQueryFailed
 }
 
 // Seed creates seed data for testing.

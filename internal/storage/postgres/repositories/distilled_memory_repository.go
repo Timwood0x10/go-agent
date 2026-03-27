@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 )
 
@@ -66,7 +67,7 @@ func parseDistilledVectorString(vecStr string) ([]float64, error) {
 	for i, part := range parts {
 		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
 		if err != nil || val != 1 {
-			return nil, fmt.Errorf("failed to parse vector component: %w", err)
+			return nil, errors.Wrap(err, "failed to parse vector component")
 		}
 	}
 
@@ -92,14 +93,14 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context",
 			"tenant_id", memory.TenantID,
 			"error", err)
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 	slog.InfoContext(ctx, "✅ [Storage] Tenant context set successfully", "tenant_id", memory.TenantID)
 
 	// Convert metadata to JSON
 	metadataJSON, err := json.Marshal(memory.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	query = `
@@ -132,7 +133,7 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 			"memory_id", memory.ID,
 			"user_id", memory.UserID,
 			"error", err)
-		return fmt.Errorf("create distilled memory: %w", err)
+		return errors.Wrap(err, "create distilled memory")
 	}
 
 	slog.InfoContext(ctx, "✅ [Storage] Successfully stored distilled memory",
@@ -159,7 +160,7 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in SearchByVector",
 			"tenant_id", tenantID,
 			"error", err)
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 	slog.InfoContext(ctx, "✅ [Storage] Tenant context set in SearchByVector", "tenant_id", tenantID)
 
@@ -180,7 +181,7 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 		slog.ErrorContext(ctx, "❌ [Storage] Failed to execute SearchByVector query",
 			"tenant_id", tenantID,
 			"error", err)
-		return nil, fmt.Errorf("search distilled memories: %w", err)
+		return nil, errors.Wrap(err, "search distilled memories")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -255,7 +256,7 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in GetByUserID",
 			"tenant_id", tenantID,
 			"error", err)
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 	slog.InfoContext(ctx, "✅ [Storage] Tenant context set in GetByUserID", "tenant_id", tenantID)
 
@@ -275,7 +276,7 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 		slog.ErrorContext(ctx, "❌ [Storage] Failed to execute GetByUserID query",
 			"user_id", userID,
 			"error", err)
-		return nil, fmt.Errorf("get memories by user: %w", err)
+		return nil, errors.Wrap(err, "get memories by user")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -332,7 +333,7 @@ func (r *DistilledMemoryRepository) UpdateAccessCount(ctx context.Context, id st
 
 	_, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("update access count: %w", err)
+		return errors.Wrap(err, "update access count")
 	}
 
 	return nil
@@ -349,7 +350,7 @@ func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantI
 	// Set tenant context for RLS
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
-		return nil, fmt.Errorf("set tenant context: %w", err)
+		return nil, errors.Wrap(err, "set tenant context")
 	}
 
 	query := `
@@ -365,7 +366,7 @@ func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantI
 
 	rows, err := r.db.QueryContext(ctx, query, memoryType, limit)
 	if err != nil {
-		return nil, fmt.Errorf("get memories by type: %w", err)
+		return nil, errors.Wrap(err, "get memories by type")
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -383,13 +384,13 @@ func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantI
 			&memory.ExpiresAt, &memory.CreatedAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("scan memory: %w", err)
+			return nil, errors.Wrap(err, "scan memory")
 		}
 
 		// Parse embedding string to float64 array
 		memory.Embedding, err = parseDistilledVectorString(embeddingStr)
 		if err != nil {
-			return nil, fmt.Errorf("parse embedding: %w", err)
+			return nil, errors.Wrap(err, "parse embedding")
 		}
 
 		// Parse metadata JSON string to map
@@ -411,12 +412,12 @@ func (r *DistilledMemoryRepository) DeleteExpired(ctx context.Context) (int64, e
 
 	result, err := r.db.ExecContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("delete expired memories: %w", err)
+		return 0, errors.Wrap(err, "delete expired memories")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("get rows affected: %w", err)
+		return 0, errors.Wrap(err, "get rows affected")
 	}
 
 	return rows, nil
@@ -435,13 +436,13 @@ func (r *DistilledMemoryRepository) Update(ctx context.Context, memory *Distille
 	// Set tenant context for RLS
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(memory.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -465,12 +466,12 @@ func (r *DistilledMemoryRepository) Update(ctx context.Context, memory *Distille
 		memory.EmbeddingVersion, memory.MemoryType, memory.Importance, metadataJSON,
 	)
 	if err != nil {
-		return fmt.Errorf("update distilled memory: %w", err)
+		return errors.Wrap(err, "update distilled memory")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
@@ -494,19 +495,19 @@ func (r *DistilledMemoryRepository) Delete(ctx context.Context, tenantID, id str
 	// Set tenant context for RLS
 	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
-		return fmt.Errorf("set tenant context: %w", err)
+		return errors.Wrap(err, "set tenant context")
 	}
 
 	query := `DELETE FROM distilled_memories WHERE id = $1`
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete distilled memory: %w", err)
+		return errors.Wrap(err, "delete distilled memory")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {

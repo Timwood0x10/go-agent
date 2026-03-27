@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/template"
 
+	"goagent/internal/errors"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -35,12 +36,12 @@ func NewTemplateEngine() *TemplateEngine {
 func (e *TemplateEngine) Render(tmpl string, data interface{}) (string, error) {
 	t, err := template.New("prompt").Funcs(e.funcs).Parse(tmpl)
 	if err != nil {
-		return "", fmt.Errorf("parse template: %w", err)
+		return "", errors.Wrap(err, "parse template")
 	}
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("execute template: %w", err)
+		return "", errors.Wrap(err, "execute template")
 	}
 
 	return buf.String(), nil
@@ -50,12 +51,12 @@ func (e *TemplateEngine) Render(tmpl string, data interface{}) (string, error) {
 func (e *TemplateEngine) RenderFile(path string, data interface{}) (string, error) {
 	tmpl, err := template.ParseFiles(path)
 	if err != nil {
-		return "", fmt.Errorf("parse template file: %w", err)
+		return "", errors.Wrap(err, "parse template file")
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("execute template: %w", err)
+		return "", errors.Wrap(err, "execute template")
 	}
 
 	return buf.String(), nil

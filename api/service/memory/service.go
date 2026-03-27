@@ -3,13 +3,13 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"goagent/api/core"
+	"goagent/internal/errors"
 	"goagent/internal/memory"
 )
 
@@ -90,7 +90,7 @@ func (s *Service) CreateSession(ctx context.Context, sessionConfig *core.Session
 	}
 
 	if err := s.repo.CreateSession(ctx, session); err != nil {
-		return "", fmt.Errorf("create session: %w", err)
+		return "", errors.Wrap(err, "create session")
 	}
 
 	return sessionID, nil
@@ -108,7 +108,7 @@ func (s *Service) GetSession(ctx context.Context, sessionID string) (*core.Sessi
 
 	session, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("get session: %w", err)
+		return nil, errors.Wrap(err, "get session")
 	}
 
 	if session == nil {
@@ -131,11 +131,11 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 	// Verify session exists
 	_, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("get session: %w", err)
+		return errors.Wrap(err, "get session")
 	}
 
 	if err := s.repo.DeleteSession(ctx, sessionID); err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return errors.Wrap(err, "delete session")
 	}
 
 	return nil
@@ -164,7 +164,7 @@ func (s *Service) AddMessage(ctx context.Context, sessionID string, role core.Me
 	// Verify session exists
 	_, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("get session: %w", err)
+		return errors.Wrap(err, "get session")
 	}
 
 	message := &core.Message{
@@ -177,7 +177,7 @@ func (s *Service) AddMessage(ctx context.Context, sessionID string, role core.Me
 	}
 
 	if err := s.repo.AddMessage(ctx, message); err != nil {
-		return fmt.Errorf("add message: %w", err)
+		return errors.Wrap(err, "add message")
 	}
 
 	return nil
@@ -197,7 +197,7 @@ func (s *Service) GetMessages(ctx context.Context, sessionID string, pagination 
 	// Verify session exists
 	_, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("get session: %w", err)
+		return nil, errors.Wrap(err, "get session")
 	}
 
 	if pagination == nil {
@@ -209,7 +209,7 @@ func (s *Service) GetMessages(ctx context.Context, sessionID string, pagination 
 
 	messages, err := s.repo.GetMessages(ctx, sessionID, pagination)
 	if err != nil {
-		return nil, fmt.Errorf("get messages: %w", err)
+		return nil, errors.Wrap(err, "get messages")
 	}
 
 	return messages, nil
@@ -232,7 +232,7 @@ func (s *Service) DistillTask(ctx context.Context, taskID string) (*core.Distill
 	if s.memoryMgr != nil {
 		task, err := s.memoryMgr.DistillTask(ctx, taskID)
 		if err != nil {
-			return nil, fmt.Errorf("get task for distillation: %w", err)
+			return nil, errors.Wrap(err, "get task for distillation")
 		}
 
 		// Extract task information
@@ -267,7 +267,7 @@ func (s *Service) DistillTask(ctx context.Context, taskID string) (*core.Distill
 		}
 
 		if err := s.repo.StoreDistilledTask(ctx, distilledTask); err != nil {
-			return nil, fmt.Errorf("store distilled task: %w", err)
+			return nil, errors.Wrap(err, "store distilled task")
 		}
 
 		return distilledTask, nil
@@ -286,7 +286,7 @@ func (s *Service) DistillTask(ctx context.Context, taskID string) (*core.Distill
 	}
 
 	if err := s.repo.StoreDistilledTask(ctx, distilledTask); err != nil {
-		return nil, fmt.Errorf("store distilled task: %w", err)
+		return nil, errors.Wrap(err, "store distilled task")
 	}
 
 	return distilledTask, nil
@@ -370,7 +370,7 @@ func (s *Service) SearchSimilarTasks(ctx context.Context, query *core.SearchQuer
 
 	results, err := s.repo.SearchSimilarTasks(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("search similar tasks: %w", err)
+		return nil, errors.Wrap(err, "search similar tasks")
 	}
 
 	return results, nil

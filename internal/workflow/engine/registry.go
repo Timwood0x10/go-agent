@@ -2,11 +2,11 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"goagent/internal/agents/base"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // AgentFactory creates agent instances.
@@ -62,7 +62,7 @@ func (r *AgentRegistry) CreateAgent(ctx context.Context, agentType string, confi
 	r.mu.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("%w: %s", ErrAgentTypeNotFound, agentType)
+		return nil, errors.Wrap(ErrAgentTypeNotFound, agentType)
 	}
 
 	return factory(ctx, config)

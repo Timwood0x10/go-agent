@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/core/models"
 )
 
@@ -30,27 +30,27 @@ func NewProfileRepositoryWithDB(db DBTX) *ProfileRepository {
 func (r *ProfileRepository) Create(ctx context.Context, profile *models.UserProfile) error {
 	styleJSON, err := json.Marshal(profile.Style)
 	if err != nil {
-		return fmt.Errorf("marshal style: %w", err)
+		return errors.Wrap(err, "marshal style")
 	}
 
 	budgetJSON, err := json.Marshal(profile.Budget)
 	if err != nil {
-		return fmt.Errorf("marshal budget: %w", err)
+		return errors.Wrap(err, "marshal budget")
 	}
 
 	colorsJSON, err := json.Marshal(profile.Colors)
 	if err != nil {
-		return fmt.Errorf("marshal colors: %w", err)
+		return errors.Wrap(err, "marshal colors")
 	}
 
 	occasionsJSON, err := json.Marshal(profile.Occasions)
 	if err != nil {
-		return fmt.Errorf("marshal occasions: %w", err)
+		return errors.Wrap(err, "marshal occasions")
 	}
 
 	preferencesJSON, err := json.Marshal(profile.Preferences)
 	if err != nil {
-		return fmt.Errorf("marshal preferences: %w", err)
+		return errors.Wrap(err, "marshal preferences")
 	}
 
 	query := `
@@ -74,7 +74,7 @@ func (r *ProfileRepository) Create(ctx context.Context, profile *models.UserProf
 		profile.UpdatedAt,
 	)
 	if err != nil {
-		return fmt.Errorf("insert profile: %w", err)
+		return errors.Wrap(err, "insert profile")
 	}
 
 	return nil
@@ -106,26 +106,26 @@ func (r *ProfileRepository) GetByID(ctx context.Context, userID string) (*models
 		&profile.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query profile: %w", err)
+		return nil, errors.Wrap(err, "query profile")
 	}
 
 	if err := json.Unmarshal(styleJSON, &profile.Style); err != nil {
-		return nil, fmt.Errorf("unmarshal style: %w", err)
+		return nil, errors.Wrap(err, "unmarshal style")
 	}
 	if err := json.Unmarshal(budgetJSON, &profile.Budget); err != nil {
-		return nil, fmt.Errorf("unmarshal budget: %w", err)
+		return nil, errors.Wrap(err, "unmarshal budget")
 	}
 	if err := json.Unmarshal(colorsJSON, &profile.Colors); err != nil {
-		return nil, fmt.Errorf("unmarshal colors: %w", err)
+		return nil, errors.Wrap(err, "unmarshal colors")
 	}
 	if err := json.Unmarshal(occasionsJSON, &profile.Occasions); err != nil {
-		return nil, fmt.Errorf("unmarshal occasions: %w", err)
+		return nil, errors.Wrap(err, "unmarshal occasions")
 	}
 	if err := json.Unmarshal(preferencesJSON, &profile.Preferences); err != nil {
-		return nil, fmt.Errorf("unmarshal preferences: %w", err)
+		return nil, errors.Wrap(err, "unmarshal preferences")
 	}
 
 	return &profile, nil
@@ -137,27 +137,27 @@ func (r *ProfileRepository) Update(ctx context.Context, profile *models.UserProf
 
 	styleJSON, err := json.Marshal(profile.Style)
 	if err != nil {
-		return fmt.Errorf("marshal style: %w", err)
+		return errors.Wrap(err, "marshal style")
 	}
 
 	budgetJSON, err := json.Marshal(profile.Budget)
 	if err != nil {
-		return fmt.Errorf("marshal budget: %w", err)
+		return errors.Wrap(err, "marshal budget")
 	}
 
 	colorsJSON, err := json.Marshal(profile.Colors)
 	if err != nil {
-		return fmt.Errorf("marshal colors: %w", err)
+		return errors.Wrap(err, "marshal colors")
 	}
 
 	occasionsJSON, err := json.Marshal(profile.Occasions)
 	if err != nil {
-		return fmt.Errorf("marshal occasions: %w", err)
+		return errors.Wrap(err, "marshal occasions")
 	}
 
 	preferencesJSON, err := json.Marshal(profile.Preferences)
 	if err != nil {
-		return fmt.Errorf("marshal preferences: %w", err)
+		return errors.Wrap(err, "marshal preferences")
 	}
 
 	query := `
@@ -182,15 +182,15 @@ func (r *ProfileRepository) Update(ctx context.Context, profile *models.UserProf
 		profile.UserID,
 	)
 	if err != nil {
-		return fmt.Errorf("update profile: %w", err)
+		return errors.Wrap(err, "update profile")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
+		return errors.Wrap(err, "rows affected")
 	}
 	if rowsAffected == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -202,15 +202,15 @@ func (r *ProfileRepository) Delete(ctx context.Context, userID string) error {
 
 	result, err := r.db.ExecContext(ctx, query, userID)
 	if err != nil {
-		return fmt.Errorf("delete profile: %w", err)
+		return errors.Wrap(err, "delete profile")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
+		return errors.Wrap(err, "rows affected")
 	}
 	if rowsAffected == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -223,7 +223,7 @@ func (r *ProfileRepository) Exists(ctx context.Context, userID string) (bool, er
 	var exists bool
 	err := r.db.QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
-		return false, fmt.Errorf("check exists: %w", err)
+		return false, errors.Wrap(err, "check exists")
 	}
 
 	return exists, nil

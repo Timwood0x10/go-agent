@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // OpenAIAdapter implements LLMAdapter for OpenAI.
@@ -47,13 +48,13 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return "", errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		a.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -61,18 +62,18 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", errors.Wrap(err, "send request")
 	}
 	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
 	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("openai error: %s", respBody)
+		return "", errors.Wrap(errors.Newf("openai error: %s", respBody), "API request failed")
 	}
 
 	var result OpenAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", errors.Wrap(err, "decode response")
 	}
 
 	if len(result.Choices) == 0 {
@@ -103,13 +104,13 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errors.Wrap(err, "marshal request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		a.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, errors.Wrap(err, "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -117,7 +118,7 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, errors.Wrap(err, "send request")
 	}
 	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
 	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
@@ -128,7 +129,7 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 
 	var result OpenAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, errors.Wrap(err, "decode response")
 	}
 
 	if len(result.Choices) == 0 {

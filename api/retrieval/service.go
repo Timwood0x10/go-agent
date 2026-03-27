@@ -3,8 +3,8 @@ package retrieval
 
 import (
 	"context"
-	"fmt"
 
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	"goagent/internal/storage/postgres/repositories"
@@ -85,7 +85,7 @@ func (s *Service) Search(ctx context.Context, tenantID, query string) ([]*Result
 	if s.simpleRetrieval != nil {
 		results, err := s.simpleRetrieval.Search(ctx, tenantID, query)
 		if err != nil {
-			return nil, fmt.Errorf("simple retrieval search: %w", err)
+			return nil, errors.Wrap(err, "simple retrieval search")
 		}
 
 		// Convert internal results to API results
@@ -131,7 +131,7 @@ func (s *Service) SearchWithConfig(ctx context.Context, tenantID, query string, 
 		// to update the existing service's config or use a more sophisticated approach
 		simpleResults, err := s.simpleRetrieval.Search(ctx, tenantID, query)
 		if err != nil {
-			return nil, fmt.Errorf("simple retrieval search with config: %w", err)
+			return nil, errors.Wrap(err, "simple retrieval search with config")
 		}
 
 		// Convert internal results to API results

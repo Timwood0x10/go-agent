@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"goagent/internal/errors"
 	"goagent/internal/llm"
 	"goagent/internal/tools/resources/base"
 	"goagent/internal/tools/resources/core"
@@ -352,7 +353,7 @@ func (t *TaskPlanner) parsePlan(response string) (*TaskPlan, error) {
 
 	var plan TaskPlan
 	if err := json.Unmarshal([]byte(jsonStr), &plan); err != nil {
-		return nil, fmt.Errorf("failed to parse plan JSON: %w", err)
+		return nil, errors.Wrap(err, "failed to parse plan JSON")
 	}
 
 	return &plan, nil
@@ -369,7 +370,7 @@ func (t *TaskPlanner) parseSubtasks(response string) ([]Subtask, error) {
 		Subtasks []Subtask `json:"subtasks"`
 	}
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse subtasks JSON: %w", err)
+		return nil, errors.Wrap(err, "failed to parse subtasks JSON")
 	}
 
 	return result.Subtasks, nil
@@ -384,7 +385,7 @@ func (t *TaskPlanner) parseEstimation(response string) (*TimeEstimate, error) {
 
 	var estimate TimeEstimate
 	if err := json.Unmarshal([]byte(jsonStr), &estimate); err != nil {
-		return nil, fmt.Errorf("failed to parse estimation JSON: %w", err)
+		return nil, errors.Wrap(err, "failed to parse estimation JSON")
 	}
 
 	return &estimate, nil

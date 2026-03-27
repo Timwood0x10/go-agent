@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"goagent/internal/errors"
 	storage_models "goagent/internal/storage/postgres/models"
 )
 
@@ -66,7 +67,7 @@ func (a *SecretAdapter) parseJSON(data []byte) ([]byte, error) {
 	// Validate JSON format
 	var importData ImportData
 	if err := json.Unmarshal(data, &importData); err != nil {
-		return nil, fmt.Errorf("invalid JSON format: %w", err)
+		return nil, errors.Wrap(err, "invalid JSON format")
 	}
 
 	// Return as-is (already JSON)
@@ -125,7 +126,7 @@ func (a *SecretAdapter) parseCSV(data []byte) ([]byte, error) {
 	reader := csv.NewReader(strings.NewReader(string(data)))
 	records, err := reader.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("parse CSV: %w", err)
+		return nil, errors.Wrap(err, "parse CSV")
 	}
 
 	if len(records) == 0 {
@@ -207,7 +208,7 @@ func (a *SecretAdapter) ConvertTo(data []byte, format SecretFormat) ([]byte, err
 func (a *SecretAdapter) convertToYAML(data []byte) ([]byte, error) {
 	var importData ImportData
 	if err := json.Unmarshal(data, &importData); err != nil {
-		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+		return nil, errors.Wrap(err, "unmarshal JSON")
 	}
 
 	var yamlBuilder strings.Builder
@@ -233,7 +234,7 @@ func (a *SecretAdapter) convertToYAML(data []byte) ([]byte, error) {
 func (a *SecretAdapter) convertToCSV(data []byte) ([]byte, error) {
 	var importData ImportData
 	if err := json.Unmarshal(data, &importData); err != nil {
-		return nil, fmt.Errorf("unmarshal JSON: %w", err)
+		return nil, errors.Wrap(err, "unmarshal JSON")
 	}
 
 	var csvBuilder strings.Builder
@@ -242,7 +243,7 @@ func (a *SecretAdapter) convertToCSV(data []byte) ([]byte, error) {
 	// Write header
 	headers := []string{"key", "value", "expires_at"}
 	if err := csvWriter.Write(headers); err != nil {
-		return nil, fmt.Errorf("write CSV header: %w", err)
+		return nil, errors.Wrap(err, "write CSV header")
 	}
 
 	// Write data rows
@@ -252,13 +253,13 @@ func (a *SecretAdapter) convertToCSV(data []byte) ([]byte, error) {
 			record = append(record, secret.ExpiresAt)
 		}
 		if err := csvWriter.Write(record); err != nil {
-			return nil, fmt.Errorf("write CSV record: %w", err)
+			return nil, errors.Wrap(err, "write CSV record")
 		}
 	}
 
 	csvWriter.Flush()
 	if err := csvWriter.Error(); err != nil {
-		return nil, fmt.Errorf("flush CSV writer: %w", err)
+		return nil, errors.Wrap(err, "flush CSV writer")
 	}
 
 	return []byte(csvBuilder.String()), nil
@@ -268,7 +269,7 @@ func (a *SecretAdapter) convertToCSV(data []byte) ([]byte, error) {
 func (a *SecretAdapter) ParseImportData(data []byte) ([]SecretImportItem, error) {
 	var importData ImportData
 	if err := json.Unmarshal(data, &importData); err != nil {
-		return nil, fmt.Errorf("parse import data: %w", err)
+		return nil, errors.Wrap(err, "parse import data")
 	}
 
 	return importData.Secrets, nil

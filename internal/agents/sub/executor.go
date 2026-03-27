@@ -8,6 +8,7 @@ import (
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/llm/output"
 )
 
@@ -166,7 +167,7 @@ func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, pr
 				}
 				// Strict mode: return error
 				if e.strictMode {
-					return nil, fmt.Errorf("validation failed: %w", err)
+					return nil, errors.Wrap(err, "validation failed")
 				}
 				// Non-strict mode: log and continue with whatever we got
 				slog.Debug("Continuing with unvalidated result", "strict_mode", false)
@@ -179,7 +180,7 @@ func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, pr
 		return items, nil
 	}
 
-	return nil, fmt.Errorf("all retries failed: %w", lastErr)
+	return nil, errors.Wrap(lastErr, "all retries failed")
 }
 
 func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Task, profile *models.UserProfile) ([]*models.RecommendItem, error) {
@@ -207,14 +208,14 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 
 	prompt, err := e.template.Render(e.promptTpl, promptData)
 	if err != nil {
-		return nil, fmt.Errorf("render prompt: %w", err)
+		return nil, errors.Wrap(err, "render prompt")
 	}
 	slog.Debug("Generated prompt", "preview", prompt[:min(200, len(prompt))])
 
 	// Call LLM
 	response, err := e.llmAdapter.Generate(ctx, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("LLM call failed: %w", err)
+		return nil, errors.Wrap(err, "LLM call failed")
 	}
 	slog.Debug("LLM response", "preview", response[:min(500, len(response))])
 
@@ -222,11 +223,11 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 	parser := output.NewParser()
 	result, err := parser.ParseRecommendResult(response)
 	if err != nil {
-		return nil, fmt.Errorf("parse result: %w", err)
+		return nil, errors.Wrap(err, "parse result")
 	}
 
 	if result == nil || result.Items == nil {
-		return nil, fmt.Errorf("empty result from LLM")
+		return nil, errors.New("empty result from LLM")
 	}
 
 	slog.Info("Parsed result items", "count", len(result.Items))

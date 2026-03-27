@@ -3,12 +3,12 @@ package retrieval
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	"goagent/api/core"
+	"goagent/internal/errors"
 )
 
 // Service provides retrieval operations for knowledge base.
@@ -104,7 +104,7 @@ func (s *Service) SearchWithConfig(ctx context.Context, request *core.RetrievalR
 
 	results, err := s.repo.SearchKnowledge(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("search knowledge: %w", err)
+		return nil, errors.Wrap(err, "search knowledge")
 	}
 
 	return results, nil
@@ -138,7 +138,7 @@ func (s *Service) AddKnowledge(ctx context.Context, item *core.KnowledgeItem) (*
 	item.UpdatedAt = now
 
 	if err := s.repo.CreateKnowledge(ctx, item); err != nil {
-		return nil, fmt.Errorf("create knowledge: %w", err)
+		return nil, errors.Wrap(err, "create knowledge")
 	}
 
 	return item, nil
@@ -161,7 +161,7 @@ func (s *Service) GetKnowledge(ctx context.Context, tenantID, itemID string) (*c
 
 	item, err := s.repo.GetKnowledge(ctx, itemID)
 	if err != nil {
-		return nil, fmt.Errorf("get knowledge: %w", err)
+		return nil, errors.Wrap(err, "get knowledge")
 	}
 
 	if item == nil {
@@ -198,7 +198,7 @@ func (s *Service) UpdateKnowledge(ctx context.Context, tenantID string, item *co
 	// Verify item exists and belongs to tenant
 	existing, err := s.repo.GetKnowledge(ctx, item.ID)
 	if err != nil {
-		return nil, fmt.Errorf("get knowledge: %w", err)
+		return nil, errors.Wrap(err, "get knowledge")
 	}
 
 	if existing == nil {
@@ -213,7 +213,7 @@ func (s *Service) UpdateKnowledge(ctx context.Context, tenantID string, item *co
 	item.UpdatedAt = time.Now().Unix()
 
 	if err := s.repo.UpdateKnowledge(ctx, item); err != nil {
-		return nil, fmt.Errorf("update knowledge: %w", err)
+		return nil, errors.Wrap(err, "update knowledge")
 	}
 
 	return item, nil
@@ -237,7 +237,7 @@ func (s *Service) DeleteKnowledge(ctx context.Context, tenantID, itemID string) 
 	// Verify item exists and belongs to tenant
 	existing, err := s.repo.GetKnowledge(ctx, itemID)
 	if err != nil {
-		return fmt.Errorf("get knowledge: %w", err)
+		return errors.Wrap(err, "get knowledge")
 	}
 
 	if existing == nil {
@@ -249,7 +249,7 @@ func (s *Service) DeleteKnowledge(ctx context.Context, tenantID, itemID string) 
 	}
 
 	if err := s.repo.DeleteKnowledge(ctx, itemID); err != nil {
-		return fmt.Errorf("delete knowledge: %w", err)
+		return errors.Wrap(err, "delete knowledge")
 	}
 
 	return nil
@@ -272,7 +272,7 @@ func (s *Service) ListKnowledge(ctx context.Context, tenantID string, filter *co
 
 	items, err := s.repo.ListKnowledge(ctx, tenantID, filter)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list knowledge: %w", err)
+		return nil, nil, errors.Wrap(err, "list knowledge")
 	}
 
 	// Calculate pagination info

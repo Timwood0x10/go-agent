@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	gerr "goagent/internal/errors"
 	"goagent/internal/core/models"
 )
 
@@ -46,7 +47,7 @@ func NewParserWithValidator(validator *InputValidator) *Parser {
 func (p *Parser) ParseRecommendResult(output string) (*models.RecommendResult, error) {
 	// Validate input length before processing
 	if err := p.inputValidator.ValidateInput(output); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		return nil, gerr.Wrap(err, "input validation failed")
 	}
 
 	jsonStr := p.extractJSON(output)
@@ -56,7 +57,7 @@ func (p *Parser) ParseRecommendResult(output string) (*models.RecommendResult, e
 
 	// Validate JSON content length
 	if err := p.inputValidator.ValidateJSONLength(jsonStr); err != nil {
-		return nil, fmt.Errorf("JSON validation failed: %w", err)
+		return nil, gerr.Wrap(err, "JSON validation failed")
 	}
 
 	// Try to detect if it's an array or object
@@ -107,7 +108,7 @@ func (p *Parser) parseArrayFormat(jsonStr string) (*models.RecommendResult, erro
 				}
 			}
 		}
-		return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+		return nil, gerr.WrapError(ErrInvalidJSON, err)
 	}
 
 	return &models.RecommendResult{
@@ -209,16 +210,16 @@ func (p *Parser) ParseGeneric(output string, target interface{}) error {
 
 	if err := json.Unmarshal([]byte(jsonStr), target); err != nil {
 		if !p.fixJSON {
-			return fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+			return gerr.WrapError(ErrInvalidJSON, err)
 		}
 
 		fixed, fixErr := p.fixJSONString(jsonStr)
 		if fixErr != nil {
-			return fmt.Errorf("%w: %w (tried fix: %v)", ErrInvalidJSON, err, fixErr)
+			return fmt.Errorf("%w: tried fix: %v", ErrInvalidJSON, fixErr)
 		}
 
 		if err := json.Unmarshal([]byte(fixed), target); err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+			return gerr.WrapError(ErrInvalidJSON, err)
 		}
 	}
 
@@ -229,7 +230,7 @@ func (p *Parser) ParseGeneric(output string, target interface{}) error {
 func (p *Parser) ParseJSON(output string) (map[string]interface{}, error) {
 	// Validate input length before processing
 	if err := p.inputValidator.ValidateInput(output); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		return nil, gerr.Wrap(err, "input validation failed")
 	}
 
 	jsonStr := p.extractJSON(output)
@@ -239,22 +240,22 @@ func (p *Parser) ParseJSON(output string) (map[string]interface{}, error) {
 
 	// Validate JSON content length
 	if err := p.inputValidator.ValidateJSONLength(jsonStr); err != nil {
-		return nil, fmt.Errorf("JSON validation failed: %w", err)
+		return nil, gerr.Wrap(err, "JSON validation failed")
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
 		if !p.fixJSON {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+			return nil, gerr.WrapError(ErrInvalidJSON, err)
 		}
 
 		fixed, fixErr := p.fixJSONString(jsonStr)
 		if fixErr != nil {
-			return nil, fmt.Errorf("%w: %w (tried fix: %v)", ErrInvalidJSON, err, fixErr)
+			return nil, fmt.Errorf("%w: tried fix: %v", ErrInvalidJSON, fixErr)
 		}
 
 		if err := json.Unmarshal([]byte(fixed), &result); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+			return nil, gerr.WrapError(ErrInvalidJSON, err)
 		}
 	}
 
@@ -265,7 +266,7 @@ func (p *Parser) ParseJSON(output string) (map[string]interface{}, error) {
 func (p *Parser) ParseArray(output string) ([]interface{}, error) {
 	// Validate input length before processing
 	if err := p.inputValidator.ValidateInput(output); err != nil {
-		return nil, fmt.Errorf("input validation failed: %w", err)
+		return nil, gerr.Wrap(err, "input validation failed")
 	}
 
 	jsonStr := p.extractJSON(output)
@@ -275,7 +276,7 @@ func (p *Parser) ParseArray(output string) ([]interface{}, error) {
 
 	// Validate JSON content length
 	if err := p.inputValidator.ValidateJSONLength(jsonStr); err != nil {
-		return nil, fmt.Errorf("JSON validation failed: %w", err)
+		return nil, gerr.Wrap(err, "JSON validation failed")
 	}
 
 	// Check if it's an array
@@ -286,12 +287,12 @@ func (p *Parser) ParseArray(output string) ([]interface{}, error) {
 
 	var result []interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
+		return nil, gerr.WrapError(ErrInvalidJSON, err)
 	}
 
 	// Validate array length
 	if len(result) > p.inputValidator.GetMaxArrayLength() {
-		return nil, fmt.Errorf("%w: %d elements (max %d)", ErrArrayTooLarge, len(result), p.inputValidator.GetMaxArrayLength())
+		return nil, gerr.Wrapf(ErrArrayTooLarge, "%d elements (max %d)", len(result), p.inputValidator.GetMaxArrayLength())
 	}
 
 	return result, nil

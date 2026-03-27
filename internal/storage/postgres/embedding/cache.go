@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"goagent/internal/errors"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -107,7 +108,7 @@ func (c *EmbeddingCache) Set(ctx context.Context, key *CacheKey, embedding []flo
 
 	data, err := json.Marshal(embedding)
 	if err != nil {
-		return fmt.Errorf("marshal embedding: %w", err)
+		return errors.Wrap(err, "marshal embedding")
 	}
 
 	keyStr := key.String()

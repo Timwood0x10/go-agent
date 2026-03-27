@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -540,7 +541,7 @@ func distillTask(ctx context.Context, memorySvc core.MemoryService, userInput st
 		return nil
 	}
 
-	taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	taskID := "task-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	log.Printf("\nDistilling task: %s", taskID)
 
 	task, err := memorySvc.DistillTask(ctx, taskID)

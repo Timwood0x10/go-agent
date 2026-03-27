@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"goagent/internal/errors"
 	"goagent/internal/memory"
 )
 
@@ -36,7 +37,7 @@ func (s *Service) CreateSession(ctx context.Context, userID string) (string, err
 
 	sessionID, err := s.memoryMgr.CreateSession(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("create session: %w", err)
+		return "", errors.Wrap(err, "create session")
 	}
 
 	return sessionID, nil
@@ -61,7 +62,7 @@ func (s *Service) AddMessage(ctx context.Context, sessionID, role, content strin
 	}
 
 	if err := s.memoryMgr.AddMessage(ctx, sessionID, role, content); err != nil {
-		return fmt.Errorf("add message: %w", err)
+		return errors.Wrap(err, "add message")
 	}
 
 	return nil
@@ -79,7 +80,7 @@ func (s *Service) GetMessages(ctx context.Context, sessionID string) ([]*Message
 
 	messages, err := s.memoryMgr.GetMessages(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("get messages: %w", err)
+		return nil, errors.Wrap(err, "get messages")
 	}
 
 	// Convert internal messages to API messages
@@ -111,7 +112,7 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 
 	// Delete session and all associated messages
 	if err := s.memoryMgr.DeleteSession(ctx, sessionID); err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return errors.Wrap(err, "delete session")
 	}
 
 	slog.Info("Session deleted successfully", "session_id", sessionID)
@@ -130,11 +131,11 @@ func (s *Service) DistillTask(ctx context.Context, taskID string) error {
 
 	task, err := s.memoryMgr.DistillTask(ctx, taskID)
 	if err != nil {
-		return fmt.Errorf("distill task: %w", err)
+		return errors.Wrap(err, "distill task")
 	}
 
 	if err := s.memoryMgr.StoreDistilledTask(ctx, taskID, task); err != nil {
-		return fmt.Errorf("store distilled task: %w", err)
+		return errors.Wrap(err, "store distilled task")
 	}
 
 	return nil
@@ -156,7 +157,7 @@ func (s *Service) SearchSimilarTasks(ctx context.Context, query string, limit in
 
 	tasks, err := s.memoryMgr.SearchSimilarTasks(ctx, query, limit)
 	if err != nil {
-		return nil, fmt.Errorf("search similar tasks: %w", err)
+		return nil, errors.Wrap(err, "search similar tasks")
 	}
 
 	// Convert internal tasks to API tasks

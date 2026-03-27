@@ -3,7 +3,8 @@ package postgres
 
 import (
 	"context"
-	"fmt"
+
+	"goagent/internal/errors"
 )
 
 // MigrateStorage runs the storage system database migrations.
@@ -357,7 +358,7 @@ func MigrateStorage(ctx context.Context, pool *Pool) error {
 	// Execute migrations
 	for _, migration := range migrations {
 		if _, err := pool.db.ExecContext(ctx, migration); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
+			return errors.Wrap(err, "migration failed")
 		}
 	}
 

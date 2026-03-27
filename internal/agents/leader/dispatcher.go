@@ -8,6 +8,7 @@ import (
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 	"goagent/internal/protocol/ahp"
 
 	"golang.org/x/sync/errgroup"
@@ -119,7 +120,7 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 
 	// Wait for all goroutines to complete
 	if err := g.Wait(); err != nil {
-		return results, fmt.Errorf("task dispatch failed: %w", err)
+		return results, errors.Wrap(err, "task dispatch failed")
 	}
 
 	return results, nil

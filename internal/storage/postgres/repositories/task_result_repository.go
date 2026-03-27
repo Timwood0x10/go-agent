@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"goagent/internal/core/errors"
+	coreerrors "goagent/internal/core/errors"
+	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
 	storage_models "goagent/internal/storage/postgres/models"
 )
@@ -36,20 +37,20 @@ func NewTaskResultRepository(db postgres.DBTX) *TaskResultRepository {
 func (r *TaskResultRepository) Create(ctx context.Context, result *storage_models.TaskResult) error {
 	inputJSON, err := json.Marshal(result.Input)
 	if err != nil {
-		return fmt.Errorf("marshal input: %w", err)
+		return errors.Wrap(err, "marshal input")
 	}
 
 	var outputJSON []byte
 	if result.Output != nil {
 		outputJSON, err = json.Marshal(result.Output)
 		if err != nil {
-			return fmt.Errorf("marshal output: %w", err)
+			return errors.Wrap(err, "marshal output")
 		}
 	}
 
 	metadataJSON, err := json.Marshal(result.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -131,7 +132,7 @@ func (r *TaskResultRepository) Create(ctx context.Context, result *storage_model
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 
 	if err != nil {
-		return fmt.Errorf("create task result: %w", err)
+		return errors.Wrap(err, "create task result")
 	}
 
 	result.ID = id
@@ -145,7 +146,7 @@ func (r *TaskResultRepository) Create(ctx context.Context, result *storage_model
 // Returns task result or error if not found or invalid argument.
 func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage_models.TaskResult, error) {
 	if id == "" {
-		return nil, errors.ErrInvalidArgument
+		return nil, coreerrors.ErrInvalidArgument
 	}
 
 	query := `
@@ -167,34 +168,34 @@ func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, errors.ErrRecordNotFound
+		return nil, coreerrors.ErrRecordNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get task result by id: %w", err)
+		return nil, errors.Wrap(err, "get task result by id")
 	}
 
 	// Parse embedding string to float64 array
 	result.Embedding, err = parseVectorString(embeddingStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse embedding: %w", err)
+		return nil, errors.Wrap(err, "parse embedding")
 	}
 
 	// Parse input JSON
 	if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
-		return nil, fmt.Errorf("unmarshal input: %w", err)
+		return nil, errors.Wrap(err, "unmarshal input")
 	}
 
 	// Parse output JSON
 	if outputJSON != nil {
 		if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
-			return nil, fmt.Errorf("unmarshal output: %w", err)
+			return nil, errors.Wrap(err, "unmarshal output")
 		}
 	}
 
 	// Parse metadata JSON string to map
 	if metadataStr != "" {
 		if err := json.Unmarshal([]byte(metadataStr), &result.Metadata); err != nil {
-			return nil, fmt.Errorf("parse metadata: %w", err)
+			return nil, errors.Wrap(err, "parse metadata")
 		}
 	}
 
@@ -209,21 +210,21 @@ func (r *TaskResultRepository) GetByID(ctx context.Context, id string) (*storage
 func (r *TaskResultRepository) Update(ctx context.Context, result *storage_models.TaskResult) error {
 	inputJSON, err := json.Marshal(result.Input)
 	if err != nil {
-		return fmt.Errorf("marshal input: %w", err)
+		return errors.Wrap(err, "marshal input")
 	}
 
 	var outputJSON []byte
 	if result.Output != nil {
 		outputJSON, err = json.Marshal(result.Output)
 		if err != nil {
-			return fmt.Errorf("marshal output: %w", err)
+			return errors.Wrap(err, "marshal output")
 		}
 	}
 
 	// Convert metadata to JSON for database storage
 	metadataJSON, err := json.Marshal(result.Metadata)
 	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
+		return errors.Wrap(err, "marshal metadata")
 	}
 
 	// Convert embedding to pgvector format
@@ -243,16 +244,16 @@ func (r *TaskResultRepository) Update(ctx context.Context, result *storage_model
 		result.Status, result.Error, result.LatencyMs, metadataJSON,
 	)
 	if err != nil {
-		return fmt.Errorf("update task result: %w", err)
+		return errors.Wrap(err, "update task result")
 	}
 
 	rows, err := resultSQL.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -268,16 +269,16 @@ func (r *TaskResultRepository) Delete(ctx context.Context, id string) error {
 
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return fmt.Errorf("delete task result: %w", err)
+		return errors.Wrap(err, "delete task result")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -313,7 +314,7 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 
 	rows, err := r.db.QueryContext(ctx, query, embeddingStr, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("vector search: %w", err)
+		return nil, errors.Wrap(err, "vector search")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -397,7 +398,7 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 
 	rows, err := r.db.QueryContext(ctx, query, taskType, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list task results by type: %w", err)
+		return nil, errors.Wrap(err, "list task results by type")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -473,7 +474,7 @@ func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, ten
 
 	rows, err := r.db.QueryContext(ctx, query, sessionID, tenantID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("list task results by session: %w", err)
+		return nil, errors.Wrap(err, "list task results by session")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -550,16 +551,16 @@ func (r *TaskResultRepository) UpdateEmbedding(ctx context.Context, id string, e
 
 	result, err := r.db.ExecContext(ctx, query, id, embeddingStr, model, version)
 	if err != nil {
-		return fmt.Errorf("update embedding: %w", err)
+		return errors.Wrap(err, "update embedding")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -582,16 +583,16 @@ func (r *TaskResultRepository) UpdateStatus(ctx context.Context, id, status, err
 
 	result, err := r.db.ExecContext(ctx, query, id, status, errorMsg, latencyMs)
 	if err != nil {
-		return fmt.Errorf("update status: %w", err)
+		return errors.Wrap(err, "update status")
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
+		return errors.Wrap(err, "get rows affected")
 	}
 
 	if rows == 0 {
-		return errors.ErrRecordNotFound
+		return coreerrors.ErrRecordNotFound
 	}
 
 	return nil
@@ -615,7 +616,7 @@ func (r *TaskResultRepository) GetStatistics(ctx context.Context, tenantID strin
 
 	rows, err := r.db.QueryContext(ctx, query, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("get task result statistics: %w", err)
+		return nil, errors.Wrap(err, "get task result statistics")
 	}
 	defer func() { _ = rows.Close() }()
 

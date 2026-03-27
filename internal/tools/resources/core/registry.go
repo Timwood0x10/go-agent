@@ -3,8 +3,9 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
+
+	gerr "goagent/internal/errors"
 )
 
 // Registry manages tool registration and lookup.
@@ -31,7 +32,7 @@ func (r *Registry) Register(tool Tool) error {
 
 	name := tool.Name()
 	if _, exists := r.tools[name]; exists {
-		return fmt.Errorf("%w: %s", ErrToolAlreadyRegistered, name)
+		return gerr.Wrap(ErrToolAlreadyRegistered, name)
 	}
 
 	r.tools[name] = tool
@@ -44,7 +45,7 @@ func (r *Registry) Unregister(name string) error {
 	defer r.mu.Unlock()
 
 	if _, exists := r.tools[name]; !exists {
-		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
+		return gerr.Wrap(ErrToolNotFound, name)
 	}
 
 	delete(r.tools, name)
@@ -85,7 +86,7 @@ func (r *Registry) Count() int {
 func (r *Registry) Execute(ctx context.Context, name string, params map[string]interface{}) (Result, error) {
 	tool, exists := r.Get(name)
 	if !exists {
-		return Result{}, fmt.Errorf("%w: %s", ErrToolNotFound, name)
+		return Result{}, gerr.Wrap(ErrToolNotFound, name)
 	}
 
 	return tool.Execute(ctx, params)

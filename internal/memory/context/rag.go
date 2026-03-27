@@ -264,8 +264,9 @@ func cosineSimilarity(a, b []float64) float64 {
 		return 0
 	}
 
-	// Correct: √(∑a²) * √(∑b²) not (∑a²)(∑b²)
-	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
+	// Optimization: Use single sqrt instead of two for better performance
+	// math.Sqrt(normA) * math.Sqrt(normB) == math.Sqrt(normA * normB)
+	return dotProduct / math.Sqrt(normA*normB)
 }
 
 // contains checks if text contains substring (simple implementation).
