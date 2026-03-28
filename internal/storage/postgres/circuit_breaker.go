@@ -26,7 +26,6 @@ type CircuitBreaker struct {
 	successThreshold int
 	lastFailureTime  time.Time
 	openTimeout      time.Duration
-	halfOpenMaxCalls int
 	halfOpenSuccess  int
 }
 
@@ -39,9 +38,8 @@ func NewCircuitBreaker(failureThreshold int, openTimeout time.Duration) *Circuit
 	return &CircuitBreaker{
 		state:            CircuitBreakerStateClosed,
 		failureThreshold: failureThreshold,
-		successThreshold: 3, // Number of successes needed to close circuit in half-open state
+		successThreshold: 3,
 		openTimeout:      openTimeout,
-		halfOpenMaxCalls: 5,
 	}
 }
 
@@ -65,7 +63,8 @@ func (cb *CircuitBreaker) AllowRequest() error {
 		return errors.ErrCircuitBreakerOpen
 
 	case CircuitBreakerStateHalfOpen:
-		if cb.halfOpenSuccess >= cb.halfOpenMaxCalls {
+		// In half-open state, check if we've had enough successful calls to close the circuit
+		if cb.halfOpenSuccess >= cb.successThreshold {
 			// Circuit recovered, close it
 			cb.state = CircuitBreakerStateClosed
 			cb.failureCount = 0

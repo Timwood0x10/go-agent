@@ -150,30 +150,67 @@ func (t *CodeRunner) Execute(ctx context.Context, params map[string]interface{})
 }
 
 // validateCode checks code for potential security issues.
+// Note: This is a basic validation layer. For production use, consider:
+// 1. Using a proper sandbox (Docker, gVisor, etc.)
+// 2. AST-based code analysis
+// 3. Resource limits (CPU, memory, time)
 func (t *CodeRunner) validateCode(code string) error {
 	// Convert to lowercase for checking
 	lowerCode := strings.ToLower(code)
 
-	// Check for dangerous patterns
+	// Check for dangerous patterns - direct imports and calls
 	dangerousPatterns := []string{
 		"import os",
 		"import subprocess",
 		"import shutil",
+		"import sys",
+		"import socket",
+		"import pickle",
+		"import marshal",
+		"import ctypes",
+		"import multiprocessing",
 		"eval(",
 		"exec(",
 		"__import__",
+		"__builtins__",
 		"open(",
 		"file(",
-		"write(",
+		".write(",
 		"delete",
-		"remove",
+		".remove",
 		"system(",
 		"popen",
+		"getattr(",
+		"setattr(",
+		"delattr(",
+		"globals(",
+		"locals(",
+		"vars(",
+		"compile(",
+		"breakpoint(",
 	}
 
 	for _, pattern := range dangerousPatterns {
 		if strings.Contains(lowerCode, pattern) {
 			return fmt.Errorf("potentially dangerous pattern detected: %s", pattern)
+		}
+	}
+
+	// Check for obfuscation attempts
+	obfuscationPatterns := []string{
+		"__imp",
+		"chr(",
+		"ord(",
+		"\\x",
+		"getattr",
+		"importlib",
+		"import_module",
+		"from import",
+	}
+
+	for _, pattern := range obfuscationPatterns {
+		if strings.Contains(lowerCode, pattern) {
+			return fmt.Errorf("potential code obfuscation detected: %s", pattern)
 		}
 	}
 

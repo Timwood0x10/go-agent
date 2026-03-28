@@ -19,8 +19,6 @@ type Pool struct {
 	cfg          *Config
 	db           *sql.DB
 	mu           sync.RWMutex
-	openCount    int
-	idleCount    int
 	waitCount    int
 	waitDuration time.Duration
 }
@@ -46,10 +44,8 @@ func NewPool(cfg *Config) (*Pool, error) {
 	}
 
 	return &Pool{
-		cfg:       cfg,
-		db:        db,
-		openCount: 0,
-		idleCount: 0,
+		cfg: cfg,
+		db:  db,
 	}, nil
 }
 
@@ -63,8 +59,6 @@ func (p *Pool) Get(ctx context.Context) (*sql.Conn, error) {
 	}
 
 	p.mu.Lock()
-	p.openCount++
-	p.idleCount--
 	elapsed := time.Since(start)
 	p.waitDuration += elapsed
 	if elapsed > time.Second {
@@ -82,11 +76,6 @@ func (p *Pool) Release(conn *sql.Conn) {
 	}
 
 	conn.Close()
-	// nolint: errcheck // Connection is closed by defer
-	p.mu.Lock()
-	p.openCount--
-	p.idleCount++
-	p.mu.Unlock()
 }
 
 // WithConnection executes a function with a connection from the pool.

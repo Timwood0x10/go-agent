@@ -3,6 +3,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -239,11 +241,8 @@ func (b *WriteBuffer) Stop(ctx context.Context) error {
 
 // computeContentHash computes content hash for deduplication (per design standard).
 // This implements real-time hash deduplication as specified in storage-implementation-plan.md.
+// Uses SHA256 for strong collision resistance.
 func (b *WriteBuffer) computeContentHash(content string) string {
-	// Simple hash implementation - in production, consider using more robust hashing
-	h := 0
-	for i := 0; i < len(content); i++ {
-		h = 31*h + int(content[i])
-	}
-	return fmt.Sprintf("%x", h)
+	hash := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(hash[:])
 }

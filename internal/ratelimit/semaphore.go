@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 )
 
@@ -36,6 +37,7 @@ func (l *SemaphoreLimiter) Acquire(ctx context.Context, key string) error {
 }
 
 // Release releases a semaphore slot.
+// Logs a warning if no slot is available to release (indicates potential bug in caller).
 func (l *SemaphoreLimiter) Release(key string) {
 	select {
 	case <-l.sem:
@@ -45,6 +47,9 @@ func (l *SemaphoreLimiter) Release(key string) {
 		}
 		l.mu.Unlock()
 	default:
+		slog.Warn("SemaphoreLimiter.Release: no slot available to release",
+			"key", key,
+			"hint", "this indicates a bug: releasing more times than acquired")
 	}
 }
 

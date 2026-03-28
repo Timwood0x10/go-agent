@@ -122,13 +122,15 @@ func (m *HeartbeatMonitor) ListAgents() []string {
 
 // HeartbeatSender sends periodic heartbeats.
 type HeartbeatSender struct {
-	agentID  string
-	interval time.Duration
-	queue    *MessageQueue
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	stopped  bool
+	agentID   string
+	interval  time.Duration
+	queue     *MessageQueue
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	stopped   bool
+	stopOnce  sync.Once
+	startOnce sync.Once
 }
 
 // NewHeartbeatSender creates a new HeartbeatSender.
@@ -144,10 +146,13 @@ func NewHeartbeatSender(agentID string, interval time.Duration, queue *MessageQu
 }
 
 // Start starts sending heartbeats.
+// This method is idempotent - calling it multiple times has no additional effect.
 func (s *HeartbeatSender) Start(ctx context.Context) {
-	s.ctx, s.cancel = context.WithCancel(ctx)
-	s.wg.Add(1)
-	go s.run()
+	s.startOnce.Do(func() {
+		s.ctx, s.cancel = context.WithCancel(ctx)
+		s.wg.Add(1)
+		go s.run()
+	})
 }
 
 // run is the main heartbeat sending loop.
@@ -180,11 +185,14 @@ func (s *HeartbeatSender) sendHeartbeat() {
 }
 
 // Stop stops sending heartbeats.
+// This method is idempotent and safe to call even if Start() was never called.
+// Subsequent calls after the first will be no-ops.
 func (s *HeartbeatSender) Stop() {
-	if s.stopped {
-		return
-	}
-	s.stopped = true
-	s.cancel()
-	s.wg.Wait()
+	s.stopOnce.Do(func() {
+		s.stopped = true
+		if s.cancel != nil {
+			s.cancel()
+		}
+		s.wg.Wait()
+	})
 }

@@ -155,17 +155,22 @@ func (c *Cache) cleanup() {
 
 // CacheWithTTL creates a cache with custom TTL per item.
 type CacheWithTTL struct {
-	items   map[string]*CacheItem
-	mu      sync.RWMutex
-	maxSize int
+	items    map[string]*CacheItem
+	mu       sync.RWMutex
+	maxSize  int
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // NewCacheWithTTL creates a new CacheWithTTL.
 func NewCacheWithTTL(maxSize int) *CacheWithTTL {
-	return &CacheWithTTL{
+	c := &CacheWithTTL{
 		items:   make(map[string]*CacheItem),
 		maxSize: maxSize,
+		stopCh:  make(chan struct{}),
 	}
+	go c.cleanupLoop()
+	return c
 }
 
 // SetWithTTL stores a value with custom TTL.
@@ -245,6 +250,42 @@ func (c *CacheWithTTL) evictOldest() {
 	if oldestKey != "" {
 		delete(c.items, oldestKey)
 	}
+}
+
+// cleanupLoop periodically removes expired items.
+func (c *CacheWithTTL) cleanupLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.cleanup()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+// cleanup removes expired items.
+func (c *CacheWithTTL) cleanup() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	for key, item := range c.items {
+		if now.After(item.Expiration) {
+			delete(c.items, key)
+		}
+	}
+}
+
+// Stop stops the cleanup goroutine.
+// This method is idempotent and safe to call multiple times.
+func (c *CacheWithTTL) Stop() {
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 }
 
 // LRU Cache implementation.
@@ -336,7 +377,7 @@ func (c *LRUCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.size
+	return len(c.items)
 }
 
 func (c *LRUCache) addToFront(item *LRUItem) {

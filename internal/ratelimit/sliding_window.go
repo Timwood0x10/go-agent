@@ -68,6 +68,13 @@ func (l *SlidingWindowLimiter) Wait(ctx context.Context) error {
 			}
 		} else {
 			l.mu.Unlock()
+			// Window is empty but rate limit hit - wait a short time before retry
+			// This prevents busy-waiting when the window is empty
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(l.windowSize / 10):
+			}
 		}
 	}
 }

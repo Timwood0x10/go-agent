@@ -60,7 +60,12 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 	resultChan := make(chan *StepResult, len(workflow.Steps))
 	errChan := make(chan error, 1)
 
-	go e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan)
+	// Use done channel to ensure proper cleanup
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan)
+	}()
 
 	var stepResults []*StepResult
 	for i := 0; i < len(workflow.Steps); i++ {
@@ -78,6 +83,8 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 				execution.Status = WorkflowStatusFailed
 				execution.Error = result.Error
 				execution.FinishedAt = time.Now()
+				// Wait for runSteps to finish before returning
+				<-done
 				return &WorkflowResult{
 					ExecutionID: execution.ID,
 					WorkflowID:  workflow.ID,
@@ -90,6 +97,8 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		case err := <-errChan:
 			execution.Status = WorkflowStatusFailed
 			execution.FinishedAt = time.Now()
+			// Wait for runSteps to finish before returning
+			<-done
 			return &WorkflowResult{
 				ExecutionID: execution.ID,
 				WorkflowID:  workflow.ID,
@@ -100,9 +109,14 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		case <-ctx.Done():
 			execution.Status = WorkflowStatusCancelled
 			execution.FinishedAt = time.Now()
+			// Wait for runSteps to finish before returning
+			<-done
 			return nil, ctx.Err()
 		}
 	}
+
+	// Wait for runSteps to finish
+	<-done
 
 	execution.Status = WorkflowStatusCompleted
 	execution.FinishedAt = time.Now()
