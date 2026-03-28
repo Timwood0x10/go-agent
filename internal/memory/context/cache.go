@@ -8,11 +8,12 @@ import (
 
 // Cache provides in-memory caching capabilities.
 type Cache struct {
-	items   map[string]*CacheItem
-	mu      sync.RWMutex
-	maxSize int
-	ttl     time.Duration
-	stopCh  chan struct{}
+	items    map[string]*CacheItem
+	mu       sync.RWMutex
+	maxSize  int
+	ttl      time.Duration
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // CacheItem represents a cache entry.
@@ -131,8 +132,12 @@ func (c *Cache) cleanupLoop() {
 }
 
 // Stop stops the cleanup goroutine.
+// This method is idempotent and safe to call multiple times.
+// Subsequent calls after the first will be no-ops.
 func (c *Cache) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 }
 
 // cleanup removes expired items.

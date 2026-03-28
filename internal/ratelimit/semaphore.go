@@ -3,7 +3,6 @@ package ratelimit
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 // SemaphoreLimiter implements semaphore-based rate limiting.
@@ -125,38 +124,30 @@ func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimite
 }
 
 // Acquire acquires weighted slots.
+// Uses sync.Cond for efficient waiting without busy-looping.
+// Context cancellation is checked at each wake-up.
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	if l.available >= weight {
-		l.available -= weight
-		l.used += weight
-		l.weighted[key] += weight
-		l.mu.Unlock()
-		return nil
-	}
-
-	// Wait for available slots with proper signaling
-	// Release lock while waiting, re-check after wakeup
 	for l.available < weight {
-		l.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-			l.mu.Lock()
-			// Re-check condition after waking up
-			if l.available >= weight {
-				l.available -= weight
-				l.used += weight
-				l.weighted[key] += weight
-				l.mu.Unlock()
-				return nil
-			}
+		// Check context cancellation before waiting
+		if err := ctx.Err(); err != nil {
+			return err
 		}
+
+		// Wait() releases the lock and waits for signal, then reacquires lock on wake-up
+		l.cond.Wait()
 	}
 
-	l.mu.Unlock()
+	// Check context one more time after acquiring the lock
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	l.available -= weight
+	l.used += weight
+	l.weighted[key] += weight
 	return nil
 }
 

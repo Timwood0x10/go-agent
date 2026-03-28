@@ -16,12 +16,14 @@ var (
 
 // SessionMemory stores conversation context for a session.
 type SessionMemory struct {
-	sessions    map[string]*SessionData
-	mu          sync.RWMutex
-	maxSize     int
-	ttl         time.Duration
-	cleanupTick time.Duration
-	stopCleanup chan struct{}
+	sessions     map[string]*SessionData
+	mu           sync.RWMutex
+	maxSize      int
+	ttl          time.Duration
+	cleanupTick  time.Duration
+	stopCleanup  chan struct{}
+	stopOnce     sync.Once
+	cleanupStart sync.Once
 }
 
 // SessionData holds session information.
@@ -54,31 +56,35 @@ func NewSessionMemory(maxSize int, ttl time.Duration) *SessionMemory {
 
 // StartCleanup starts the background cleanup task.
 func (m *SessionMemory) StartCleanup() {
-	if m.cleanupTick <= 0 {
-		return
-	}
-
-	go func() {
-		ticker := time.NewTicker(m.cleanupTick)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				removed := m.Cleanup(context.Background())
-				if removed > 0 {
-					slog.Debug("Session memory cleanup completed", "removed_sessions", removed)
-				}
-			case <-m.stopCleanup:
-				return
-			}
+	m.cleanupStart.Do(func() {
+		if m.cleanupTick <= 0 {
+			return
 		}
-	}()
+
+		go func() {
+			ticker := time.NewTicker(m.cleanupTick)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					removed := m.Cleanup(context.Background())
+					if removed > 0 {
+						slog.Debug("Session memory cleanup completed", "removed_sessions", removed)
+					}
+				case <-m.stopCleanup:
+					return
+				}
+			}
+		}()
+	})
 }
 
 // StopCleanup stops the background cleanup task.
 func (m *SessionMemory) StopCleanup() {
-	close(m.stopCleanup)
+	m.stopOnce.Do(func() {
+		close(m.stopCleanup)
+	})
 }
 
 // Cleanup removes all expired sessions and returns the count of removed sessions.
@@ -206,12 +212,7 @@ func (m *SessionMemory) Size() int {
 // Close stops the background cleanup task and clears all sessions.
 func (m *SessionMemory) Close(ctx context.Context) error {
 	// Stop background cleanup
-	select {
-	case <-m.stopCleanup:
-		// Already stopped
-	default:
-		close(m.stopCleanup)
-	}
+	m.StopCleanup()
 
 	// Clear all sessions
 	return m.Clear(ctx)

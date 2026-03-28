@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"goagent/internal/agents/base"
 	coreerrors "goagent/internal/core/errors"
@@ -341,19 +342,23 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			slog.Warn("Failed to add assistant message to memory", "error", err)
 		}
 
-		// Async distillation
-		g, ctx := errgroup.WithContext(ctx)
+		// Async distillation with timeout context derived from request context.
+		// This ensures the async task is cancelled when the parent request is cancelled,
+		// while still having its own timeout boundary.
+		distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel() // Ensure context is cancelled when function returns
+		g, distillCtx := errgroup.WithContext(distillCtx)
 		g.Go(func() error {
-			distilled, err := a.memoryManager.DistillTask(ctx, taskID)
+			distilled, err := a.memoryManager.DistillTask(distillCtx, taskID)
 			if err != nil {
 				slog.Warn("Failed to distill task", "error", err)
 				return err
 			}
 
-			return a.memoryManager.StoreDistilledTask(ctx, taskID, distilled)
+			return a.memoryManager.StoreDistilledTask(distillCtx, taskID, distilled)
 		})
 
-		// Don't wait for async operations to complete
+		// Fire and forget with proper errgroup management
 		go func() {
 			if err := g.Wait(); err != nil {
 				slog.Error("Error in async distillation", "error", err)

@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -222,17 +223,30 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 		defer cancel()
 	}
 
-	var row *sql.Row
+	var (
+		row     *sql.Row
+		connErr error
+	)
 
-	p.WithConnection(ctx, func(conn *sql.Conn) error {
+	connErr = p.WithConnection(ctx, func(conn *sql.Conn) error {
 		row = conn.QueryRowContext(ctx, query, args...)
-		return nil // Don't return error here, let sql.Row handle it
+		return nil
 	})
 
-	// Check if connection was acquired successfully
-	if row == nil {
-		// Return a row that will produce an error on Scan
-		return nil
+	// If connection acquisition failed, return a row that produces a clear error on Scan.
+	// We use a cancelled context with a descriptive query to help identify the error source.
+	// The caller should check the error from Scan to detect connection failures.
+	if connErr != nil || row == nil {
+		if connErr != nil {
+			slog.Warn("Failed to acquire database connection for QueryRow", "error", connErr)
+		}
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		// Return a row that will fail on Scan with "context canceled" error.
+		// The log above provides the actual error reason for debugging.
+		// Note: sql.Row does not allow wrapping errors, so we use this pattern
+		// to propagate the failure through the interface while logging the root cause.
+		return p.db.QueryRowContext(cancelCtx, "SELECT 1 WHERE 1=0")
 	}
 
 	return row

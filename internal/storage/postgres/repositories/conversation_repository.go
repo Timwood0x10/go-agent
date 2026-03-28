@@ -171,6 +171,7 @@ func (r *ConversationRepository) GetBySession(ctx context.Context, sessionID, te
 			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
 		)
 		if err != nil {
+			slog.Error("Failed to scan conversation row", "error", err)
 			continue
 		}
 		conversations = append(conversations, conv)
@@ -263,6 +264,7 @@ func (r *ConversationRepository) GetByUser(ctx context.Context, userID, tenantID
 			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
 		)
 		if err != nil {
+			slog.Warn("Failed to scan conversation row", "error", err)
 			continue
 		}
 		conversations = append(conversations, conv)
@@ -305,6 +307,7 @@ func (r *ConversationRepository) GetByAgent(ctx context.Context, agentID, tenant
 			&conv.AgentID, &conv.Role, &conv.Content, &conv.ExpiresAt, &conv.CreatedAt,
 		)
 		if err != nil {
+			slog.Error("Failed to scan conversation row", "error", err)
 			continue
 		}
 		conversations = append(conversations, conv)

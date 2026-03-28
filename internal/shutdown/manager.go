@@ -201,10 +201,10 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 		}
 
 		// Then check for errors
-		var errors []error
+		var errs []error
 		for err := range errChan {
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, err)
 			}
 		}
 
@@ -212,12 +212,14 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 			return fmt.Errorf("%d callback(s) panicked during shutdown phase %s", panicCount, phase)
 		}
 
-		if len(errors) > 0 {
-			return fmt.Errorf("%d callback(s) failed during shutdown phase %s: %v", len(errors), phase, errors)
+		if len(errs) > 0 {
+			return fmt.Errorf("%d callback(s) failed during shutdown phase %s: %v", len(errs), phase, errs)
 		}
 
 		return nil
 	case <-phaseCtx.Done():
+		close(errChan)
+		close(panicChan)
 		if handler.onTimeout != nil {
 			handler.onTimeout()
 		}

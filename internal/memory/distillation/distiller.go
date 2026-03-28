@@ -295,9 +295,11 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 		// Convert to experiences for scoring
 		var exps []Experience
 		for _, mem := range memories {
+			problem, _ := mem.Metadata["problem"].(string)
+			solution, _ := mem.Metadata["solution"].(string)
 			exps = append(exps, Experience{
-				Problem:    mem.Metadata["problem"].(string),
-				Solution:   mem.Metadata["solution"].(string),
+				Problem:    problem,
+				Solution:   solution,
 				Confidence: mem.Importance,
 			})
 		}
@@ -347,9 +349,11 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 			"importance_score", memory.Importance)
 
 		// Detect conflicts with existing memories
+		problem, _ := memory.Metadata["problem"].(string)
+		solution, _ := memory.Metadata["solution"].(string)
 		exp := &Experience{
-			Problem:    memory.Metadata["problem"].(string),
-			Solution:   memory.Metadata["solution"].(string),
+			Problem:    problem,
+			Solution:   solution,
 			Confidence: memory.Importance,
 		}
 

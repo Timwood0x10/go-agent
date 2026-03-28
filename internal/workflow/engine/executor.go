@@ -57,11 +57,10 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 
 	e.outputStore.Clear()
 
-	stepChan := make(chan string, e.maxParallel)
 	resultChan := make(chan *StepResult, len(workflow.Steps))
 	errChan := make(chan error, 1)
 
-	go e.runSteps(ctx, execution, workflow, executionOrder, initialInput, stepChan, resultChan, errChan)
+	go e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan)
 
 	var stepResults []*StepResult
 	for i := 0; i < len(workflow.Steps); i++ {
@@ -130,7 +129,6 @@ func (e *Executor) runSteps(
 	workflow *Workflow,
 	executionOrder []string,
 	initialInput string,
-	stepChan chan string,
 	resultChan chan *StepResult,
 	errChan chan error,
 ) {
@@ -140,43 +138,42 @@ func (e *Executor) runSteps(
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	// Submit steps according to execution order
+	sem := make(chan struct{}, e.maxParallel)
+
 	for stepIndex < len(executionOrder) {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			close(resultChan)
+			return
+		default:
+		}
+
 		stepID := executionOrder[stepIndex]
 		step := e.findStep(workflow.Steps, stepID)
 
-		// Check if step can be executed based on dependencies
 		if !e.canExecute(step, completed, &mu) {
-			// Cannot execute yet, check if this step was already processed
 			mu.Lock()
 			alreadyProcessed := processed[stepID]
 			mu.Unlock()
 
 			if alreadyProcessed {
-				// Already processed but not completed, move to next step
 				stepIndex++
 				continue
 			}
 
-			// Wait for dependency to complete
-			// Check if we have any active goroutines
 			wg.Wait()
 			continue
 		}
 
-		// Wait for capacity
-		if len(stepChan) >= e.maxParallel {
-			<-stepChan
-		}
+		sem <- struct{}{}
 
-		// Start executing the step
-		stepChan <- stepID
 		stepIndex++
 
 		wg.Add(1)
 		go func(sid string) {
 			defer func() {
-				<-stepChan
+				<-sem
 				wg.Done()
 
 				if r := recover(); r != nil {
@@ -189,7 +186,10 @@ func (e *Executor) runSteps(
 						Status: StepStatusFailed,
 						Error:  fmt.Sprintf("panic: %v", r),
 					}
-					resultChan <- result
+					select {
+					case resultChan <- result:
+					case <-ctx.Done():
+					}
 				}
 			}()
 
@@ -202,14 +202,22 @@ func (e *Executor) runSteps(
 			}
 			mu.Unlock()
 
-			resultChan <- result
+			select {
+			case resultChan <- result:
+			case <-ctx.Done():
+			}
 		}(stepID)
 	}
 
-	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// Check if workflow is complete
+	select {
+	case <-ctx.Done():
+		close(resultChan)
+		return
+	default:
+	}
+
 	mu.Lock()
 	allCompleted := len(completed) == len(workflow.Steps)
 	mu.Unlock()
@@ -219,7 +227,6 @@ func (e *Executor) runSteps(
 		return
 	}
 
-	// Check for incomplete workflow
 	pending := false
 	for _, sid := range executionOrder {
 		mu.Lock()
@@ -236,11 +243,12 @@ func (e *Executor) runSteps(
 	}
 
 	if pending {
-		errChan <- ErrWorkflowIncomplete
-		close(resultChan)
-	} else {
-		close(resultChan)
+		select {
+		case errChan <- ErrWorkflowIncomplete:
+		case <-ctx.Done():
+		}
 	}
+	close(resultChan)
 }
 
 // canExecute checks if a step can be executed.

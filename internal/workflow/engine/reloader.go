@@ -156,6 +156,14 @@ func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
 	}
 }
 
+// Close closes the file watcher and releases resources.
+func (w *FileWatcher) Close() {
+	if w.watcher != nil {
+		_ = w.watcher.Close()
+		w.watcher = nil
+	}
+}
+
 // scanAndLoad scans and loads workflows from directory.
 func (w *FileWatcher) scanAndLoad(ctx context.Context, dir string) error {
 	entries, err := os.ReadDir(dir)
@@ -390,6 +398,7 @@ func (r *WorkflowReloader) StopWatching() {
 		r.cancel()
 	}
 	if r.watcher != nil {
+		r.watcher.Close()
 		r.watcher = nil
 	}
 }
