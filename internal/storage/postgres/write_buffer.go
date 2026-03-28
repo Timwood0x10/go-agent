@@ -139,16 +139,18 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 		return nil
 	}
 
-	// Start transaction
 	tx, err := b.db.Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "begin transaction")
 	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			slog.Error("Failed to rollback transaction", "error", err)
-		}
 
+	committed := false
+	defer func() {
+		if !committed {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				slog.Error("Failed to rollback transaction", "error", rbErr)
+			}
+		}
 	}()
 
 	// Batch insert into database with content hash deduplication (per design standard)
@@ -193,6 +195,7 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 	if err := tx.Commit(); err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}
+	committed = true
 
 	// Enqueue embedding tasks
 	for _, item := range batch {

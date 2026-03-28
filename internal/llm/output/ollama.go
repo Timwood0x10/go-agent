@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"time"
 
-	gerr "goagent/internal/errors"
 	"goagent/internal/core/models"
+	gerr "goagent/internal/errors"
 )
 
 // Ollama errors.

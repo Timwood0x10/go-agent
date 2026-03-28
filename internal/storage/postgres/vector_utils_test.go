@@ -7,9 +7,9 @@ import (
 
 func TestFormatVector(t *testing.T) {
 	tests := []struct {
-		name      string
-		vector    []float64
-		expected  string
+		name     string
+		vector   []float64
+		expected string
 	}{
 		{
 			name:     "empty vector",

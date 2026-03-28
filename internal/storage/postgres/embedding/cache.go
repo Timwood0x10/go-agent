@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"goagent/internal/errors"
+
 	"golang.org/x/crypto/blake2b"
 )
 

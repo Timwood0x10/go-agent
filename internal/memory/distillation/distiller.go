@@ -164,12 +164,13 @@ func NewDistiller(config *DistillationConfig, embedder embedding.EmbeddingServic
 //	[]Memory - distilled memories.
 //	error - any error encountered.
 func (d *Distiller) DistillConversation(ctx context.Context, conversationID string, messages []Message, tenantID, userID string) ([]Memory, error) {
+	startTime := time.Now()
 	slog.InfoContext(ctx, "🔄 [Memory Distillation] Starting distillation process",
 		"conversation_id", conversationID,
 		"tenant_id", tenantID,
 		"user_id", userID,
 		"message_count", len(messages),
-		"timestamp", time.Now().Format(time.RFC3339))
+		"timestamp", startTime.Format(time.RFC3339))
 
 	d.metrics.AttemptTotal++
 
@@ -356,7 +357,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 			"conversation_id", conversationID,
 			"memory_index", idx)
 
-		conflict, err := d.resolver.DetectConflict(ctx, exp, tenantID)
+		conflict, err := d.resolver.DetectConflict(ctx, memory.Vector, tenantID)
 		if err != nil {
 			slog.WarnContext(ctx, "⚠️ [Memory Distillation] Failed to detect memory conflicts",
 				"conversation_id", conversationID,
@@ -420,25 +421,15 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 
 	d.metrics.MemoriesCreated += int64(len(finalMemories))
 
-	// Final summary log
-
 	slog.InfoContext(ctx, "✅ [Memory Distillation] Distillation completed successfully",
-
 		"conversation_id", conversationID,
-
 		"tenant_id", tenantID,
-
 		"user_id", userID,
-
 		"final_memory_count", len(finalMemories),
-
 		"importance_scores", formatImportanceScores(finalMemories),
-
 		"memory_types", formatMemoryTypes(finalMemories),
-
 		"metrics", d.metrics.String(),
-
-		"duration_ms", time.Since(time.Now()).Milliseconds())
+		"duration_ms", time.Since(startTime).Milliseconds())
 
 	return finalMemories, nil
 

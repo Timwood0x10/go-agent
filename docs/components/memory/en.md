@@ -483,28 +483,44 @@ func (s *ImportanceScorer) ScoreMemory(memoryType MemoryType, problem, solution 
 
 **Conflict Detection**:
 ```go
-func (r *ConflictResolver) DetectConflict(ctx context.Context, exp *Experience, tenantID string) (*Experience, error) {
-    // Generate embedding for problem-solution
-    embeddingText := fmt.Sprintf("%s → %s", exp.Problem, exp.Solution)
-    embedding, err := r.embedder.EmbedWithPrefix(ctx, embeddingText, "memory:")
-    if err != nil {
-        return nil, err
+// DetectConflict detects conflicts with existing memories.
+// Args:
+//   - ctx: operation context
+//   - vector: embedding vector to search for similar memories
+//   - tenantID: tenant ID for multi-tenancy
+// Returns:
+//   - *Experience: conflicting memory, or nil if no conflict
+//   - error: any error encountered
+func (r *ConflictResolver) DetectConflict(ctx context.Context, vector []float64, tenantID string) (*Experience, error) {
+    if r.repo == nil {
+        return nil, nil // No repository configured
     }
-    
+
+    if len(vector) == 0 {
+        return nil, nil // No vector provided
+    }
+
     // Vector search for similar memories
-    similarExperiences, err := r.repo.SearchByVector(ctx, embedding, tenantID, r.searchLimit)
+    similar, err := r.repo.SearchByVector(ctx, vector, tenantID, r.searchLimit)
     if err != nil {
-        return nil, err
+        return nil, errors.Wrap(err, "failed to search for similar memories")
     }
-    
+
+    if len(similar) == 0 {
+        return nil, nil
+    }
+
     // Check for high similarity memories
-    for _, similar := range similarExperiences {
-        similarity := r.calculateCosineSimilarity(embedding, similar.Embedding)
+    for i := range similar {
+        if len(similar[i].Vector) == 0 {
+            continue
+        }
+        similarity := r.cosineSimilarity(vector, similar[i].Vector)
         if similarity > r.conflictThreshold {
-            return &similar, nil
+            return &similar[i], nil
         }
     }
-    
+
     return nil, nil
 }
 ```

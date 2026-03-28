@@ -131,8 +131,9 @@ func (m *Manager) StartShutdown(ctx context.Context) error {
 		m.mu.Unlock()
 
 		if err := m.executePhase(ctx, phase); err != nil {
-				return errors.Wrapf(err, "phase %s failed", phase)
-			}	}
+			return errors.Wrapf(err, "phase %s failed", phase)
+		}
+	}
 
 	return nil
 }

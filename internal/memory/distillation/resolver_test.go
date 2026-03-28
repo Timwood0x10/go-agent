@@ -109,10 +109,12 @@ func TestConflictResolver_DetectConflict(t *testing.T) {
 		{
 			Problem:  "docker container won't start",
 			Solution: "restart docker daemon",
+			Vector:   []float64{0.9, 0.1, 0.1, 0.1},
 		},
 		{
 			Problem:  "I prefer Go",
 			Solution: "Use Go examples",
+			Vector:   []float64{0.1, 0.9, 0.1, 0.1},
 		},
 	}
 
@@ -121,24 +123,106 @@ func TestConflictResolver_DetectConflict(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		newMemory      *Experience
+		vector         []float64
 		tenantID       string
 		expectConflict bool
 	}{
 		{
-			name: "new memory",
-			newMemory: &Experience{
-				Problem:  "docker error",
-				Solution: "fix it",
+			name:           "empty vector returns no conflict",
+			vector:         []float64{},
+			tenantID:       "test",
+			expectConflict: false,
+		},
+		{
+			name:           "high similarity vector finds conflict",
+			vector:         []float64{0.95, 0.05, 0.05, 0.05},
+			tenantID:       "test",
+			expectConflict: true,
+		},
+		{
+			name:           "low similarity vector no conflict",
+			vector:         []float64{0.1, 0.1, 0.9, 0.1},
+			tenantID:       "test",
+			expectConflict: false,
+		},
+		{
+			name:           "nil vector returns no conflict",
+			vector:         nil,
+			tenantID:       "test",
+			expectConflict: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			conflict, err := resolver.DetectConflict(ctx, tt.vector, tt.tenantID)
+
+			if err != nil {
+				t.Errorf("DetectConflict() returned error: %v", err)
+			}
+
+			if tt.expectConflict && conflict == nil {
+				t.Error("Expected conflict but got none")
+			}
+
+			if !tt.expectConflict && conflict != nil {
+				t.Error("Expected no conflict but got one")
+			}
+		})
+	}
+}
+
+func TestConflictResolver_DetectConflictByExperience(t *testing.T) {
+	existingExperiences := []Experience{
+		{
+			Problem:  "docker container won't start",
+			Solution: "restart docker daemon",
+			Vector:   []float64{0.9, 0.1, 0.1, 0.1},
+		},
+	}
+
+	repo := NewMockExperienceRepository(existingExperiences)
+	resolver := NewConflictResolver(repo)
+
+	tests := []struct {
+		name           string
+		experience     *Experience
+		tenantID       string
+		expectConflict bool
+	}{
+		{
+			name:           "nil experience returns no conflict",
+			experience:     nil,
+			tenantID:       "test",
+			expectConflict: false,
+		},
+		{
+			name: "experience without vector returns no conflict",
+			experience: &Experience{
+				Problem:  "test problem",
+				Solution: "test solution",
+				Vector:   nil,
 			},
 			tenantID:       "test",
 			expectConflict: false,
 		},
 		{
-			name: "low similarity",
-			newMemory: &Experience{
-				Problem:  "database connection error",
-				Solution: "update connection string",
+			name: "high similarity experience finds conflict",
+			experience: &Experience{
+				Problem:  "docker error",
+				Solution: "fix it",
+				Vector:   []float64{0.95, 0.05, 0.05, 0.05},
+			},
+			tenantID:       "test",
+			expectConflict: true,
+		},
+		{
+			name: "low similarity experience no conflict",
+			experience: &Experience{
+				Problem:  "unrelated issue",
+				Solution: "different solution",
+				Vector:   []float64{0.1, 0.1, 0.9, 0.1},
 			},
 			tenantID:       "test",
 			expectConflict: false,
@@ -148,10 +232,10 @@ func TestConflictResolver_DetectConflict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			conflict, err := resolver.DetectConflict(ctx, tt.newMemory, tt.tenantID)
+			conflict, err := resolver.DetectConflictByExperience(ctx, tt.experience, tt.tenantID)
 
 			if err != nil {
-				t.Errorf("DetectConflict() returned error: %v", err)
+				t.Errorf("DetectConflictByExperience() returned error: %v", err)
 			}
 
 			if tt.expectConflict && conflict == nil {

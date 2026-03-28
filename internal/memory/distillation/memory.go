@@ -41,6 +41,7 @@ type Experience struct {
 	Solution         string
 	Confidence       float64
 	ExtractionMethod ExtractionMethod
+	Vector           []float64
 }
 
 // ResolutionStrategy defines how to resolve memory conflicts.

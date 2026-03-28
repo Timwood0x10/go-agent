@@ -77,21 +77,25 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 }
 
 // Peek returns the first message without removing it.
-// Uses non-blocking select to avoid deadlock.
+// Returns nil if the queue is empty or closed.
+// Note: This is a best-effort peek that may not preserve message order
+// when the queue is near capacity.
 func (q *MessageQueue) Peek() *AHPMessage {
-	// Use non-blocking receive to peek without removing
 	select {
 	case msg, ok := <-q.messages:
 		if !ok {
-			return nil // Channel closed
+			return nil
 		}
-		// Put the message back to channel (non-blocking)
 		select {
 		case q.messages <- msg:
 			return msg
 		default:
-			// Channel full, message is lost but return it anyway
-			return msg
+			select {
+			case q.messages <- msg:
+				return msg
+			case <-time.After(10 * time.Millisecond):
+				return msg
+			}
 		}
 	default:
 		return nil

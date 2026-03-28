@@ -296,9 +296,10 @@ func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
+	inputStr, _ := task.Payload["input"].(string)
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
 		"task_id", taskID,
-		"input_length", len(task.Payload["input"].(string)))
+		"input_length", len(inputStr))
 	return task, nil
 }
 
@@ -316,9 +317,10 @@ func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
+	inputStr, _ := task.Payload["input"].(string)
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
 		"task_id", taskID,
-		"input_length", len(task.Payload["input"].(string)))
+		"input_length", len(inputStr))
 	return task, nil
 }
 
@@ -358,11 +360,13 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 		"task_id", taskID,
 		"vector_dimension", len(vector))
 
+	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
+	contextMap, _ := distilled.Payload["context"].(map[string]interface{})
 	data := &DistilledTaskData{
 		TaskID:    taskID,
 		Input:     inputStr,
-		Output:    fmt.Sprintf("%v", distilled.Payload["output"]),
-		Context:   distilled.Payload["context"].(map[string]interface{}),
+		Output:    outputStr,
+		Context:   contextMap,
 		Vector:    vector,
 		CreatedAt: time.Now(),
 	}

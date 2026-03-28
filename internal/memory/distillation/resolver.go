@@ -69,32 +69,67 @@ func (r *ConflictResolver) ResolveConflict(newMemory *Experience, oldMemory *Exp
 // Args:
 //
 //	ctx - operation context.
-//	memory - the memory to check for conflicts.
+//	vector - the embedding vector to search for similar memories.
 //	tenantID - tenant ID for multi-tenancy.
 //
 // Returns:
 //
 //	*Experience - the conflicting memory, or nil if no conflict.
 //	error - any error encountered.
-func (r *ConflictResolver) DetectConflict(ctx context.Context, memory *Experience, tenantID string) (*Experience, error) {
+func (r *ConflictResolver) DetectConflict(ctx context.Context, vector []float64, tenantID string) (*Experience, error) {
 	if r.repo == nil {
 		return nil, nil // No repository configured
 	}
 
-	// Search for similar experiences
-	// Note: This requires the memory to have a vector, which should be
-	// generated before calling this method
-	similar, err := r.repo.SearchByVector(ctx, nil, tenantID, r.searchLimit)
+	if len(vector) == 0 {
+		return nil, nil // No vector provided
+	}
+
+	similar, err := r.repo.SearchByVector(ctx, vector, tenantID, r.searchLimit)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to search for similar memories")
 	}
 
-	// Check if any similar memory exceeds the conflict threshold
-	// For now, return nil since vector comparison is not available in Experience
-	// This would require additional fields in Experience struct
-	_ = similar
+	if len(similar) == 0 {
+		return nil, nil
+	}
+
+	for i := range similar {
+		if len(similar[i].Vector) == 0 {
+			continue
+		}
+		similarity := r.cosineSimilarity(vector, similar[i].Vector)
+		if similarity > r.conflictThreshold {
+			return &similar[i], nil
+		}
+	}
 
 	return nil, nil
+}
+
+// DetectConflictByExperience detects conflicts using an Experience struct.
+// This is a convenience method that extracts the vector from the Experience
+// and calls DetectConflict. It provides backward compatibility for callers
+// that prefer to work with Experience structs.
+//
+// Args:
+//
+//	ctx - operation context.
+//	exp - the experience to check for conflicts (must have a non-empty Vector field).
+//	tenantID - tenant ID for multi-tenancy.
+//
+// Returns:
+//
+//	*Experience - the conflicting memory, or nil if no conflict.
+//	error - any error encountered.
+func (r *ConflictResolver) DetectConflictByExperience(ctx context.Context, exp *Experience, tenantID string) (*Experience, error) {
+	if exp == nil {
+		return nil, nil
+	}
+	if len(exp.Vector) == 0 {
+		return nil, nil // Experience has no vector
+	}
+	return r.DetectConflict(ctx, exp.Vector, tenantID)
 }
 
 // cosineSimilarity calculates the cosine similarity between two vectors.
