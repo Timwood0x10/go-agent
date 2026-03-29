@@ -102,19 +102,19 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 	for i, task := range tasks {
 		task := task // capture loop variable
 		g.Go(func() error {
+			// Acquire semaphore with context cancellation support
 			select {
+			case sem <- struct{}{}:
+				// Acquired
 			case <-ctx.Done():
 				return ctx.Err()
-			default:
-				// Acquire semaphore
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				// Execute task
-				result := d.executeTask(ctx, task)
-				results[i] = result
-				return nil
 			}
+			defer func() { <-sem }()
+
+			// Execute task
+			result := d.executeTask(ctx, task)
+			results[i] = result
+			return nil
 		})
 	}
 

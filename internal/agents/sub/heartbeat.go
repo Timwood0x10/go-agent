@@ -2,6 +2,7 @@ package sub
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"goagent/internal/protocol/ahp"
@@ -12,6 +13,7 @@ type heartbeatSender struct {
 	agentID      string
 	interval     time.Duration
 	stopCh       chan struct{}
+	stopOnce     sync.Once
 	heartbeatMon *ahp.HeartbeatMonitor
 }
 
@@ -48,11 +50,9 @@ func (s *heartbeatSender) Start(ctx context.Context) {
 }
 
 // Stop stops sending heartbeats.
+// This method is idempotent and safe to call multiple times.
 func (s *heartbeatSender) Stop() {
-	select {
-	case <-s.stopCh:
-		return
-	default:
+	s.stopOnce.Do(func() {
 		close(s.stopCh)
-	}
+	})
 }

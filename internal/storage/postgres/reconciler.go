@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -15,7 +16,8 @@ type EmbeddingReconciler struct {
 	embeddingConfig  *EmbeddingConfig
 	interval         time.Duration
 	missingThreshold time.Duration
-	stopped          bool
+	stopCh           chan struct{}
+	stopOnce         sync.Once
 }
 
 // NewEmbeddingReconciler creates a new EmbeddingReconciler instance.
@@ -36,7 +38,7 @@ func NewEmbeddingReconciler(db *Pool, queue *EmbeddingQueue, embeddingConfig *Em
 		embeddingConfig:  embeddingConfig,
 		interval:         interval,
 		missingThreshold: missingThreshold,
-		stopped:          false,
+		stopCh:           make(chan struct{}),
 	}
 }
 
@@ -51,9 +53,11 @@ func (r *EmbeddingReconciler) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Stopping embedding reconciler")
+			slog.Info("Stopping embedding reconciler due to context cancellation")
 			return
-
+		case <-r.stopCh:
+			slog.Info("Stopping embedding reconciler due to Stop() call")
+			return
 		case <-ticker.C:
 			if err := r.Reconcile(ctx); err != nil {
 				slog.Error("Embedding reconciliation failed", "error", err)
@@ -136,6 +140,9 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down the reconciler.
+// This method is idempotent and safe to call multiple times.
 func (r *EmbeddingReconciler) Stop() {
-	r.stopped = true
+	r.stopOnce.Do(func() {
+		close(r.stopCh)
+	})
 }

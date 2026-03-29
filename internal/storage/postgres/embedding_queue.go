@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	coreerrors "goagent/internal/core/errors"
@@ -109,11 +110,12 @@ func (q *EmbeddingQueue) FetchPendingTasks(ctx context.Context, limit int) ([]*E
 		return nil, errors.Wrap(err, "fetch pending tasks")
 	}
 	defer rows.Close()
-	// nolint: errcheck // Rows are closed by defer
+
 	tasks := make([]*EmbeddingTask, 0)
 	for rows.Next() {
 		task := &EmbeddingTask{}
 		if err := rows.Scan(&task.TaskID, &task.Table, &task.Content, &task.TenantID, &task.Model, &task.Version); err != nil {
+			slog.Error("Failed to scan embedding task row", "error", err)
 			continue
 		}
 		tasks = append(tasks, task)
