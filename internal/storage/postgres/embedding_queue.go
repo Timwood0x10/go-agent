@@ -19,7 +19,6 @@ import (
 type EmbeddingQueue struct {
 	db              *Pool
 	embeddingConfig *EmbeddingConfig
-	stopped         bool
 }
 
 // EmbeddingTask represents a single embedding task.
@@ -44,7 +43,6 @@ func NewEmbeddingQueue(pool *Pool, embeddingConfig *EmbeddingConfig) *EmbeddingQ
 	return &EmbeddingQueue{
 		db:              pool,
 		embeddingConfig: embeddingConfig,
-		stopped:         false,
 	}
 }
 

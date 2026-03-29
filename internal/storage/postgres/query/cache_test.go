@@ -67,8 +67,8 @@ func TestQueryCache(t *testing.T) {
 
 	// Test stats
 	stats := cache.GetStats()
-	if stats.Hits != 1 {
-		t.Errorf("Expected 1 hit, got %d", stats.Hits)
+	if stats.Hits.Load() != 1 {
+		t.Errorf("Expected 1 hit, got %d", stats.Hits.Load())
 	}
 
 	hitRate := stats.HitRate()
@@ -95,8 +95,8 @@ func TestQueryCacheMiss(t *testing.T) {
 
 	// Test stats
 	stats := cache.GetStats()
-	if stats.Misses != 1 {
-		t.Errorf("Expected 1 miss, got %d", stats.Misses)
+	if stats.Misses.Load() != 1 {
+		t.Errorf("Expected 1 miss, got %d", stats.Misses.Load())
 	}
 
 	hitRate := stats.HitRate()

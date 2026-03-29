@@ -32,6 +32,9 @@ type FileWatcher struct {
 	callbackID   uint64
 	mu           sync.RWMutex
 	pollInterval time.Duration // Fallback polling interval (only used if fsnotify fails)
+	wg           sync.WaitGroup
+	stopCtx      context.Context
+	stopCancel   context.CancelFunc
 }
 
 // NewFileWatcher creates a new FileWatcher.
@@ -44,12 +47,16 @@ func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *File
 		slog.Info("FileWatcher: using fsnotify for real-time file monitoring")
 	}
 
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+
 	return &FileWatcher{
 		watcher:      watcher,
 		loader:       loader,
 		workflows:    workflows,
 		callbacks:    make([]callbackWithID, 0),
 		pollInterval: 5 * time.Second,
+		stopCtx:      stopCtx,
+		stopCancel:   stopCancel,
 	}
 }
 
@@ -69,10 +76,12 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 		// Watch subdirectories for workflow files
 		w.watchDirectory(ctx, dir)
 
-		go w.fsnotifyLoop(ctx, dir)
+		w.wg.Add(1)
+		go w.fsnotifyLoop(dir)
 	} else {
 		// Fallback to polling
-		go w.watchLoop(ctx, dir)
+		w.wg.Add(1)
+		go w.watchLoop(dir)
 	}
 
 	return nil
@@ -102,7 +111,8 @@ func (w *FileWatcher) watchDirectory(ctx context.Context, dir string) {
 }
 
 // fsnotifyLoop watches for file change events.
-func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
+func (w *FileWatcher) fsnotifyLoop(dir string) {
+	defer w.wg.Done()
 	defer func() {
 		if w.watcher != nil {
 			_ = w.watcher.Close()
@@ -111,7 +121,7 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.stopCtx.Done():
 			return
 		case event, ok := <-w.watcher.Events:
 			if !ok {
@@ -127,7 +137,7 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 				continue
 			}
 			// Reload on file change
-			if err := w.scanAndLoad(ctx, dir); err != nil {
+			if err := w.scanAndLoad(w.stopCtx, dir); err != nil {
 				continue
 			}
 		case err, ok := <-w.watcher.Errors:
@@ -140,16 +150,17 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 }
 
 // watchLoop periodically checks for file changes (fallback when fsnotify unavailable).
-func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
+func (w *FileWatcher) watchLoop(dir string) {
+	defer w.wg.Done()
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.stopCtx.Done():
 			return
 		case <-ticker.C:
-			if err := w.scanAndLoad(ctx, dir); err != nil {
+			if err := w.scanAndLoad(w.stopCtx, dir); err != nil {
 				continue
 			}
 		}
@@ -158,6 +169,10 @@ func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
 
 // Close closes the file watcher and releases resources.
 func (w *FileWatcher) Close() {
+	if w.stopCancel != nil {
+		w.stopCancel()
+	}
+	w.wg.Wait()
 	if w.watcher != nil {
 		_ = w.watcher.Close()
 		w.watcher = nil
@@ -343,10 +358,13 @@ func (r *WorkflowReloader) onReload(workflows map[string]*Workflow) {
 func (r *WorkflowReloader) notifyCallbacks() {
 	r.mu.RLock()
 	workflows := r.workflows
-	callbacks := r.callbacks
+	callbacksCopy := make(map[string]ReloadCallback, len(r.callbacks))
+	for k, v := range r.callbacks {
+		callbacksCopy[k] = v
+	}
 	r.mu.RUnlock()
 
-	for _, callback := range callbacks {
+	for _, callback := range callbacksCopy {
 		callback(workflows)
 	}
 }

@@ -128,7 +128,6 @@ type HeartbeatSender struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
-	stopped   bool
 	stopOnce  sync.Once
 	startOnce sync.Once
 }
@@ -167,9 +166,6 @@ func (s *HeartbeatSender) run() {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			if s.stopped {
-				return
-			}
 			s.sendHeartbeat()
 		}
 	}
@@ -189,7 +185,6 @@ func (s *HeartbeatSender) sendHeartbeat() {
 // Subsequent calls after the first will be no-ops.
 func (s *HeartbeatSender) Stop() {
 	s.stopOnce.Do(func() {
-		s.stopped = true
 		if s.cancel != nil {
 			s.cancel()
 		}

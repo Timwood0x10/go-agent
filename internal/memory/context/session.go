@@ -107,28 +107,20 @@ func (m *SessionMemory) Cleanup(ctx context.Context) int {
 
 // Get retrieves session data.
 func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData, bool) {
-	m.mu.RLock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	session, exists := m.sessions[sessionID]
 	if !exists {
-		m.mu.RUnlock()
 		return nil, false
 	}
 
 	if time.Since(session.AccessedAt) > m.ttl {
-		m.mu.RUnlock()
-		// Session expired, remove it
-		m.mu.Lock()
 		delete(m.sessions, sessionID)
-		m.mu.Unlock()
 		return nil, false
 	}
-	m.mu.RUnlock()
 
-	// Use write lock to update AccessedAt to avoid data race
-	m.mu.Lock()
 	session.AccessedAt = time.Now()
-	m.mu.Unlock()
-
 	return session, true
 }
 

@@ -470,18 +470,20 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 		return vector
 	}
 
-	// Simple hash-based vector generation
-	hash := uint64(0)
-	for i, c := range text {
-		hash = hash*31 + uint64(c)
-		if i >= len(text)-1 {
-			break
-		}
+	// Generate multiple hash values using different seeds for better distribution
+	hashes := make([]uint64, (m.vectorDim+12)/13)
+	for i := range hashes {
+		hashes[i] = m.hashWithSeed(text, uint64(i)*0x9e3779b97f4a7c15)
 	}
 
-	// Spread hash across vector dimensions
+	// Spread hash values across vector dimensions
 	for i := range vector {
-		vector[i] = float64((hash>>(i*5))%1000) / 1000.0
+		hashIdx := i / 13
+		shift := (i % 13) * 5
+		if shift >= 64 {
+			shift = 64 - 5
+		}
+		vector[i] = float64((hashes[hashIdx]>>shift)%1000) / 1000.0
 	}
 
 	// Normalize vector
@@ -498,6 +500,19 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 	}
 
 	return vector
+}
+
+// hashWithSeed generates a hash with a specific seed for better distribution.
+func (m *memoryManager) hashWithSeed(text string, seed uint64) uint64 {
+	hash := seed
+	for _, c := range text {
+		hash ^= uint64(c)
+		hash *= 0x100000001b3
+		hash ^= hash >> 33
+		hash *= 0xff51afd7ed558ccd
+		hash ^= hash >> 33
+	}
+	return hash
 }
 
 // SearchSimilarTasks searches for similar tasks using local cosine similarity.

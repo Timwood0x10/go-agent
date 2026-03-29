@@ -73,9 +73,13 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			// Flush remaining items on shutdown
+			// Flush remaining items on shutdown with a fresh context
+			// The original context is cancelled, so we create a new one with timeout
 			if len(batch) > 0 {
-				if err := b.flushBatch(ctx, batch); err != nil {
+				flushCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				err := b.flushBatch(flushCtx, batch)
+				cancel()
+				if err != nil {
 					return errors.Wrap(err, "flush final batch")
 				}
 			}

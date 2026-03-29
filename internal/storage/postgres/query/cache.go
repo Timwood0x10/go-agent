@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	gerr "goagent/internal/errors"
@@ -164,7 +165,7 @@ func (c *QueryCache) Clear(ctx context.Context) error {
 	}
 
 	// Reset stats
-	c.stats = &CacheStats{}
+	c.stats.Reset()
 
 	return nil
 }
@@ -265,25 +266,31 @@ func normalizeText(text string) string {
 
 // CacheStats represents cache statistics.
 type CacheStats struct {
-	Hits   int64
-	Misses int64
+	Hits   atomic.Int64
+	Misses atomic.Int64
 }
 
 func (s *CacheStats) recordHit() {
-	s.Hits++
+	s.Hits.Add(1)
 }
 
 func (s *CacheStats) recordMiss() {
-	s.Misses++
+	s.Misses.Add(1)
+}
+
+// Reset resets all statistics to zero.
+func (s *CacheStats) Reset() {
+	s.Hits.Store(0)
+	s.Misses.Store(0)
 }
 
 // HitRate returns the cache hit rate.
 func (s *CacheStats) HitRate() float64 {
-	total := s.Hits + s.Misses
+	total := s.Hits.Load() + s.Misses.Load()
 	if total == 0 {
 		return 0.0
 	}
-	return float64(s.Hits) / float64(total)
+	return float64(s.Hits.Load()) / float64(total)
 }
 
 // RedisClient defines the interface for Redis operations.

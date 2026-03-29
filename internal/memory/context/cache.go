@@ -419,7 +419,8 @@ func (c *LRUCache) removeLeastRecentlyUsed() {
 		return
 	}
 
-	c.remove(c.tail)
-	delete(c.items, c.tail.Key)
+	oldTail := c.tail
+	c.remove(oldTail)
+	delete(c.items, oldTail.Key)
 	c.size--
 }

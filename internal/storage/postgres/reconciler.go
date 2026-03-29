@@ -59,6 +59,9 @@ func (r *EmbeddingReconciler) Start(ctx context.Context) {
 			slog.Info("Stopping embedding reconciler due to Stop() call")
 			return
 		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
 			if err := r.Reconcile(ctx); err != nil {
 				slog.Error("Embedding reconciliation failed", "error", err)
 			}
