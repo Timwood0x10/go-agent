@@ -433,7 +433,11 @@ func (e *Executor) executeWithRetry(ctx context.Context, step *Step, input strin
 
 // executeSingle executes a step once.
 func (e *Executor) executeSingle(ctx context.Context, step *Step, input string) (string, error) {
-	stepCtx, cancel := context.WithTimeout(ctx, step.Timeout)
+	timeout := step.Timeout
+	if timeout == 0 {
+		timeout = DefaultStepTimeout
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	executor := NewAgentExecutor(e.registry)

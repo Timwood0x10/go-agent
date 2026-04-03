@@ -177,6 +177,11 @@ func (r *ConversationRepository) GetBySession(ctx context.Context, sessionID, te
 		conversations = append(conversations, conv)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate conversations", "error", err)
+		return nil, errors.Wrap(err, "iterate conversations")
+	}
+
 	return conversations, nil
 }
 
@@ -270,6 +275,11 @@ func (r *ConversationRepository) GetByUser(ctx context.Context, userID, tenantID
 		conversations = append(conversations, conv)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate conversations", "error", err)
+		return nil, errors.Wrap(err, "iterate conversations")
+	}
+
 	return conversations, nil
 }
 
@@ -311,6 +321,11 @@ func (r *ConversationRepository) GetByAgent(ctx context.Context, agentID, tenant
 			continue
 		}
 		conversations = append(conversations, conv)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate conversations", "error", err)
+		return nil, errors.Wrap(err, "iterate conversations")
 	}
 
 	return conversations, nil
@@ -417,6 +432,11 @@ func (r *ConversationRepository) GetRecentSessions(ctx context.Context, tenantID
 			continue
 		}
 		sessions = append(sessions, sessionID)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate sessions", "error", err)
+		return nil, errors.Wrap(err, "iterate sessions")
 	}
 
 	return sessions, nil

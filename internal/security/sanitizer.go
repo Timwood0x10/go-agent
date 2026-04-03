@@ -292,9 +292,13 @@ func maskString(s string, preserveLength int) string {
 
 	length := len(s)
 
-	// If string is too short or exactly the length to preserve, return as-is
+	if length <= preserveLength {
+		return strings.Repeat("*", length)
+	}
+
 	if length <= preserveLength*2 {
-		return s
+		prefix := s[:preserveLength]
+		return prefix + strings.Repeat("*", length-preserveLength)
 	}
 
 	prefix := s[:preserveLength]

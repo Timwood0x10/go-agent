@@ -174,6 +174,11 @@ func (r *SecretRepository) List(ctx context.Context, tenantID string) ([]*storag
 		secrets = append(secrets, secret)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate secrets", "error", err)
+		return nil, errors.Wrap(err, "iterate secrets")
+	}
+
 	return secrets, nil
 }
 
@@ -392,6 +397,11 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 
 		secret.Value = valueBytes
 		secrets = append(secrets, secret)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate secrets", "error", err)
+		return 0, errors.Wrap(err, "iterate secrets")
 	}
 
 	// For each secret: decrypt with old key, re-encrypt with new key (per design standard)

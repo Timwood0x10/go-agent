@@ -141,7 +141,6 @@ func (p *Pool) GetDB() *sql.DB {
 
 // Exec executes a query without returning rows.
 func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	// Add query timeout if not already set in context
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, p.cfg.QueryTimeout)
@@ -151,10 +150,12 @@ func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 	var result sql.Result
 	var execErr error
 
-	p.WithConnection(ctx, func(conn *sql.Conn) error {
+	if err := p.WithConnection(ctx, func(conn *sql.Conn) error {
 		result, execErr = conn.ExecContext(ctx, query, args...)
 		return execErr
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return result, execErr
 }

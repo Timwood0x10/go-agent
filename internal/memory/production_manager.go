@@ -178,13 +178,9 @@ func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Start write buffer (write backpressure layer per design standard)
 	if err := m.writeBuffer.Start(ctx); err != nil {
 		return errors.Wrap(err, "start write buffer")
 	}
-
-	// Start background cleanup if needed
-	// This could include periodic cache cleanup, statistics collection, etc.
 
 	m.started = true
 	slog.Info("Production memory manager started")

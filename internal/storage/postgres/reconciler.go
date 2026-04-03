@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"goagent/internal/errors"
 )
 
 // EmbeddingReconciler provides eventual consistency for embedding operations.
@@ -133,6 +135,11 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 		}
 
 		reconciledCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate orphaned tasks", "error", err)
+		return errors.Wrap(err, "iterate orphaned tasks")
 	}
 
 	if reconciledCount > 0 {

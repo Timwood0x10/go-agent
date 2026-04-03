@@ -58,7 +58,6 @@ type leaderAgent struct {
 	heartbeatMon  *ahp.HeartbeatMonitor
 	memoryManager memory.MemoryManager
 	sessionID     string
-	stepCount     int
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
@@ -207,8 +206,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		}
 	}
 
-	// Reset step count for new request
-	a.stepCount = 0
+	stepCount := 0
 	maxSteps := a.config.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = DefaultMaxSteps
@@ -229,24 +227,28 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.Wrapf(coreerrors.ErrInvalidInput, "expected string, []byte, or fmt.Stringer, got %T", input)
 	}
 
-	// Memory: Initialize session and add user input
+	var sessionID string
 	if a.memoryManager != nil {
-		if a.sessionID == "" {
-			sessionID, err := a.memoryManager.CreateSession(ctx, "default_user")
+		a.mu.Lock()
+		sessionID = a.sessionID
+		if sessionID == "" {
+			newSessionID, err := a.memoryManager.CreateSession(ctx, "default_user")
 			if err != nil {
 				slog.Warn("Failed to create session", "error", err)
 			} else {
+				sessionID = newSessionID
 				a.sessionID = sessionID
 			}
 		}
+		a.mu.Unlock()
 
 		// Add user input to memory
-		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "user", strInput); err != nil {
+		if err := a.memoryManager.AddMessage(ctx, sessionID, "user", strInput); err != nil {
 			slog.Warn("Failed to add user message to memory", "error", err)
 		}
 
 		// Build input with context
-		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, a.sessionID)
+		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, sessionID)
 		if err != nil {
 			slog.Warn("Failed to build context, using raw input", "error", err)
 		} else {
@@ -259,7 +261,6 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			slog.Warn("Failed to search similar tasks", "error", err)
 		} else if len(similarTasks) > 0 {
 			slog.Debug("Found similar tasks", "count", len(similarTasks))
-			// Inject similar tasks into context
 			contextStr := "\n\nSimilar previous tasks:\n"
 			for _, task := range similarTasks {
 				if taskInput, ok := task.Payload["input"].(string); ok {
@@ -274,15 +275,15 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	var taskID string
 	if a.memoryManager != nil {
 		var err error
-		taskID, err = a.memoryManager.CreateTask(ctx, a.sessionID, "default_user", strInput)
+		taskID, err = a.memoryManager.CreateTask(ctx, sessionID, "default_user", strInput)
 		if err != nil {
 			slog.Warn("Failed to create task", "error", err)
 		}
 	}
 
 	// Step 1: Parse profile
-	a.stepCount++
-	if a.stepCount > maxSteps {
+	stepCount++
+	if stepCount > maxSteps {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
@@ -292,8 +293,8 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	}
 
 	// Step 2: Plan tasks
-	a.stepCount++
-	if a.stepCount > maxSteps {
+	stepCount++
+	if stepCount > maxSteps {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
@@ -304,8 +305,8 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	slog.Info("Leader tasks created", "module", "leader", "count", len(tasks))
 
 	// Step 3: Dispatch tasks
-	a.stepCount++
-	if a.stepCount > maxSteps {
+	stepCount++
+	if stepCount > maxSteps {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
@@ -320,8 +321,8 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	}
 
 	// Step 4: Aggregate results
-	a.stepCount++
-	if a.stepCount > maxSteps {
+	stepCount++
+	if stepCount > maxSteps {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 

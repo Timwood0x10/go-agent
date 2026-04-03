@@ -107,6 +107,8 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 			case sem <- struct{}{}:
 				// Acquired
 			case <-ctx.Done():
+				results[i] = models.NewTaskResult(task.TaskID, task.AgentType)
+				results[i].SetError("task cancelled")
 				return ctx.Err()
 			}
 			defer func() { <-sem }()

@@ -376,6 +376,11 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 		results = append(results, result)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate task results", "error", err)
+		return nil, errors.Wrap(err, "iterate task results")
+	}
+
 	return results, nil
 }
 
@@ -452,6 +457,11 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 		results = append(results, result)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate task results", "error", err)
+		return nil, errors.Wrap(err, "iterate task results")
+	}
+
 	return results, nil
 }
 
@@ -526,6 +536,11 @@ func (r *TaskResultRepository) ListBySession(ctx context.Context, sessionID, ten
 		}
 
 		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate task results", "error", err)
+		return nil, errors.Wrap(err, "iterate task results")
 	}
 
 	return results, nil
@@ -629,6 +644,11 @@ func (r *TaskResultRepository) GetStatistics(ctx context.Context, tenantID strin
 		}
 		key := fmt.Sprintf("%s:%s", taskType, status)
 		stats[key] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate task result stats", "error", err)
+		return nil, errors.Wrap(err, "iterate task result stats")
 	}
 
 	return stats, nil

@@ -119,6 +119,11 @@ func (q *EmbeddingQueue) FetchPendingTasks(ctx context.Context, limit int) ([]*E
 		tasks = append(tasks, task)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate embedding tasks", "error", err)
+		return nil, errors.Wrap(err, "iterate embedding tasks")
+	}
+
 	return tasks, nil
 }
 

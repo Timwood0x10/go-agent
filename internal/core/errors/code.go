@@ -35,6 +35,12 @@ type AppError struct {
 
 // Error returns the error message.
 func (e *AppError) Error() string {
+	if e.Code == nil {
+		if e.Err != nil {
+			return e.Err.Error()
+		}
+		return "unknown error"
+	}
 	if e.Err != nil {
 		return e.Code.Message + ": " + e.Err.Error()
 	}
@@ -57,11 +63,17 @@ func (e *AppError) WithContext(key string, value any) *AppError {
 
 // IsRetryable checks if the error is retryable.
 func (e *AppError) IsRetryable() bool {
+	if e.Code == nil {
+		return false
+	}
 	return e.Code.Retry
 }
 
 // ShouldRetry checks if the error should be retried based on attempt count.
 func (e *AppError) ShouldRetry(attempt int) bool {
+	if e.Code == nil {
+		return false
+	}
 	if !e.Code.Retry {
 		return false
 	}

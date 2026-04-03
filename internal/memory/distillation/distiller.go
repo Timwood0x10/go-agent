@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -453,29 +454,37 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 //	error - any error encountered.
 func (d *Distiller) enforceSolutionCap(ctx context.Context, tenantID string) error {
 	if d.repo == nil {
-		return nil // No repository configured, skip cap enforcement
+		return nil
 	}
 
-	// Get current solution count
 	solutions, err := d.repo.GetByMemoryType(ctx, tenantID, MemoryInteraction)
 	if err != nil {
 		return errors.Wrap(err, "failed to get solution count")
 	}
 
-	// Check if we need to prune
 	if len(solutions) <= d.config.MaxSolutionsPerTenant {
 		return nil
 	}
 
-	// Log warning about exceeding cap
 	slog.WarnContext(ctx, "solution count exceeds cap, pruning lowest importance memories",
 		"tenant_id", tenantID,
 		"current_count", len(solutions),
 		"max_count", d.config.MaxSolutionsPerTenant,
 	)
 
-	// Note: Actual deletion should be handled by the repository implementation
-	// This is a placeholder for the pruning logic
+	sort.Slice(solutions, func(i, j int) bool {
+		return solutions[i].Confidence < solutions[j].Confidence
+	})
+
+	deleteCount := len(solutions) - d.config.MaxSolutionsPerTenant
+	for i := 0; i < deleteCount; i++ {
+		if err := d.repo.Delete(ctx, solutions[i].Problem); err != nil {
+			slog.WarnContext(ctx, "failed to delete solution during pruning",
+				"problem", solutions[i].Problem,
+				"error", err)
+		}
+	}
+
 	return nil
 }
 

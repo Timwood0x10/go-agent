@@ -155,6 +155,10 @@ func (a *subAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.ErrInvalidInput
 	}
 
+	if a.executor == nil {
+		return nil, errors.ErrInvalidState
+	}
+
 	return a.executor.Execute(ctx, task)
 }
 

@@ -25,6 +25,7 @@ var (
 	ErrHeartbeatMissed = errors.New("heartbeat missed")
 	ErrQueueFull       = errors.New("message queue is full")
 	ErrQueueEmpty      = errors.New("message queue is empty")
+	ErrQueueClosed     = errors.New("message queue is closed")
 )
 
 // Sentinel errors for Storage module.

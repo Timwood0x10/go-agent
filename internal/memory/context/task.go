@@ -60,8 +60,8 @@ func NewTaskMemory(maxSize int, ttl time.Duration) *TaskMemory {
 
 // Get retrieves task data.
 func (m *TaskMemory) Get(ctx context.Context, taskID string) (*TaskData, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	task, exists := m.tasks[taskID]
 	if !exists {

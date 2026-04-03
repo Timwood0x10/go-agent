@@ -3,6 +3,7 @@ package ahp
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"goagent/internal/errors"
 )
@@ -86,6 +87,7 @@ func (c *JSONCodec) MustDecode(data []byte) *AHPMessage {
 // CodecRegistry manages available codecs.
 type CodecRegistry struct {
 	codecs map[string]Codec
+	mu     sync.RWMutex
 }
 
 // NewCodecRegistry creates a new CodecRegistry.
@@ -97,18 +99,25 @@ func NewCodecRegistry() *CodecRegistry {
 
 // Register registers a codec with a name.
 func (r *CodecRegistry) Register(name string, codec Codec) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.codecs[name] = codec
 }
 
 // Get returns a codec by name.
 func (r *CodecRegistry) Get(name string) (Codec, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	codec, ok := r.codecs[name]
 	return codec, ok
 }
 
 // Default returns the default JSON codec.
 func (r *CodecRegistry) Default() Codec {
-	if c, ok := r.codecs["json"]; ok {
+	r.mu.RLock()
+	c, ok := r.codecs["json"]
+	r.mu.RUnlock()
+	if ok {
 		return c
 	}
 	return NewJSONCodec()

@@ -7,6 +7,8 @@ import (
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
+
+	"github.com/lib/pq"
 )
 
 // TenantGuard provides physical isolation for multi-tenant data access.
@@ -31,9 +33,8 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 		return coreerrors.ErrInvalidArgument
 	}
 
-	// SET statement does not support parameterized queries, need to concatenate string directly
-	// tenantID has been validated as non-empty string, so it's safe to use
-	query := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	quotedID := pq.QuoteLiteral(tenantID)
+	query := fmt.Sprintf("SET app.tenant_id TO %s", quotedID)
 	_, err := g.db.Exec(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "set tenant context")

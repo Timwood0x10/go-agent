@@ -326,12 +326,14 @@ func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*mod
 
 // StoreDistilledTask stores a distilled task with local vector embedding.
 func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, distilled *models.Task) error {
-	// Use new distillation engine if enabled
+	if distilled == nil {
+		return errors.New("distilled task cannot be nil")
+	}
+
 	if m.useNewDistill {
 		return m.storeDistilledTaskNew(ctx, taskID, distilled)
 	}
 
-	// Use old hash-based storage for backward compatibility
 	return m.storeDistilledTaskOld(ctx, taskID, distilled)
 }
 

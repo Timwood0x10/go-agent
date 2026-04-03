@@ -86,10 +86,12 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 			return nil
 
 		case item := <-b.buffer:
+			if item == nil {
+				return nil
+			}
 			batch = append(batch, item)
 			if len(batch) >= b.batchSize {
 				if err := b.flushBatch(ctx, batch); err != nil {
-					// Log error but continue processing to avoid dropping items
 					continue
 				}
 				batch = batch[:0]

@@ -3,6 +3,7 @@ package ahp
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"goagent/internal/core/errors"
@@ -15,6 +16,8 @@ type MessageQueue struct {
 	opts         *QueueOptions
 	backupBuffer []*AHPMessage
 	backupMu     sync.Mutex
+	closed       atomic.Bool
+	closeOnce    sync.Once
 }
 
 // QueueOptions holds the configuration options for the message queue.
@@ -48,13 +51,15 @@ func NewMessageQueue(agentID string, opts *QueueOptions) *MessageQueue {
 
 // Enqueue adds a message to the queue.
 func (q *MessageQueue) Enqueue(ctx context.Context, msg *AHPMessage) error {
+	if q.closed.Load() {
+		return errors.ErrQueueClosed
+	}
 	select {
 	case q.messages <- msg:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Queue is full
 		return errors.ErrQueueFull
 	}
 }
@@ -112,7 +117,10 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 //   - (*AHPMessage, nil): successfully peeked message
 //   - (nil, nil): queue is empty
 func (q *MessageQueue) Peek() (*AHPMessage, error) {
-	// First check backup buffer
+	if q.closed.Load() {
+		return nil, errors.ErrQueueClosed
+	}
+
 	q.backupMu.Lock()
 	if len(q.backupBuffer) > 0 {
 		msg := q.backupBuffer[0]
@@ -124,14 +132,12 @@ func (q *MessageQueue) Peek() (*AHPMessage, error) {
 	select {
 	case msg, ok := <-q.messages:
 		if !ok {
-			return nil, nil
+			return nil, errors.ErrQueueClosed
 		}
-		// Try to put the message back immediately
 		select {
 		case q.messages <- msg:
 			return msg, nil
 		default:
-			// Queue is full, store in backup buffer to prevent message loss
 			q.backupMu.Lock()
 			q.backupBuffer = append(q.backupBuffer, msg)
 			q.backupMu.Unlock()
@@ -177,7 +183,10 @@ func (q *MessageQueue) AgentID() string {
 
 // Close closes the queue and drains remaining messages.
 func (q *MessageQueue) Close() {
-	close(q.messages)
+	q.closeOnce.Do(func() {
+		q.closed.Store(true)
+		close(q.messages)
+	})
 }
 
 // QueueRegistry manages multiple message queues for different agents.
