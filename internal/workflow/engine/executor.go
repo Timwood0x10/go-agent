@@ -176,8 +176,28 @@ func (e *Executor) runSteps(
 				continue
 			}
 
-			wg.Wait()
-			continue
+			// Wait for some goroutines to complete, but with timeout to avoid deadlock
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+				// Some goroutines completed, retry
+				continue
+			case <-time.After(5 * time.Second):
+				// Timeout: potential deadlock detected, abort workflow
+				errChan <- fmt.Errorf("workflow deadlock detected: step %s waiting for dependencies that may never complete", stepID)
+				wg.Wait()
+				close(resultChan)
+				return
+			case <-ctx.Done():
+				wg.Wait()
+				close(resultChan)
+				return
+			}
 		}
 
 		sem <- struct{}{}
@@ -306,7 +326,11 @@ func (e *Executor) executeStep(
 
 	startTime := time.Now()
 
-	input := e.resolveInput(step, initialInput, completed)
+	completedCopy := make(map[string]bool)
+	for k, v := range completed {
+		completedCopy[k] = v
+	}
+	input := e.resolveInput(step, initialInput, completedCopy)
 
 	output, err := e.executeWithRetry(ctx, step, input)
 

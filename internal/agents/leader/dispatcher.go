@@ -8,7 +8,6 @@ import (
 
 	apperrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
-	"goagent/internal/errors"
 	"goagent/internal/protocol/ahp"
 
 	"golang.org/x/sync/errgroup"
@@ -93,36 +92,44 @@ func (d *taskDispatcher) Dispatch(ctx context.Context, tasks []*models.Task) ([]
 		return nil, apperrors.ErrInvalidInput
 	}
 
-	// Create errgroup for concurrent task execution
 	g, ctx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, d.maxParallel)
+	var resultsMu sync.Mutex
 
 	results := make([]*models.TaskResult, len(tasks))
 
 	for i, task := range tasks {
-		task := task // capture loop variable
+		task := task
 		g.Go(func() error {
-			// Acquire semaphore with context cancellation support
+			result := models.NewTaskResult(task.TaskID, task.AgentType)
+
 			select {
 			case sem <- struct{}{}:
-				// Acquired
 			case <-ctx.Done():
-				results[i] = models.NewTaskResult(task.TaskID, task.AgentType)
-				results[i].SetError("task cancelled")
+				result.SetError("task cancelled: " + ctx.Err().Error())
+				resultsMu.Lock()
+				results[i] = result
+				resultsMu.Unlock()
 				return ctx.Err()
 			}
 			defer func() { <-sem }()
 
-			// Execute task
-			result := d.executeTask(ctx, task)
-			results[i] = result
+			execResult := d.executeTask(ctx, task)
+			resultsMu.Lock()
+			results[i] = execResult
+			resultsMu.Unlock()
 			return nil
 		})
 	}
 
-	// Wait for all goroutines to complete
 	if err := g.Wait(); err != nil {
-		return results, errors.Wrap(err, "task dispatch failed")
+		for i, r := range results {
+			if r == nil && i < len(tasks) && tasks[i] != nil {
+				results[i] = models.NewTaskResult(tasks[i].TaskID, tasks[i].AgentType)
+				results[i].SetError("task failed: " + err.Error())
+			}
+		}
+		return results, fmt.Errorf("%w: %v", apperrors.ErrDispatchFailed, err)
 	}
 
 	return results, nil
@@ -142,12 +149,15 @@ func (d *taskDispatcher) executeTask(ctx context.Context, task *models.Task) *mo
 
 	// Check if we have a direct executor registered
 	if fn, exists := d.executorFuncs[task.AgentType]; exists {
-		// Call the executor directly
 		slog.Debug("Calling executor", "agent_type", task.AgentType)
 		execResult, err := fn(ctx, task)
 		if err != nil {
 			slog.Error("Executor error", "agent_type", task.AgentType, "error", err)
 			result.SetError(err.Error())
+			return result
+		}
+		if execResult == nil {
+			result.SetError("executor returned nil result")
 			return result
 		}
 		slog.Debug("Executor returned", "agent_type", task.AgentType, "item_count", len(execResult.Items), "success", execResult.Success)

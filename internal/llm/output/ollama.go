@@ -28,6 +28,9 @@ type OllamaAdapter struct {
 
 // NewOllamaAdapter creates a new OllamaAdapter.
 func NewOllamaAdapter(config *Config) *OllamaAdapter {
+	if config == nil {
+		config = &Config{}
+	}
 	if config.BaseURL == "" {
 		config.BaseURL = "http://localhost:11434"
 	}

@@ -22,6 +22,9 @@ type OpenAIAdapter struct {
 
 // NewOpenAIAdapter creates a new OpenAIAdapter.
 func NewOpenAIAdapter(config *Config) *OpenAIAdapter {
+	if config == nil {
+		config = &Config{}
+	}
 	if config.BaseURL == "" {
 		config.BaseURL = "https://api.openai.com/v1"
 	}

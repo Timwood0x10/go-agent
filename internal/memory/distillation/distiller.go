@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,6 +94,22 @@ type DistillationMetrics struct {
 	MemoriesCreated  int64
 }
 
+// atomicMetrics holds atomic counters for metrics.
+type atomicMetrics struct {
+	AttemptTotal     atomic.Int64
+	SuccessTotal     atomic.Int64
+	FilteredNoise    atomic.Int64
+	FilteredSecurity atomic.Int64
+	ConflictResolved atomic.Int64
+	MemoriesCreated  atomic.Int64
+}
+
+// String returns a string representation of the atomic metrics.
+func (a *atomicMetrics) String() string {
+	return fmt.Sprintf("attempts=%d,success=%d,filtered_noise=%d,filtered_security=%d,conflicts_resolved=%d,memories_created=%d",
+		a.AttemptTotal.Load(), a.SuccessTotal.Load(), a.FilteredNoise.Load(), a.FilteredSecurity.Load(), a.ConflictResolved.Load(), a.MemoriesCreated.Load())
+}
+
 // String returns a string representation of the metrics.
 func (m *DistillationMetrics) String() string {
 	return fmt.Sprintf("attempts=%d,success=%d,filtered_noise=%d,filtered_security=%d,conflicts_resolved=%d,memories_created=%d",
@@ -109,7 +126,7 @@ type Distiller struct {
 	noiseFilter *NoiseFilter
 	embedder    embedding.EmbeddingService
 	repo        ExperienceRepository
-	metrics     *DistillationMetrics
+	metrics     atomicMetrics // Thread-safe atomic counters
 }
 
 // NewDistiller creates a new Distiller instance.
@@ -145,7 +162,7 @@ func NewDistiller(config *DistillationConfig, embedder embedding.EmbeddingServic
 		noiseFilter: NewNoiseFilterWithConfig(noiseFilterConfig),
 		embedder:    embedder,
 		repo:        repo,
-		metrics:     &DistillationMetrics{},
+		metrics:     atomicMetrics{},
 	}
 }
 
@@ -173,7 +190,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 		"message_count", len(messages),
 		"timestamp", startTime.Format(time.RFC3339))
 
-	d.metrics.AttemptTotal++
+	d.metrics.AttemptTotal.Add(1)
 
 	if ctx.Err() != nil {
 		slog.ErrorContext(ctx, "❌ [Memory Distillation] Context cancelled",
@@ -190,7 +207,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 		slog.InfoContext(ctx, "⚠️ [Memory Distillation] No experiences extracted from conversation",
 			"conversation_id", conversationID,
 			"reason", "filtered as noise")
-		d.metrics.FilteredNoise++
+		d.metrics.FilteredNoise.Add(1)
 		return []Memory{}, nil
 	}
 	slog.InfoContext(ctx, "✅ [Memory Distillation] Experiences extracted",
@@ -208,7 +225,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 				"conversation_id", conversationID,
 				"experience_index", idx,
 				"reason", "security violation")
-			d.metrics.FilteredSecurity++
+			d.metrics.FilteredSecurity.Add(1)
 			continue
 		}
 
@@ -223,7 +240,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 				"experience_index", idx,
 				"memory_type", memoryType.String(),
 				"reason", "content noise")
-			d.metrics.FilteredNoise++
+			d.metrics.FilteredNoise.Add(1)
 			continue
 		}
 
@@ -244,7 +261,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 				"score", score,
 				"threshold", d.config.MinImportance,
 				"reason", "below importance threshold")
-			d.metrics.FilteredNoise++
+			d.metrics.FilteredNoise.Add(1)
 			continue
 		}
 
@@ -380,7 +397,7 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 				"new_confidence", exp.Confidence,
 				"old_confidence", conflict.Confidence,
 				"conflict_content", truncateString(conflict.Problem, 50))
-			d.metrics.ConflictResolved++
+			d.metrics.ConflictResolved.Add(1)
 		}
 
 		// Keep the memory
@@ -422,9 +439,9 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 
 	}
 
-	d.metrics.SuccessTotal++
+	d.metrics.SuccessTotal.Add(1)
 
-	d.metrics.MemoriesCreated += int64(len(finalMemories))
+	d.metrics.MemoriesCreated.Add(int64(len(finalMemories)))
 
 	slog.InfoContext(ctx, "✅ [Memory Distillation] Distillation completed successfully",
 		"conversation_id", conversationID,
@@ -457,7 +474,7 @@ func (d *Distiller) enforceSolutionCap(ctx context.Context, tenantID string) err
 		return nil
 	}
 
-	solutions, err := d.repo.GetByMemoryType(ctx, tenantID, MemoryInteraction)
+	solutions, err := d.repo.GetByMemoryType(ctx, tenantID, MemoryKnowledge)
 	if err != nil {
 		return errors.Wrap(err, "failed to get solution count")
 	}
@@ -490,16 +507,32 @@ func (d *Distiller) enforceSolutionCap(ctx context.Context, tenantID string) err
 
 // GetMetrics returns the current distillation metrics.
 //
+// Thread-safety: Uses atomic operations to safely read metrics.
+//
 // Returns:
 //
 //	*DistillationMetrics - the metrics.
 func (d *Distiller) GetMetrics() *DistillationMetrics {
-	return d.metrics
+	return &DistillationMetrics{
+		AttemptTotal:     d.metrics.AttemptTotal.Load(),
+		SuccessTotal:     d.metrics.SuccessTotal.Load(),
+		FilteredNoise:    d.metrics.FilteredNoise.Load(),
+		FilteredSecurity: d.metrics.FilteredSecurity.Load(),
+		ConflictResolved: d.metrics.ConflictResolved.Load(),
+		MemoriesCreated:  d.metrics.MemoriesCreated.Load(),
+	}
 }
 
 // ResetMetrics resets the distillation metrics.
+//
+// Thread-safety: Uses atomic operations to safely reset metrics.
 func (d *Distiller) ResetMetrics() {
-	d.metrics = &DistillationMetrics{}
+	d.metrics.AttemptTotal.Store(0)
+	d.metrics.SuccessTotal.Store(0)
+	d.metrics.FilteredNoise.Store(0)
+	d.metrics.FilteredSecurity.Store(0)
+	d.metrics.ConflictResolved.Store(0)
+	d.metrics.MemoriesCreated.Store(0)
 }
 
 // truncateString truncates a string to the specified maximum length.

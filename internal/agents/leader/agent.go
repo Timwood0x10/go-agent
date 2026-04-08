@@ -58,6 +58,11 @@ type leaderAgent struct {
 	heartbeatMon  *ahp.HeartbeatMonitor
 	memoryManager memory.MemoryManager
 	sessionID     string
+
+	// Lifecycle management
+	stopCh      chan struct{}  // Channel to signal shutdown
+	distillWg   sync.WaitGroup // WaitGroup for distillation goroutines
+	cleanupOnce sync.Once      // Ensure cleanup runs only once
 }
 
 // LeaderAgentConfig holds configuration for LeaderAgent.
@@ -156,6 +161,9 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 		return coreerrors.ErrResultAggNotInitialized
 	}
 
+	// Initialize lifecycle channels
+	a.stopCh = make(chan struct{})
+
 	// Initialize heartbeat monitor if provided
 	if a.heartbeatMon != nil {
 		// Start heartbeat monitoring for this agent
@@ -183,11 +191,31 @@ func (a *leaderAgent) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the leader agent.
+// Stop stops the leader agent and cleans up resources.
 func (a *leaderAgent) Stop(ctx context.Context) error {
 	if a.Status() == models.AgentStatusOffline {
 		return coreerrors.ErrAgentNotRunning
 	}
+
+	a.cleanupOnce.Do(func() {
+		// Signal all goroutines to stop
+		close(a.stopCh)
+
+		// Wait for distillation goroutines to complete
+		a.distillWg.Wait()
+
+		// Note: MessageQueue does not have a Drain method. Messages in the queue
+		// will be naturally drained by consumers or discarded when the queue is closed.
+		// If needed, consumers should handle remaining messages before stopping.
+
+		// Cleanup heartbeat monitor if provided
+		if a.heartbeatMon != nil {
+			// Remove agent from heartbeat monitoring
+			a.heartbeatMon.RemoveAgent(a.id)
+		}
+
+		slog.Info("Leader agent stopped successfully", "agent_id", a.id)
+	})
 
 	a.setStatus(models.AgentStatusStopping)
 	a.setStatus(models.AgentStatusOffline)
@@ -244,13 +272,19 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 
 		// Add user input to memory
 		if err := a.memoryManager.AddMessage(ctx, sessionID, "user", strInput); err != nil {
-			slog.Warn("Failed to add user message to memory", "error", err)
+			slog.Warn("Failed to add user message to memory - proceeding without history logging",
+				"error", err,
+				"session_id", sessionID,
+				"impact", "message will not be available in conversation history")
 		}
 
 		// Build input with context
 		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, sessionID)
 		if err != nil {
-			slog.Warn("Failed to build context, using raw input", "error", err)
+			slog.Warn("Failed to build context - proceeding without conversation history",
+				"error", err,
+				"session_id", sessionID,
+				"impact", "agent will not have previous context")
 		} else {
 			strInput = inputWithContext
 		}
@@ -258,7 +292,9 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		// Search similar tasks for context
 		similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, strInput, 3)
 		if err != nil {
-			slog.Warn("Failed to search similar tasks", "error", err)
+			slog.Warn("Failed to search similar tasks - proceeding without task context",
+				"error", err,
+				"impact", "agent will not have similar task examples")
 		} else if len(similarTasks) > 0 {
 			slog.Debug("Found similar tasks", "count", len(similarTasks))
 			contextStr := "\n\nSimilar previous tasks:\n"
@@ -277,7 +313,10 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		var err error
 		taskID, err = a.memoryManager.CreateTask(ctx, sessionID, "default_user", strInput)
 		if err != nil {
-			slog.Warn("Failed to create task", "error", err)
+			slog.Warn("Failed to create task - proceeding without task tracking",
+				"error", err,
+				"session_id", sessionID,
+				"impact", "task will not be tracked for distillation")
 		}
 	}
 
@@ -335,12 +374,18 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if a.memoryManager != nil && taskID != "" {
 		resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
 		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
-			slog.Warn("Failed to update task output", "error", err)
+			slog.Warn("Failed to update task output - proceeding without output tracking",
+				"error", err,
+				"task_id", taskID,
+				"impact", "task output will not be available for analysis")
 		}
 
 		// Add assistant response to memory
 		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "assistant", resultStr); err != nil {
-			slog.Warn("Failed to add assistant message to memory", "error", err)
+			slog.Warn("Failed to add assistant message to memory - proceeding without history logging",
+				"error", err,
+				"session_id", a.sessionID,
+				"impact", "response will not be available in conversation history")
 		}
 
 		// Async distillation with timeout context derived from request context.
@@ -359,10 +404,21 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			return a.memoryManager.StoreDistilledTask(distillCtx, taskID, distilled)
 		})
 
-		// Fire and forget with proper errgroup management
+		// Run distillation in background goroutine with proper lifecycle management
+		a.distillWg.Add(1)
 		go func() {
+			defer a.distillWg.Done()
+
+			// Check if agent is stopped before starting
+			select {
+			case <-a.stopCh:
+				slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
+				return
+			default:
+			}
+
 			if err := g.Wait(); err != nil {
-				slog.Error("Error in async distillation", "error", err)
+				slog.Error("Error in async distillation", "error", err, "task_id", taskID)
 			}
 		}()
 	}

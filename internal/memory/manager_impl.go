@@ -296,7 +296,11 @@ func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
-	inputStr, _ := task.Payload["input"].(string)
+	inputStr, ok := task.Payload["input"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
+		inputStr = ""
+	}
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
 		"task_id", taskID,
 		"input_length", len(inputStr))
@@ -317,7 +321,11 @@ func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
-	inputStr, _ := task.Payload["input"].(string)
+	inputStr, ok := task.Payload["input"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
+		inputStr = ""
+	}
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
 		"task_id", taskID,
 		"input_length", len(inputStr))
@@ -363,7 +371,11 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 		"vector_dimension", len(vector))
 
 	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
-	contextMap, _ := distilled.Payload["context"].(map[string]interface{})
+	contextMap, ok := distilled.Payload["context"].(map[string]interface{})
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task context is not a map", "task_id", taskID)
+		contextMap = nil
+	}
 	data := &DistilledTaskData{
 		TaskID:    taskID,
 		Input:     inputStr,
@@ -372,6 +384,9 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 		Vector:    vector,
 		CreatedAt: time.Now(),
 	}
+
+	// Evict oldest tasks if limit exceeded (LRU eviction)
+	m.evictOldestDistilledTask()
 
 	m.distilledTasks[taskID] = data
 
@@ -407,9 +422,14 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	}
 
 	// Extract metadata
-	userID, _ := distilled.Payload["user_id"].(string)
-	tenantID, _ := distilled.Payload["tenant_id"].(string)
-	if tenantID == "" {
+	userID, ok := distilled.Payload["user_id"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task user_id is not a string", "task_id", taskID)
+		userID = ""
+	}
+	tenantID, ok := distilled.Payload["tenant_id"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task tenant_id is not a string", "task_id", taskID)
 		tenantID = "default"
 	}
 
@@ -424,10 +444,26 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	// Store memories in experience repository
 	for _, mem := range memories {
 		// Convert distillation.Memory to distillation.Experience
-		problem, _ := mem.Metadata["problem"].(string)
-		solution, _ := mem.Metadata["solution"].(string)
-		confidence, _ := mem.Metadata["confidence"].(float64)
-		extractionMethodStr, _ := mem.Metadata["extraction_method"].(string)
+		problem, ok := mem.Metadata["problem"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory problem is not a string", "task_id", taskID)
+			problem = ""
+		}
+		solution, ok := mem.Metadata["solution"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory solution is not a string", "task_id", taskID)
+			solution = ""
+		}
+		confidence, ok := mem.Metadata["confidence"].(float64)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory confidence is not a float64", "task_id", taskID)
+			confidence = 0.0
+		}
+		extractionMethodStr, ok := mem.Metadata["extraction_method"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory extraction_method is not a string", "task_id", taskID)
+			extractionMethodStr = "unknown"
+		}
 
 		// Default extraction method if not set
 		if extractionMethodStr == "" {
@@ -462,6 +498,35 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 		"metrics_total", metrics.SuccessTotal)
 
 	return nil
+}
+
+// evictOldestDistilledTask removes the oldest distilled task when limit is reached.
+// This implements LRU (Least Recently Used) eviction policy for distilled tasks.
+// MUST be called while holding m.mu lock.
+func (m *memoryManager) evictOldestDistilledTask() {
+	if m.config.MaxDistilledTasks <= 0 {
+		return
+	}
+
+	if len(m.distilledTasks) <= m.config.MaxDistilledTasks {
+		return
+	}
+
+	// Find the oldest task
+	var oldestID string
+	var oldestTime time.Time
+	for id, data := range m.distilledTasks {
+		if oldestID == "" || data.CreatedAt.Before(oldestTime) {
+			oldestID = id
+			oldestTime = data.CreatedAt
+		}
+	}
+
+	// Delete the oldest task
+	if oldestID != "" {
+		delete(m.distilledTasks, oldestID)
+		slog.Debug("Evicted oldest distilled task", "task_id", oldestID, "total_tasks", len(m.distilledTasks))
+	}
 }
 
 // generateHashVector generates a simple hash-based vector from text.
@@ -675,10 +740,17 @@ func (m *memoryManager) cosineSimilarity(v1, v2 []float64) float64 {
 	return dotProduct / math.Sqrt(norm1*norm2)
 }
 
-// truncate truncates a string to the maximum length and adds "..." if truncated.
+// truncate truncates a string to the maximum length (in runes) and adds "..." if truncated.
+// This correctly handles multi-byte UTF-8 characters by using runes instead of bytes.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+
+	return string(runes[:maxLen]) + "..."
 }

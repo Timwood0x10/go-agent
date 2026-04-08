@@ -67,6 +67,9 @@ func (c *JSONCodec) DecodeMultiple(data []byte) ([]*AHPMessage, error) {
 }
 
 // MustEncode encodes a message and panics on error.
+//
+// DEPRECATED: This method is only for use in test code where failure is fatal.
+// Do not use in production code. Use Encode instead and handle the error properly.
 func (c *JSONCodec) MustEncode(msg *AHPMessage) []byte {
 	data, err := c.Encode(msg)
 	if err != nil {
@@ -76,6 +79,9 @@ func (c *JSONCodec) MustEncode(msg *AHPMessage) []byte {
 }
 
 // MustDecode decodes data and panics on error.
+//
+// DEPRECATED: This method is only for use in test code where failure is fatal.
+// Do not use in production code. Use Decode instead and handle the error properly.
 func (c *JSONCodec) MustDecode(data []byte) *AHPMessage {
 	msg, err := c.Decode(data)
 	if err != nil {

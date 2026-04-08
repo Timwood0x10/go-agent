@@ -323,6 +323,7 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 	}()
 
 	results := make([]*storage_models.TaskResult, 0)
+	skippedCount := 0
 	for rows.Next() {
 		result := &storage_models.TaskResult{}
 		var inputJSON, outputJSON []byte
@@ -336,23 +337,31 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 			&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt, &similarity,
 		)
 		if err != nil {
+			slog.Error("Failed to scan task result row", "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse embedding string to float64 array
 		result.Embedding, err = parseVectorString(embeddingStr)
 		if err != nil {
+			slog.Error("Failed to parse embedding vector", "task_id", result.ID, "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse input JSON
 		if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
+			slog.Error("Failed to parse input JSON", "task_id", result.ID, "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse output JSON
 		if outputJSON != nil {
 			if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
+				slog.Error("Failed to parse output JSON", "task_id", result.ID, "error", err)
+				skippedCount++
 				continue
 			}
 		}
@@ -374,6 +383,10 @@ func (r *TaskResultRepository) SearchByVector(ctx context.Context, embedding []f
 		// where cosine_distance range is [0,2], so similarity range is [-1,1]
 		result.Metadata["similarity"] = similarity
 		results = append(results, result)
+	}
+
+	if skippedCount > 0 {
+		slog.Warn("Skipped task results due to errors", "skipped_count", skippedCount, "total_count", len(results)+skippedCount)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -412,6 +425,7 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 	}()
 
 	results := make([]*storage_models.TaskResult, 0)
+	skippedCount := 0
 	for rows.Next() {
 		result := &storage_models.TaskResult{}
 		var inputJSON, outputJSON []byte
@@ -424,23 +438,31 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 			&result.Error, &result.LatencyMs, &metadataStr, &result.CreatedAt,
 		)
 		if err != nil {
+			slog.Error("Failed to scan task result row", "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse embedding string to float64 array
 		result.Embedding, err = parseVectorString(embeddingStr)
 		if err != nil {
+			slog.Error("Failed to parse embedding vector", "task_id", result.ID, "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse input JSON
 		if err := json.Unmarshal(inputJSON, &result.Input); err != nil {
+			slog.Error("Failed to parse input JSON", "task_id", result.ID, "error", err)
+			skippedCount++
 			continue
 		}
 
 		// Parse output JSON
 		if outputJSON != nil {
 			if err := json.Unmarshal(outputJSON, &result.Output); err != nil {
+				slog.Error("Failed to parse output JSON", "task_id", result.ID, "error", err)
+				skippedCount++
 				continue
 			}
 		}
@@ -455,6 +477,10 @@ func (r *TaskResultRepository) ListByType(ctx context.Context, taskType, tenantI
 		}
 
 		results = append(results, result)
+	}
+
+	if skippedCount > 0 {
+		slog.Warn("Skipped task results due to errors", "skipped_count", skippedCount, "total_count", len(results)+skippedCount)
 	}
 
 	if err := rows.Err(); err != nil {

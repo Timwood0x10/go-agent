@@ -28,7 +28,7 @@ type QueryCache struct {
 	redis   RedisClient
 	memory  *MemoryQueryCache
 	ttl     time.Duration
-	enabled bool
+	enabled atomic.Bool
 	stats   *CacheStats
 }
 
@@ -52,18 +52,19 @@ type SearchRequest struct {
 // NewQueryCache creates a new query cache.
 // redisClient is optional. If nil, it will use in-memory cache only.
 func NewQueryCache(redisClient RedisClient, ttl time.Duration) *QueryCache {
-	return &QueryCache{
-		redis:   redisClient,
-		memory:  NewMemoryQueryCache(),
-		ttl:     ttl,
-		enabled: true,
-		stats:   &CacheStats{},
+	c := &QueryCache{
+		redis:  redisClient,
+		memory: NewMemoryQueryCache(),
+		ttl:    ttl,
+		stats:  &CacheStats{},
 	}
+	c.enabled.Store(true)
+	return c
 }
 
 // Get retrieves cached search results.
 func (c *QueryCache) Get(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil, ErrQueryNotFound
 	}
 
@@ -96,7 +97,7 @@ func (c *QueryCache) Get(ctx context.Context, req *SearchRequest) ([]*SearchResu
 
 // Set stores search results in cache.
 func (c *QueryCache) Set(ctx context.Context, req *SearchRequest, results []*SearchResult) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -126,7 +127,7 @@ func (c *QueryCache) Set(ctx context.Context, req *SearchRequest, results []*Sea
 
 // Delete removes a query result from cache.
 func (c *QueryCache) Delete(ctx context.Context, req *SearchRequest) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -147,7 +148,7 @@ func (c *QueryCache) Delete(ctx context.Context, req *SearchRequest) error {
 
 // Clear removes all query results from cache.
 func (c *QueryCache) Clear(ctx context.Context) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -177,17 +178,17 @@ func (c *QueryCache) GetStats() *CacheStats {
 
 // Enable enables the cache.
 func (c *QueryCache) Enable() {
-	c.enabled = true
+	c.enabled.Store(true)
 }
 
 // Disable disables the cache.
 func (c *QueryCache) Disable() {
-	c.enabled = false
+	c.enabled.Store(false)
 }
 
 // IsEnabled returns whether the cache is enabled.
 func (c *QueryCache) IsEnabled() bool {
-	return c.enabled
+	return c.enabled.Load()
 }
 
 // getCacheKey generates a cache key for the search request using BLAKE2b hash.

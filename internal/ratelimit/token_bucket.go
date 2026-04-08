@@ -47,17 +47,20 @@ func (l *TokenBucketLimiter) Allow(ctx context.Context) (bool, error) {
 // Wait blocks until a request can be processed.
 func (l *TokenBucketLimiter) Wait(ctx context.Context) error {
 	for {
-		allowed, err := l.Allow(ctx)
-		if err != nil {
-			return err
-		}
+		l.mu.Lock()
+		l.refill()
 
-		if allowed {
+		if l.tokens >= 1 {
+			l.tokens--
+			l.mu.Unlock()
+
 			return nil
 		}
 
-		// Wait for token to become available
-		waitTime := time.Duration(float64(time.Second) / l.rate)
+		rate := l.rate
+		l.mu.Unlock()
+
+		waitTime := time.Duration(float64(time.Second) / rate)
 
 		select {
 		case <-ctx.Done():

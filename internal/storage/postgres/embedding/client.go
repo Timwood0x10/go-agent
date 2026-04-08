@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -33,7 +34,7 @@ type EmbeddingClient struct {
 
 	cacheTTL time.Duration
 
-	enabled bool
+	enabled atomic.Bool
 }
 
 // GetModel returns the embedding model name.
@@ -51,8 +52,7 @@ func (c *EmbeddingClient) GetTimeout() time.Duration {
 // redisClient is optional. If nil, the client will work without Redis.
 
 func NewEmbeddingClient(baseURL, model string, redisClient RedisClient, timeout time.Duration) *EmbeddingClient {
-
-	return &EmbeddingClient{
+	c := &EmbeddingClient{
 
 		httpClient: &http.Client{
 
@@ -77,10 +77,9 @@ func NewEmbeddingClient(baseURL, model string, redisClient RedisClient, timeout 
 		timeout: timeout,
 
 		cacheTTL: 24 * time.Hour,
-
-		enabled: true,
 	}
-
+	c.enabled.Store(true)
+	return c
 }
 
 // Embed generates vector embedding for a query text (uses "query" prefix).
@@ -101,7 +100,7 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float64, er
 // prefix - prefix to add before text (e.g., "query:", "passage:").
 // Returns embedding vector or error.
 func (c *EmbeddingClient) EmbedWithPrefix(ctx context.Context, text, prefix string) ([]float64, error) {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil, fmt.Errorf("embedding client is disabled")
 	}
 
@@ -140,7 +139,7 @@ func (c *EmbeddingClient) EmbedWithPrefix(ctx context.Context, text, prefix stri
 
 // EmbedBatch generates vector embeddings for multiple texts.
 func (c *EmbeddingClient) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil, fmt.Errorf("embedding client is disabled")
 	}
 
@@ -339,7 +338,7 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 
 // HealthCheck checks if the embedding service is healthy.
 func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return fmt.Errorf("embedding client is disabled")
 	}
 
@@ -368,15 +367,15 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 
 // Enable enables the embedding client.
 func (c *EmbeddingClient) Enable() {
-	c.enabled = true
+	c.enabled.Store(true)
 }
 
 // Disable disables the embedding client.
 func (c *EmbeddingClient) Disable() {
-	c.enabled = false
+	c.enabled.Store(false)
 }
 
 // IsEnabled returns whether the embedding client is enabled.
 func (c *EmbeddingClient) IsEnabled() bool {
-	return c.enabled
+	return c.enabled.Load()
 }

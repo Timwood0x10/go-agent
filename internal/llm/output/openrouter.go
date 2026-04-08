@@ -21,6 +21,9 @@ type OpenRouterAdapter struct {
 
 // NewOpenRouterAdapter creates a new OpenRouterAdapter.
 func NewOpenRouterAdapter(config *Config) *OpenRouterAdapter {
+	if config == nil {
+		config = &Config{}
+	}
 	if config.BaseURL == "" {
 		config.BaseURL = "https://openrouter.ai/api/v1"
 	}

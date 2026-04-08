@@ -4,6 +4,7 @@ package postgres
 import (
 	"goagent/internal/core/errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,6 +28,7 @@ type CircuitBreaker struct {
 	lastFailureTime  time.Time
 	openTimeout      time.Duration
 	halfOpenSuccess  int
+	halfOpenInflight atomic.Int32
 }
 
 // NewCircuitBreaker creates a new CircuitBreaker instance.
@@ -63,12 +65,10 @@ func (cb *CircuitBreaker) AllowRequest() error {
 		return errors.ErrCircuitBreakerOpen
 
 	case CircuitBreakerStateHalfOpen:
-		// In half-open state, check if we've had enough successful calls to close the circuit
-		if cb.halfOpenSuccess >= cb.successThreshold {
-			// Circuit recovered, close it
-			cb.state = CircuitBreakerStateClosed
-			cb.failureCount = 0
-			cb.halfOpenSuccess = 0
+		inflight := cb.halfOpenInflight.Add(1)
+		if inflight > 1 {
+			cb.halfOpenInflight.Add(-1)
+			return errors.ErrCircuitBreakerOpen
 		}
 		return nil
 
@@ -78,28 +78,38 @@ func (cb *CircuitBreaker) AllowRequest() error {
 }
 
 // RecordSuccess records a successful operation.
-// This is called after a request completes successfully.
 func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	if cb.state == CircuitBreakerStateHalfOpen {
 		cb.halfOpenSuccess++
+		cb.halfOpenInflight.Add(-1)
+		if cb.halfOpenSuccess >= cb.successThreshold {
+			cb.state = CircuitBreakerStateClosed
+			cb.failureCount = 0
+			cb.halfOpenSuccess = 0
+		}
 	}
 
 	cb.failureCount = 0
 }
 
 // RecordFailure records a failed operation.
-// This is called when a request fails and may trigger circuit opening.
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	if cb.state == CircuitBreakerStateHalfOpen {
+		cb.halfOpenInflight.Add(-1)
+		cb.state = CircuitBreakerStateOpen
+		cb.lastFailureTime = time.Now()
+		return
+	}
+
 	cb.failureCount++
 	cb.lastFailureTime = time.Now()
 
-	// Open circuit if failure threshold reached
 	if cb.failureCount >= cb.failureThreshold {
 		cb.state = CircuitBreakerStateOpen
 	}
@@ -114,7 +124,6 @@ func (cb *CircuitBreaker) State() CircuitBreakerState {
 }
 
 // Reset resets the circuit breaker to closed state.
-// This is primarily used for testing purposes.
 func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -123,4 +132,5 @@ func (cb *CircuitBreaker) Reset() {
 	cb.failureCount = 0
 	cb.lastFailureTime = time.Time{}
 	cb.halfOpenSuccess = 0
+	cb.halfOpenInflight.Store(0)
 }

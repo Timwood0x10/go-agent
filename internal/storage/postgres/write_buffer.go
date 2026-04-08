@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	coreerrors "goagent/internal/core/errors"
@@ -25,7 +26,8 @@ type WriteBuffer struct {
 	embeddingConfig *EmbeddingConfig
 	mu              sync.Mutex
 	wg              sync.WaitGroup
-	stopped         bool
+	stopped         atomic.Bool
+	closeOnce       sync.Once // Ensure channel is closed only once
 }
 
 // WriteItem represents a single write operation to be batched.
@@ -55,20 +57,44 @@ func NewWriteBuffer(pool *Pool, queue *EmbeddingQueue, batchSize int, flushInter
 		flushInterval:   flushInterval,
 		queue:           queue,
 		embeddingConfig: embeddingConfig,
-		stopped:         false,
 	}
 }
 
-// Start begins the buffer processing loop.
-// This should be called after initialization and runs until Stop is called.
+// Start begins the buffer processing loop in a background goroutine.
+// This method returns immediately after starting the goroutine.
+// The processing loop runs until Stop is called.
+//
 // Args:
-// ctx - context for cancellation.
-// Returns error if processing loop encounters unrecoverable error.
+// ctx - context for cancellation and graceful shutdown.
+// Returns error if the goroutine fails to start.
 func (b *WriteBuffer) Start(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.stopped.Load() {
+		return errors.New("write buffer already stopped")
+	}
+
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		if err := b.processLoop(ctx); err != nil {
+			slog.Error("Write buffer processing loop failed", "error", err)
+		}
+	}()
+
+	return nil
+}
+
+// processLoop runs the buffer processing loop.
+// This method blocks until ctx is cancelled or an error occurs.
+func (b *WriteBuffer) processLoop(ctx context.Context) error {
 	ticker := time.NewTicker(b.flushInterval)
 	defer ticker.Stop()
 
 	batch := make([]*WriteItem, 0, b.batchSize)
+	retryCount := 0
+	const maxRetries = 3
 
 	for {
 		select {
@@ -80,30 +106,54 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 				err := b.flushBatch(flushCtx, batch)
 				cancel()
 				if err != nil {
+					slog.Error("Failed to flush final batch", "error", err)
 					return errors.Wrap(err, "flush final batch")
 				}
 			}
 			return nil
 
-		case item := <-b.buffer:
+		case item, ok := <-b.buffer:
+			if !ok {
+				// Channel closed, exit gracefully
+				return nil
+			}
 			if item == nil {
 				return nil
 			}
 			batch = append(batch, item)
 			if len(batch) >= b.batchSize {
 				if err := b.flushBatch(ctx, batch); err != nil {
+					slog.Error("Failed to flush batch", "error", err, "batch_size", len(batch))
+					retryCount++
+					if retryCount < maxRetries {
+						slog.Warn("Retrying batch flush", "retry_count", retryCount)
+						continue
+					}
+					slog.Error("Max retries reached, keeping batch in buffer", "batch_size", len(batch))
+					// Keep batch in buffer and reset retry count for next attempt
+					retryCount = 0
 					continue
 				}
 				batch = batch[:0]
+				retryCount = 0
 			}
 
 		case <-ticker.C:
 			if len(batch) > 0 {
 				if err := b.flushBatch(ctx, batch); err != nil {
-					// Log error but continue processing
+					slog.Error("Failed to flush batch on timer", "error", err, "batch_size", len(batch))
+					retryCount++
+					if retryCount < maxRetries {
+						slog.Warn("Retrying batch flush on timer", "retry_count", retryCount)
+						continue
+					}
+					slog.Error("Max retries reached, keeping batch in buffer", "batch_size", len(batch))
+					// Keep batch in buffer and reset retry count for next attempt
+					retryCount = 0
 					continue
 				}
 				batch = batch[:0]
+				retryCount = 0
 			}
 		}
 	}
@@ -112,17 +162,26 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 // Write queues a write operation for batch processing.
 // This is non-blocking and returns immediately if the buffer has capacity.
 // If the buffer is full, it returns an error instead of spawning a goroutine.
+//
+// Thread-safety: Uses mutex to protect channel send operation, preventing
+// TOCTOU (Time-Of-Check-Time-Of-Use) race condition where the channel
+// could be closed between the stopped check and the send operation.
+//
 // Args:
 // ctx - context for cancellation.
 // item - write operation to queue.
 // Returns error if buffer is stopped, item is invalid, or buffer is full.
 func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
-	if b.stopped {
-		return coreerrors.ErrServiceUnavailable
-	}
-
 	if item == nil {
 		return coreerrors.ErrInvalidArgument
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Check stopped flag under lock to prevent race condition
+	if b.stopped.Load() {
+		return coreerrors.ErrServiceUnavailable
 	}
 
 	select {
@@ -199,13 +258,8 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 		}
 	}
 
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "commit transaction")
-	}
-	committed = true
-
-	// Enqueue embedding tasks
+	// Enqueue embedding tasks BEFORE committing transaction
+	// This ensures data consistency: if enqueue fails, transaction is rolled back
 	for _, item := range batch {
 		task := &EmbeddingTask{
 			TaskID:   "", // Will be generated by the queue
@@ -216,28 +270,49 @@ func (b *WriteBuffer) flushBatch(ctx context.Context, batch []*WriteItem) error 
 			Version:  b.embeddingConfig.DefaultVersion,
 		}
 		if err := b.queue.Enqueue(ctx, task); err != nil {
-			// Log error but don't fail the batch write
-			continue
+			slog.Error("Failed to enqueue embedding task, rolling back transaction", "table", item.Table, "error", err)
+			return errors.Wrapf(err, "enqueue embedding task for table %s", item.Table)
 		}
 	}
+
+	// Commit transaction only after all embedding tasks are enqueued successfully
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+	committed = true
 
 	return nil
 }
 
 // Stop gracefully shuts down the buffer and flushes remaining items.
 // This should be called during application shutdown.
+//
+// Thread-safety: Uses sync.Once to ensure the channel is closed only once,
+// preventing panic from concurrent close operations. The stopped flag is
+// checked atomically to avoid unnecessary mutex contention.
+//
 // Args:
 // ctx - context for cancellation.
+// Returns error if stopping fails.
 func (b *WriteBuffer) Stop(ctx context.Context) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.stopped {
+	// Check stopped flag atomically first to avoid mutex contention
+	if b.stopped.Load() {
 		return nil
 	}
 
-	b.stopped = true
-	close(b.buffer)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Double-check stopped flag under lock
+	if b.stopped.Load() {
+		return nil
+	}
+
+	// Use sync.Once to ensure channel is closed only once
+	b.closeOnce.Do(func() {
+		b.stopped.Store(true)
+		close(b.buffer)
+	})
 
 	// Wait for any ongoing processing to complete
 	b.wg.Wait()

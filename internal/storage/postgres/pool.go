@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"runtime"
 	"sync"
 	"time"
 
@@ -181,11 +182,21 @@ func (p *Pool) Query(ctx context.Context, query string, args ...any) (*ManagedRo
 		return nil, err
 	}
 
-	return &ManagedRows{
+	mr := &ManagedRows{
 		Rows: rows,
 		conn: conn,
 		pool: p,
-	}, nil
+	}
+	// Set finalizer to release connection if caller forgets to call Close()
+	runtime.SetFinalizer(mr, func(m *ManagedRows) {
+		if m.conn != nil {
+			slog.Warn("ManagedRows garbage collected without Close() being called, releasing connection")
+			m.pool.Release(m.conn)
+			m.conn = nil
+		}
+	})
+
+	return mr, nil
 }
 
 // ManagedRows wraps sql.Rows and manages connection lifecycle.
@@ -200,6 +211,7 @@ func (m *ManagedRows) Close() error {
 	if m.conn != nil {
 		m.pool.Release(m.conn)
 		m.conn = nil
+		runtime.SetFinalizer(m, nil)
 	}
 	return m.Rows.Close()
 }

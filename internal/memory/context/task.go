@@ -10,10 +10,13 @@ import (
 
 // TaskMemory stores task-specific context and distillation.
 type TaskMemory struct {
-	tasks   map[string]*TaskData
-	mu      sync.RWMutex
-	maxSize int
-	ttl     time.Duration
+	tasks          map[string]*TaskData
+	mu             sync.RWMutex
+	maxSize        int
+	ttl            time.Duration
+	cleanupStopCh  chan struct{}
+	cleanupOnce    sync.Once
+	cleanupRunning bool
 }
 
 // TaskData holds task information.
@@ -52,9 +55,72 @@ type ResultRecord struct {
 // NewTaskMemory creates a new TaskMemory.
 func NewTaskMemory(maxSize int, ttl time.Duration) *TaskMemory {
 	return &TaskMemory{
-		tasks:   make(map[string]*TaskData),
-		maxSize: maxSize,
-		ttl:     ttl,
+		tasks:         make(map[string]*TaskData),
+		maxSize:       maxSize,
+		ttl:           ttl,
+		cleanupStopCh: make(chan struct{}),
+	}
+}
+
+// Start starts the background cleanup goroutine.
+// This should be called after creating TaskMemory to enable automatic TTL cleanup.
+func (m *TaskMemory) Start(ctx context.Context) {
+	m.mu.Lock()
+	if m.cleanupRunning {
+		m.mu.Unlock()
+		return
+	}
+	m.cleanupRunning = true
+	m.mu.Unlock()
+
+	go m.cleanupLoop(ctx)
+}
+
+// Stop stops the background cleanup goroutine.
+// This should be called during application shutdown.
+func (m *TaskMemory) Stop() {
+	m.cleanupOnce.Do(func() {
+		close(m.cleanupStopCh)
+	})
+}
+
+// cleanupLoop runs periodic cleanup of expired tasks.
+func (m *TaskMemory) cleanupLoop(ctx context.Context) {
+	// Run cleanup every 5 minutes
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// Run initial cleanup
+	m.cleanupExpired()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-m.cleanupStopCh:
+			return
+		case <-ticker.C:
+			m.cleanupExpired()
+		}
+	}
+}
+
+// cleanupExpired removes expired tasks based on TTL.
+func (m *TaskMemory) cleanupExpired() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	expiredIDs := make([]string, 0)
+
+	for id, task := range m.tasks {
+		if now.Sub(task.AccessedAt) > m.ttl {
+			expiredIDs = append(expiredIDs, id)
+		}
+	}
+
+	for _, id := range expiredIDs {
+		delete(m.tasks, id)
 	}
 }
 
@@ -69,6 +135,7 @@ func (m *TaskMemory) Get(ctx context.Context, taskID string) (*TaskData, bool) {
 	}
 
 	if time.Since(task.AccessedAt) > m.ttl {
+		delete(m.tasks, taskID)
 		return nil, false
 	}
 

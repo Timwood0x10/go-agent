@@ -67,7 +67,6 @@ func (q *MessageQueue) Enqueue(ctx context.Context, msg *AHPMessage) error {
 // Dequeue removes and returns a message from the queue.
 // Messages in the backup buffer are prioritized over the main queue.
 func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
-	// First check backup buffer for any messages that couldn't be put back
 	q.backupMu.Lock()
 	if len(q.backupBuffer) > 0 {
 		msg := q.backupBuffer[0]
@@ -78,7 +77,10 @@ func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
 	q.backupMu.Unlock()
 
 	select {
-	case msg := <-q.messages:
+	case msg, ok := <-q.messages:
+		if !ok {
+			return nil, errors.ErrQueueClosed
+		}
 		return msg, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -88,7 +90,6 @@ func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
 // DequeueWithTimeout removes and returns a message with timeout.
 // Messages in the backup buffer are prioritized over the main queue.
 func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, error) {
-	// First check backup buffer for any messages that couldn't be put back
 	q.backupMu.Lock()
 	if len(q.backupBuffer) > 0 {
 		msg := q.backupBuffer[0]
@@ -99,7 +100,10 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 	q.backupMu.Unlock()
 
 	select {
-	case msg := <-q.messages:
+	case msg, ok := <-q.messages:
+		if !ok {
+			return nil, errors.ErrQueueClosed
+		}
 		return msg, nil
 	case <-time.After(timeout):
 		return nil, errors.ErrQueueEmpty

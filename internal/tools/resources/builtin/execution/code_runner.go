@@ -150,15 +150,9 @@ func (t *CodeRunner) Execute(ctx context.Context, params map[string]interface{})
 }
 
 // validateCode checks code for potential security issues.
-// Note: This is a basic validation layer. For production use, consider:
-// 1. Using a proper sandbox (Docker, gVisor, etc.)
-// 2. AST-based code analysis
-// 3. Resource limits (CPU, memory, time)
 func (t *CodeRunner) validateCode(code string) error {
-	// Convert to lowercase for checking
 	lowerCode := strings.ToLower(code)
 
-	// Check for dangerous patterns - direct imports and calls
 	dangerousPatterns := []string{
 		"import os",
 		"import subprocess",
@@ -188,6 +182,14 @@ func (t *CodeRunner) validateCode(code string) error {
 		"vars(",
 		"compile(",
 		"breakpoint(",
+		"from os ",
+		"from sys ",
+		"from subprocess ",
+		"from shutil ",
+		"from socket ",
+		"from importlib ",
+		"importlib.import_module",
+		"importlib.reload",
 	}
 
 	for _, pattern := range dangerousPatterns {
@@ -196,22 +198,38 @@ func (t *CodeRunner) validateCode(code string) error {
 		}
 	}
 
-	// Check for obfuscation attempts
+	if strings.Contains(lowerCode, "from ") && strings.Contains(lowerCode, " import ") {
+		return fmt.Errorf("potentially dangerous 'from X import' pattern detected")
+	}
+
+	if strings.Contains(lowerCode, "\"\"\"") || strings.Contains(lowerCode, "'''") {
+		if strings.Contains(code, "\"\"\"") && (strings.Contains(code, "os") || strings.Contains(code, "subprocess")) {
+			return fmt.Errorf("potentially dangerous pattern in multiline string")
+		}
+		if strings.Contains(code, "'''") && (strings.Contains(code, "os") || strings.Contains(code, "subprocess")) {
+			return fmt.Errorf("potentially dangerous pattern in multiline string")
+		}
+	}
+
 	obfuscationPatterns := []string{
 		"__imp",
 		"chr(",
 		"ord(",
 		"\\x",
-		"getattr",
-		"importlib",
 		"import_module",
-		"from import",
+		"getattr",
+		"base64.",
 	}
 
 	for _, pattern := range obfuscationPatterns {
 		if strings.Contains(lowerCode, pattern) {
 			return fmt.Errorf("potential code obfuscation detected: %s", pattern)
 		}
+	}
+
+	normalized := strings.Join(strings.Fields(code), " ")
+	if normalized != code && strings.Contains(normalized, "import") {
+		return fmt.Errorf("potential whitespace obfuscation detected")
 	}
 
 	return nil

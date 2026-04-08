@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
 )
 
@@ -130,6 +131,8 @@ type HeartbeatSender struct {
 	wg        sync.WaitGroup
 	stopOnce  sync.Once
 	startOnce sync.Once
+	started   bool
+	mu        sync.Mutex
 }
 
 // NewHeartbeatSender creates a new HeartbeatSender.
@@ -137,18 +140,32 @@ func NewHeartbeatSender(agentID string, interval time.Duration, queue *MessageQu
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
+	noOpCancel := func() {}
 	return &HeartbeatSender{
 		agentID:  agentID,
 		interval: interval,
 		queue:    queue,
+		cancel:   noOpCancel,
 	}
+}
+
+// Validate ensures the HeartbeatSender is properly configured.
+func (s *HeartbeatSender) Validate() error {
+	if s.queue == nil {
+		return errors.ErrQueueNotInitialized
+	}
+	return nil
 }
 
 // Start starts sending heartbeats.
 // This method is idempotent - calling it multiple times has no additional effect.
 func (s *HeartbeatSender) Start(ctx context.Context) {
 	s.startOnce.Do(func() {
+		s.mu.Lock()
 		s.ctx, s.cancel = context.WithCancel(ctx)
+		s.started = true
+		s.mu.Unlock()
+
 		s.wg.Add(1)
 		go s.run()
 	})
@@ -173,21 +190,27 @@ func (s *HeartbeatSender) run() {
 
 // sendHeartbeat sends a heartbeat message.
 func (s *HeartbeatSender) sendHeartbeat() {
+	if s.queue == nil {
+		return
+	}
 	msg := NewHeartbeatMessage(s.agentID)
 	if err := s.queue.Enqueue(s.ctx, msg); err != nil {
-		// Log error but continue
 		return
 	}
 }
 
 // Stop stops sending heartbeats.
-// This method is idempotent and safe to call even if Start() was never called.
-// Subsequent calls after the first will be no-ops.
+// This method is idempotent - calling it multiple times has no additional effect.
 func (s *HeartbeatSender) Stop() {
+	s.mu.Lock()
+	if !s.started {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+
 	s.stopOnce.Do(func() {
-		if s.cancel != nil {
-			s.cancel()
-		}
+		s.cancel()
 		s.wg.Wait()
 	})
 }

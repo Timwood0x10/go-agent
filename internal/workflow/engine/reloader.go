@@ -39,7 +39,9 @@ type FileWatcher struct {
 
 // NewFileWatcher creates a new FileWatcher.
 func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *FileWatcher {
-	// Try to create fsnotify watcher
+	if loader == nil {
+		panic("loader cannot be nil")
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		slog.Warn("FileWatcher: fsnotify not available, falling back to polling", "error", err)

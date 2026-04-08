@@ -121,6 +121,8 @@ func (h *SignalHandler) handleSignal(sig os.Signal) {
 
 // AddSignal adds a signal to listen for.
 func (h *SignalHandler) AddSignal(sig os.Signal) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.signals = append(h.signals, sig)
 }
 

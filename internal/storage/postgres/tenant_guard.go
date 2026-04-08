@@ -24,6 +24,12 @@ func NewTenantGuard(pool *Pool) *TenantGuard {
 
 // SetTenantContext sets the tenant context for the current database session.
 // This MUST be called for every tenant-specific operation to ensure physical isolation.
+//
+// NOTE: Uses SET LOCAL to set tenant context within the current transaction only.
+// This ensures tenant isolation works correctly with connection pooling, as SET LOCAL
+// only affects the current transaction and is reset when the transaction ends.
+// This prevents tenant context leakage across different connections in the pool.
+//
 // Args:
 // ctx - database operation context.
 // tenantID - tenant identifier, must be non-empty.
@@ -34,7 +40,9 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 	}
 
 	quotedID := pq.QuoteLiteral(tenantID)
-	query := fmt.Sprintf("SET app.tenant_id TO %s", quotedID)
+	// Use SET LOCAL to ensure tenant context only affects current transaction
+	// This prevents cross-tenant data access in connection pool scenarios
+	query := fmt.Sprintf("SET LOCAL app.tenant_id TO %s", quotedID)
 	_, err := g.db.Exec(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "set tenant context")
