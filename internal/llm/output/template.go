@@ -138,7 +138,10 @@ Return a JSON object with:
 
 // RenderRecommendation renders the recommendation prompt.
 func (e *TemplateEngine) RenderRecommendation(data map[string]interface{}) (string, error) {
-	schema, _ := GetRecommendResultSchema().ToJSONString()
+	schema, err := GetRecommendResultSchema().ToJSONString()
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize schema: %w", err)
+	}
 	data["Schema"] = schema
 	return e.Render(RecommendationPrompt, data)
 }

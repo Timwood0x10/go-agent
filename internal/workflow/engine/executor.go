@@ -55,7 +55,8 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		execution.Variables[k] = v
 	}
 
-	e.outputStore.Clear()
+	// Create independent OutputStore for this execution to prevent concurrent data corruption
+	localOutputStore := NewOutputStore()
 
 	resultChan := make(chan *StepResult, len(workflow.Steps))
 	errChan := make(chan error, 1)
@@ -64,7 +65,7 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan)
+		e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan, localOutputStore)
 	}()
 
 	var stepResults []*StepResult
@@ -145,6 +146,7 @@ func (e *Executor) runSteps(
 	initialInput string,
 	resultChan chan *StepResult,
 	errChan chan error,
+	outputStore *OutputStore,
 ) {
 	stepIndex := 0
 	completed := make(map[string]bool)
@@ -227,7 +229,7 @@ func (e *Executor) runSteps(
 				}
 			}()
 
-			result := e.executeStep(ctx, workflow, sid, initialInput, completed)
+			result := e.executeStep(ctx, workflow, sid, initialInput, completed, outputStore)
 
 			mu.Lock()
 			processed[sid] = true
@@ -314,6 +316,7 @@ func (e *Executor) executeStep(
 	stepID string,
 	initialInput string,
 	completed map[string]bool,
+	outputStore *OutputStore,
 ) *StepResult {
 	step := e.findStep(workflow.Steps, stepID)
 	if step == nil {
@@ -330,7 +333,7 @@ func (e *Executor) executeStep(
 	for k, v := range completed {
 		completedCopy[k] = v
 	}
-	input := e.resolveInput(step, initialInput, completedCopy)
+	input := e.resolveInput(step, initialInput, completedCopy, outputStore)
 
 	output, err := e.executeWithRetry(ctx, step, input)
 
@@ -347,7 +350,7 @@ func (e *Executor) executeStep(
 		result.Error = err.Error()
 	}
 
-	e.outputStore.Set(stepID, &StepOutput{
+	outputStore.Set(stepID, &StepOutput{
 		StepID:    stepID,
 		Output:    output,
 		Variables: make(map[string]interface{}),
@@ -357,24 +360,24 @@ func (e *Executor) executeStep(
 }
 
 // resolveInput resolves the input for a step.
-func (e *Executor) resolveInput(step *Step, initialInput string, completed map[string]bool) string {
+func (e *Executor) resolveInput(step *Step, initialInput string, completed map[string]bool, outputStore *OutputStore) string {
 	if len(step.DependsOn) == 0 {
 		// For steps with no dependencies, replace {{.input}} with initialInput
 		if step.Input != "" {
-			return e.replaceTemplateVariables(step.Input, initialInput, nil)
+			return e.replaceTemplateVariables(step.Input, initialInput, nil, outputStore)
 		}
 		return initialInput
 	}
 
 	if step.Input != "" {
 		// For steps with dependencies, replace template variables with actual outputs
-		return e.replaceTemplateVariables(step.Input, initialInput, completed)
+		return e.replaceTemplateVariables(step.Input, initialInput, completed, outputStore)
 	}
 
 	// Fallback: concatenate all dependency outputs
 	var depsOutput string
 	for _, dep := range step.DependsOn {
-		if output, exists := e.outputStore.Get(dep); exists {
+		if output, exists := outputStore.Get(dep); exists {
 			if depsOutput != "" {
 				depsOutput += "\n\n"
 			}
@@ -390,7 +393,7 @@ func (e *Executor) resolveInput(step *Step, initialInput string, completed map[s
 }
 
 // replaceTemplateVariables replaces template variables in input with actual values.
-func (e *Executor) replaceTemplateVariables(input, initialInput string, completed map[string]bool) string {
+func (e *Executor) replaceTemplateVariables(input, initialInput string, completed map[string]bool, outputStore *OutputStore) string {
 	result := input
 
 	// Replace {{.input}} with initial input
@@ -402,7 +405,7 @@ func (e *Executor) replaceTemplateVariables(input, initialInput string, complete
 
 	// Collect outputs from completed steps
 	for stepID := range completed {
-		if output, exists := e.outputStore.Get(stepID); exists {
+		if output, exists := outputStore.Get(stepID); exists {
 			replacements[fmt.Sprintf("{{.%s}}", stepID)] = output.Output
 		}
 	}

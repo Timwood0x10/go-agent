@@ -361,10 +361,13 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	if err != nil {
 		return 0, errors.Wrap(err, "begin transaction")
 	}
+	committed := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			// nolint: errcheck // Transaction rollback error is logged but not critical
-			slog.Error("Failed to rollback transaction", "error", err)
+		if !committed {
+			if err := tx.Rollback(); err != nil {
+				// nolint: errcheck // Transaction rollback error is logged but not critical
+				slog.Error("Failed to rollback transaction", "error", err)
+			}
 		}
 	}()
 
@@ -439,6 +442,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	if err := tx.Commit(); err != nil {
 		return 0, errors.Wrap(err, "commit transaction")
 	}
+	committed = true
 
 	// Add audit logging for key rotation events (per design standard)
 	slog.Info("Secret key rotation completed", "updated_secrets", updatedCount, "timestamp", time.Now())

@@ -226,11 +226,13 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err != nil {
 		return errors.Wrap(err, "begin transaction")
 	}
+	committed := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			slog.Error("Failed to rollback transaction", "error", err)
+		if !committed {
+			if err := tx.Rollback(); err != nil {
+				slog.Error("Failed to rollback transaction", "error", err)
+			}
 		}
-
 	}()
 
 	for i, chunk := range chunks {
@@ -283,6 +285,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err := tx.Commit(); err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}
+	committed = true
 
 	return nil
 }
