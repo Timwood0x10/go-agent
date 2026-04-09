@@ -134,6 +134,41 @@ func (b *GraphBuilder) buildFuncNode(config Node) (wfgraph.Node, error) {
 	return wfgraph.NewFuncNode(config.ID, fn), nil
 }
 
+func compareFloats(op string) func(a, b any) bool {
+	return func(a, b any) bool {
+		if aFloat, ok := a.(float64); ok {
+			if bFloat, ok := b.(float64); ok {
+				switch op {
+				case ">":
+					return aFloat > bFloat
+				case "<":
+					return aFloat < bFloat
+				case ">=":
+					return aFloat >= bFloat
+				case "<=":
+					return aFloat <= bFloat
+				}
+			}
+		}
+		af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
+		bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
+		if ae != nil || be != nil {
+			return false
+		}
+		switch op {
+		case ">":
+			return af > bf
+		case "<":
+			return af < bf
+		case ">=":
+			return af >= bf
+		case "<=":
+			return af <= bf
+		}
+		return false
+	}
+}
+
 // parseCondition parses a condition string and returns a Condition function.
 // Supports basic comparisons: "key == value", "key != value", "key > num", "key < num", "key >= num", "key <= num".
 func (b *GraphBuilder) parseCondition(condition string) (wfgraph.Condition, error) {
@@ -152,41 +187,13 @@ func (b *GraphBuilder) parseCondition(condition string) (wfgraph.Condition, erro
 		case "!=":
 			return func(a, b any) bool { return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b) }
 		case ">":
-			return func(a, b any) bool {
-				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
-				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
-				if ae != nil || be != nil {
-					return false
-				}
-				return af > bf
-			}
+			return compareFloats(op)
 		case "<":
-			return func(a, b any) bool {
-				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
-				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
-				if ae != nil || be != nil {
-					return false
-				}
-				return af < bf
-			}
+			return compareFloats(op)
 		case ">=":
-			return func(a, b any) bool {
-				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
-				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
-				if ae != nil || be != nil {
-					return false
-				}
-				return af >= bf
-			}
+			return compareFloats(op)
 		case "<=":
-			return func(a, b any) bool {
-				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
-				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
-				if ae != nil || be != nil {
-					return false
-				}
-				return af <= bf
-			}
+			return compareFloats(op)
 		default:
 			return nil
 		}
