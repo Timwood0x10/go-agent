@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 )
@@ -132,6 +133,11 @@ func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimite
 // Uses sync.Cond for efficient waiting without busy-looping.
 // Context cancellation is checked at each wake-up.
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
+	// Validate weight to prevent semaphore violation
+	if weight <= 0 {
+		return fmt.Errorf("weight must be positive, got %d", weight)
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

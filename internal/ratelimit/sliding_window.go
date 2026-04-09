@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 )
@@ -17,10 +18,11 @@ type SlidingWindowLimiter struct {
 
 // NewSlidingWindowLimiter creates a new SlidingWindowLimiter.
 func NewSlidingWindowLimiter(config *LimiterConfig) Limiter {
+	maxRequests := int(math.Ceil(config.Rate))
 	return &SlidingWindowLimiter{
 		requests:    make([]time.Time, 0),
 		windowSize:  time.Second,
-		maxRequests: int(config.Rate),
+		maxRequests: maxRequests,
 		config:      config,
 	}
 }

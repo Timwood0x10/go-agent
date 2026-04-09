@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"goagent/internal/errors"
 
 	"github.com/fsnotify/fsnotify"
@@ -35,6 +37,7 @@ type FileWatcher struct {
 	wg           sync.WaitGroup
 	stopCtx      context.Context
 	stopCancel   context.CancelFunc
+	g            *errgroup.Group
 }
 
 // NewFileWatcher creates a new FileWatcher.
@@ -68,6 +71,9 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 		return err
 	}
 
+	// Create errgroup for goroutine management
+	w.g, ctx = errgroup.WithContext(ctx)
+
 	// If we have fsnotify watcher, use event-driven approach
 	if w.watcher != nil {
 		// Add directory to watch
@@ -79,11 +85,17 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 		w.watchDirectory(ctx, dir)
 
 		w.wg.Add(1)
-		go w.fsnotifyLoop(dir)
+		w.g.Go(func() error {
+			w.fsnotifyLoop(dir)
+			return nil
+		})
 	} else {
 		// Fallback to polling
 		w.wg.Add(1)
-		go w.watchLoop(dir)
+		w.g.Go(func() error {
+			w.watchLoop(dir)
+			return nil
+		})
 	}
 
 	return nil
@@ -175,6 +187,10 @@ func (w *FileWatcher) Close() {
 		w.stopCancel()
 	}
 	w.wg.Wait()
+	// Wait for errgroup to complete (ignoring errors as we're shutting down)
+	if w.g != nil {
+		_ = w.g.Wait()
+	}
 	if w.watcher != nil {
 		_ = w.watcher.Close()
 		w.watcher = nil

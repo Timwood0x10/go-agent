@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sync"
 
 	"goagent/internal/core/models"
 )
@@ -12,7 +13,8 @@ import (
 // Validator validates data against schemas.
 type Validator struct {
 	customValidators map[string]ValidatorFunc
-	schemaType       string // "fashion", "travel"
+	schemaType       string   // "fashion", "travel"
+	regexCache       sync.Map // Cache compiled regex patterns
 }
 
 // ValidatorFunc is a custom validation function.
@@ -101,8 +103,10 @@ func (v *Validator) validateValue(data interface{}, schema *Schema, path string)
 			return fmt.Errorf("%s: length %d exceeds maximum %d", path, len(str), *schema.MaxLength)
 		}
 		if schema.Pattern != "" {
-			re := regexp.MustCompile(schema.Pattern)
-			if !re.MatchString(str) {
+			// Use cached regex pattern for better performance
+			re, _ := v.regexCache.LoadOrStore(schema.Pattern, regexp.MustCompile(schema.Pattern))
+			regex := re.(*regexp.Regexp)
+			if !regex.MatchString(str) {
 				return fmt.Errorf("%s: does not match pattern %s", path, schema.Pattern)
 			}
 		}

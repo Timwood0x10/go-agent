@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"goagent/internal/core/models"
 	"goagent/internal/errors"
 )
@@ -61,12 +63,14 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 	resultChan := make(chan *StepResult, len(workflow.Steps))
 	errChan := make(chan error, 1)
 
-	// Use done channel to ensure proper cleanup
+	// Use errgroup to manage the runSteps goroutine
+	g, gctx := errgroup.WithContext(ctx)
 	done := make(chan struct{})
-	go func() {
+	g.Go(func() error {
 		defer close(done)
-		e.runSteps(ctx, execution, workflow, executionOrder, initialInput, resultChan, errChan, localOutputStore)
-	}()
+		e.runSteps(gctx, execution, workflow, executionOrder, initialInput, resultChan, errChan, localOutputStore)
+		return nil
+	})
 
 	var stepResults []*StepResult
 	for i := 0; i < len(workflow.Steps); i++ {
@@ -179,24 +183,31 @@ func (e *Executor) runSteps(
 			}
 
 			// Wait for some goroutines to complete, but with timeout to avoid deadlock
-			done := make(chan struct{})
-			go func() {
+			// Use errgroup to manage the wait goroutine
+			waitG, _ := errgroup.WithContext(ctx)
+			waitDone := make(chan struct{})
+			waitG.Go(func() error {
+				defer close(waitDone)
 				wg.Wait()
-				close(done)
-			}()
+				return nil
+			})
 
 			select {
-			case <-done:
+			case <-waitDone:
 				// Some goroutines completed, retry
 				continue
 			case <-time.After(5 * time.Second):
 				// Timeout: potential deadlock detected, abort workflow
 				errChan <- fmt.Errorf("workflow deadlock detected: step %s waiting for dependencies that may never complete", stepID)
 				wg.Wait()
+				// Wait for waitG to complete
+				_ = waitG.Wait()
 				close(resultChan)
 				return
 			case <-ctx.Done():
 				wg.Wait()
+				// Wait for waitG to complete
+				_ = waitG.Wait()
 				close(resultChan)
 				return
 			}
@@ -206,9 +217,15 @@ func (e *Executor) runSteps(
 
 		stepIndex++
 
+		// Capture current stepID for goroutine
+		sid := stepID
+
 		wg.Add(1)
-		go func(sid string) {
+		// Create local errgroup for this step execution
+		stepG, stepCtx := errgroup.WithContext(ctx)
+		stepG.Go(func() error {
 			defer func() {
+				// Release semaphore and notify wait group
 				<-sem
 				wg.Done()
 
@@ -224,12 +241,12 @@ func (e *Executor) runSteps(
 					}
 					select {
 					case resultChan <- result:
-					case <-ctx.Done():
+					case <-stepCtx.Done():
 					}
 				}
 			}()
 
-			result := e.executeStep(ctx, workflow, sid, initialInput, completed, outputStore)
+			result := e.executeStep(stepCtx, workflow, sid, initialInput, completed, outputStore)
 
 			mu.Lock()
 			processed[sid] = true
@@ -240,11 +257,17 @@ func (e *Executor) runSteps(
 
 			select {
 			case resultChan <- result:
-			case <-ctx.Done():
+			case <-stepCtx.Done():
+				return stepCtx.Err()
 			}
-		}(stepID)
+			return nil
+		})
+
+		// Don't wait for individual step, continue to next step
+		// The stepG.Wait() will be called when needed for deadlock detection
 	}
 
+	// Wait for all step goroutines to complete
 	wg.Wait()
 
 	select {

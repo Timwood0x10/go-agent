@@ -24,6 +24,7 @@ type SessionMemory struct {
 	stopCleanup  chan struct{}
 	stopOnce     sync.Once
 	cleanupStart sync.Once
+	wg           sync.WaitGroup
 }
 
 // SessionData holds session information.
@@ -61,7 +62,9 @@ func (m *SessionMemory) StartCleanup() {
 			return
 		}
 
+		m.wg.Add(1)
 		go func() {
+			defer m.wg.Done()
 			ticker := time.NewTicker(m.cleanupTick)
 			defer ticker.Stop()
 
@@ -85,9 +88,11 @@ func (m *SessionMemory) StopCleanup() {
 	m.stopOnce.Do(func() {
 		close(m.stopCleanup)
 	})
+	m.wg.Wait()
 }
 
 // Cleanup removes all expired sessions and returns the count of removed sessions.
+// Limits cleanup to avoid long lock holding that blocks other operations.
 func (m *SessionMemory) Cleanup(ctx context.Context) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,7 +100,13 @@ func (m *SessionMemory) Cleanup(ctx context.Context) int {
 	now := time.Now()
 	removed := 0
 
+	// Limit cleanup to avoid long lock holding
+	const maxCleanupPerCall = 100
 	for sessionID, session := range m.sessions {
+		if removed >= maxCleanupPerCall {
+			// Stop early to avoid blocking other operations
+			break
+		}
 		if now.Sub(session.AccessedAt) > m.ttl {
 			delete(m.sessions, sessionID)
 			removed++
@@ -107,8 +118,8 @@ func (m *SessionMemory) Cleanup(ctx context.Context) int {
 
 // Get retrieves session data.
 func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	session, exists := m.sessions[sessionID]
 	if !exists {

@@ -491,7 +491,7 @@ func TestSecretRepository_RotateKey(t *testing.T) {
 	}
 
 	// Rotate key
-	updated, err := repo.RotateKey(ctx, newKey)
+	updated, err := repo.RotateKey(ctx, "tenant-1", newKey)
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), updated, "Should update 3 secrets")
 
@@ -524,7 +524,7 @@ func TestSecretRepository_RotateKey_InvalidKey(t *testing.T) {
 
 	// Try to rotate with invalid key length
 	invalidKey := make([]byte, 16)
-	_, err := repo.RotateKey(ctx, invalidKey)
+	_, err := repo.RotateKey(ctx, "tenant-1", invalidKey)
 	assert.Error(t, err, "Should return error for invalid key length")
 }
 

@@ -313,8 +313,19 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 		// Convert to experiences for scoring
 		var exps []Experience
 		for _, mem := range memories {
-			problem, _ := mem.Metadata["problem"].(string)
-			solution, _ := mem.Metadata["solution"].(string)
+			// Extract problem and solution with type assertion and error handling
+			problem, problemOk := mem.Metadata["problem"].(string)
+			if !problemOk {
+				slog.WarnContext(ctx, "[Memory Distillation] Problem metadata is not a string", "conversation_id", conversationID)
+				problem = "" // Use empty string as fallback
+			}
+
+			solution, solutionOk := mem.Metadata["solution"].(string)
+			if !solutionOk {
+				slog.WarnContext(ctx, "[Memory Distillation] Solution metadata is not a string", "conversation_id", conversationID)
+				solution = "" // Use empty string as fallback
+			}
+
 			exps = append(exps, Experience{
 				Problem:    problem,
 				Solution:   solution,
@@ -367,8 +378,19 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 			"importance_score", memory.Importance)
 
 		// Detect conflicts with existing memories
-		problem, _ := memory.Metadata["problem"].(string)
-		solution, _ := memory.Metadata["solution"].(string)
+		// Extract problem and solution with type assertion and error handling
+		problem, problemOk := memory.Metadata["problem"].(string)
+		if !problemOk {
+			slog.WarnContext(ctx, "[Memory Distillation] Problem metadata is not a string", "conversation_id", conversationID)
+			problem = "" // Use empty string as fallback
+		}
+
+		solution, solutionOk := memory.Metadata["solution"].(string)
+		if !solutionOk {
+			slog.WarnContext(ctx, "[Memory Distillation] Solution metadata is not a string", "conversation_id", conversationID)
+			solution = "" // Use empty string as fallback
+		}
+
 		exp := &Experience{
 			Problem:    problem,
 			Solution:   solution,

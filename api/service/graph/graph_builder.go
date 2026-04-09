@@ -5,11 +5,14 @@ package graph
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"goagent/internal/agents/base"
 	"goagent/internal/errors"
 	"goagent/internal/observability"
+	"goagent/internal/tools/resources/core"
 	wfgraph "goagent/internal/workflow/graph"
 )
 
@@ -69,9 +72,14 @@ func (b *GraphBuilder) Build(config *GraphConfig) (*wfgraph.Graph, error) {
 	// Build edges
 	for _, edgeConfig := range gdef.Edges {
 		if edgeConfig.Condition != "" {
-			// TODO: implement condition parsing from string (expected by 2026-04-01)
-			g.Edge(edgeConfig.From, edgeConfig.To)
+			// Parse condition string and create conditional edge
+			cond, err := b.parseCondition(edgeConfig.Condition)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse condition for edge %s -> %s", edgeConfig.From, edgeConfig.To)
+			}
+			g.Edge(edgeConfig.From, edgeConfig.To, cond)
 		} else {
+			// Unconditional edge
 			g.Edge(edgeConfig.From, edgeConfig.To)
 		}
 	}
@@ -126,6 +134,90 @@ func (b *GraphBuilder) buildFuncNode(config Node) (wfgraph.Node, error) {
 	return wfgraph.NewFuncNode(config.ID, fn), nil
 }
 
+// parseCondition parses a condition string and returns a Condition function.
+// Supports basic comparisons: "key == value", "key != value", "key > num", "key < num", "key >= num", "key <= num".
+func (b *GraphBuilder) parseCondition(condition string) (wfgraph.Condition, error) {
+	if condition == "" || condition == "true" {
+		return func(state *wfgraph.State) bool {
+			return true
+		}, nil
+	}
+
+	condition = strings.TrimSpace(condition)
+
+	parseCompare := func(op string) func(a, b any) bool {
+		switch op {
+		case "==":
+			return func(a, b any) bool { return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b) }
+		case "!=":
+			return func(a, b any) bool { return fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b) }
+		case ">":
+			return func(a, b any) bool {
+				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
+				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
+				if ae != nil || be != nil {
+					return false
+				}
+				return af > bf
+			}
+		case "<":
+			return func(a, b any) bool {
+				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
+				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
+				if ae != nil || be != nil {
+					return false
+				}
+				return af < bf
+			}
+		case ">=":
+			return func(a, b any) bool {
+				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
+				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
+				if ae != nil || be != nil {
+					return false
+				}
+				return af >= bf
+			}
+		case "<=":
+			return func(a, b any) bool {
+				af, ae := strconv.ParseFloat(fmt.Sprintf("%v", a), 64)
+				bf, be := strconv.ParseFloat(fmt.Sprintf("%v", b), 64)
+				if ae != nil || be != nil {
+					return false
+				}
+				return af <= bf
+			}
+		default:
+			return nil
+		}
+	}
+
+	for _, op := range []string{"==", "!=", ">=", "<=", ">", "<"} {
+		parts := strings.SplitN(condition, op, 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			cmp := parseCompare(op)
+			if cmp != nil {
+				return func(state *wfgraph.State) bool {
+					if state == nil {
+						return false
+					}
+					v, ok := state.Get(key)
+					if !ok {
+						return false
+					}
+					return cmp(v, value)
+				}, nil
+			}
+		}
+	}
+
+	return func(state *wfgraph.State) bool {
+		return true
+	}, nil
+}
+
 // buildAgentNode builds an agent node.
 func (b *GraphBuilder) buildAgentNode(config Node) (wfgraph.Node, error) {
 	if b == nil {
@@ -172,9 +264,13 @@ func (b *GraphBuilder) buildToolNode(config Node) (wfgraph.Node, error) {
 		return nil, fmt.Errorf("tool '%s' not registered", toolID)
 	}
 
-	// TODO: implement ToolNode once we have the Tool interface (expected by 2026-04-01)
-	_ = tool
-	return nil, fmt.Errorf("tool nodes not yet implemented")
+	// Type assert tool to core.Tool interface
+	toolImpl, ok := tool.(core.Tool)
+	if !ok {
+		return nil, fmt.Errorf("tool '%s' does not implement core.Tool interface", toolID)
+	}
+
+	return wfgraph.NewToolNode(toolImpl), nil
 }
 
 // BuildWithService creates a complete graph service from configuration.

@@ -111,27 +111,25 @@ func (e *Experience) IsExpired() bool {
 // GetConstraints retrieves constraints from metadata.
 // This provides backward compatibility for the new structure.
 func (e *Experience) GetConstraints() string {
-	if e.Constraints != "" {
-		return e.Constraints
-	}
+	// Check metadata first for backward compatibility
 	if e.Metadata != nil {
-		if c, ok := e.Metadata["constraints"].(string); ok {
+		if c, ok := e.Metadata["constraints"].(string); ok && c != "" {
 			return c
 		}
 	}
-	return ""
+	// Fall back to Constraints field
+	return e.Constraints
 }
 
 // GetUsageCount retrieves usage count from metadata.
 // This provides backward compatibility for the new structure.
 func (e *Experience) GetUsageCount() int {
-	if e.UsageCount > 0 {
-		return e.UsageCount
-	}
+	// Check metadata first for backward compatibility
 	if e.Metadata != nil {
 		if c, ok := e.Metadata["usage_count"].(float64); ok {
 			return int(c)
 		}
 	}
-	return 0
+	// Fall back to UsageCount field
+	return e.UsageCount
 }

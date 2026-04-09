@@ -553,7 +553,7 @@ func (s *RetrievalService) getEmbeddingCached(ctx context.Context, query string)
 	s.embeddingCacheMu.Lock()
 	defer s.embeddingCacheMu.Unlock()
 
-	// Evict oldest entry if cache is full
+	// Check if eviction is needed
 	if len(s.embeddingCache) >= s.embeddingCacheSizeLimit {
 		if len(s.embeddingCacheAccessList) > 0 {
 			oldestKey := s.embeddingCacheAccessList[0]

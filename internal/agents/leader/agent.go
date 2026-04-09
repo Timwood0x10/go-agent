@@ -414,6 +414,9 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			case <-a.stopCh:
 				slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
 				return
+			case <-distillCtx.Done():
+				slog.Debug("Distillation skipped: context cancelled", "task_id", taskID)
+				return
 			default:
 			}
 

@@ -561,7 +561,7 @@ func TestSession(t *testing.T) {
 		session := NewSession("session123", "user123", "test")
 		session.AddTask(&Task{TaskID: "task1"})
 		session.AddTask(&Task{TaskID: "task2"})
-		session.AddResult(&TaskResult{TaskID: "task1"})
+		session.AddResult(&TaskResult{TaskID: "task1", Success: true})
 
 		progress := session.Progress()
 

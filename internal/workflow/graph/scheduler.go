@@ -102,14 +102,18 @@ func (s *ShortJobScheduler) Select(ready []string) string {
 	return bestNode
 }
 
-// getEstimate returns the estimated latency for a node ID, defaulting to max int.
+// getEstimate returns the estimated latency for a node ID.
+// For unknown nodes, returns a reasonable default value (1000ms) to ensure
+// they can still be scheduled but with lower priority than known short jobs.
 func (s *ShortJobScheduler) getEstimate(nodeID string) int {
 	if s == nil || s.estimates == nil {
-		return 1<<31 - 1 // max int
+		// Return reasonable default for unknown nodes instead of max int
+		return 1000
 	}
 	estimate, ok := s.estimates[nodeID]
 	if !ok {
-		return 1<<31 - 1 // max int
+		// Return reasonable default for unknown nodes instead of max int
+		return 1000
 	}
 	return estimate
 }

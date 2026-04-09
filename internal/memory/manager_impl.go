@@ -539,6 +539,9 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 
 	// Generate multiple hash values using different seeds for better distribution
 	hashes := make([]uint64, (m.vectorDim+12)/13)
+	if len(hashes) == 0 {
+		return vector
+	}
 	for i := range hashes {
 		hashes[i] = m.hashWithSeed(text, uint64(i)*0x9e3779b97f4a7c15)
 	}
@@ -546,10 +549,9 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 	// Spread hash values across vector dimensions
 	for i := range vector {
 		hashIdx := i / 13
+		hashIdx = hashIdx % len(hashes)
 		shift := (i % 13) * 5
-		if shift >= 64 {
-			shift = 64 - 5
-		}
+		// shift is always in range [0, 60], no need for >= 64 check
 		vector[i] = float64((hashes[hashIdx]>>shift)%1000) / 1000.0
 	}
 
@@ -737,7 +739,14 @@ func (m *memoryManager) cosineSimilarity(v1, v2 []float64) float64 {
 
 	// Optimization: Use single sqrt instead of two
 	// math.Sqrt(norm1) * math.Sqrt(norm2) == math.Sqrt(norm1 * norm2)
-	return dotProduct / math.Sqrt(norm1*norm2)
+	result := dotProduct / math.Sqrt(norm1*norm2)
+
+	// Check for NaN or Inf in the result
+	if math.IsNaN(result) || math.IsInf(result, 0) {
+		return 0.0
+	}
+
+	return result
 }
 
 // truncate truncates a string to the maximum length (in runes) and adds "..." if truncated.

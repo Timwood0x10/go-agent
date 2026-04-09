@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -59,6 +60,11 @@ func (l *TokenBucketLimiter) Wait(ctx context.Context) error {
 
 		rate := l.rate
 		l.mu.Unlock()
+
+		// Check for zero or very small rate to avoid division by zero
+		if rate <= 0 {
+			return fmt.Errorf("rate must be positive, got %f", rate)
+		}
 
 		waitTime := time.Duration(float64(time.Second) / rate)
 

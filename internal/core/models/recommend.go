@@ -47,6 +47,10 @@ func NewRecommendResult(sessionID, userID string) *RecommendResult {
 
 // AddItem adds an item to the recommendation.
 func (r *RecommendResult) AddItem(item *RecommendItem) {
+	if item == nil || item.Price < 0 {
+		// Skip invalid items with negative prices
+		return
+	}
 	r.Items = append(r.Items, item)
 	r.TotalPrice += item.Price
 }

@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
 )
@@ -28,6 +30,8 @@ type WriteBuffer struct {
 	wg              sync.WaitGroup
 	stopped         atomic.Bool
 	closeOnce       sync.Once // Ensure channel is closed only once
+	g               *errgroup.Group
+	gctx            context.Context
 }
 
 // WriteItem represents a single write operation to be batched.
@@ -75,13 +79,18 @@ func (b *WriteBuffer) Start(ctx context.Context) error {
 		return errors.New("write buffer already stopped")
 	}
 
+	// Create errgroup for goroutine management
+	b.g, b.gctx = errgroup.WithContext(ctx)
+
 	b.wg.Add(1)
-	go func() {
+	b.g.Go(func() error {
 		defer b.wg.Done()
-		if err := b.processLoop(ctx); err != nil {
+		if err := b.processLoop(b.gctx); err != nil {
 			slog.Error("Write buffer processing loop failed", "error", err)
+			return err
 		}
-	}()
+		return nil
+	})
 
 	return nil
 }
@@ -316,6 +325,11 @@ func (b *WriteBuffer) Stop(ctx context.Context) error {
 
 	// Wait for any ongoing processing to complete
 	b.wg.Wait()
+
+	// Wait for errgroup to complete (ignoring errors as we're shutting down)
+	if b.g != nil {
+		_ = b.g.Wait()
+	}
 
 	return nil
 }
