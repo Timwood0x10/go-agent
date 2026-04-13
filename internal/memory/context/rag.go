@@ -240,9 +240,16 @@ func (r *RAG) IsPersistent() bool {
 
 // evictOldest removes entries when capacity is reached.
 func (r *RAG) evictOldest() {
-	// Simple eviction: remove first entry
 	for id := range r.entries {
+		entry := r.entries[id]
 		delete(r.entries, id)
+
+		for i, e := range r.index.entries {
+			if e.ID == entry.ID {
+				r.index.entries = append(r.index.entries[:i], r.index.entries[i+1:]...)
+				break
+			}
+		}
 		break
 	}
 }

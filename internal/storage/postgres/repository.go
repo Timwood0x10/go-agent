@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
@@ -24,7 +25,8 @@ type Repository struct {
 	Profile   *ProfileRepository
 	Vector    *VectorSearcher
 	pool      *Pool
-	tx        *sql.Tx // Transaction (if in transaction mode)
+	tx        *sql.Tx
+	close     func()
 }
 
 // NewRepository creates a new Repository with all sub-repositories.
@@ -45,6 +47,12 @@ func (r *Repository) Pool() *Pool {
 
 // Close closes the repository and its pool.
 func (r *Repository) Close() error {
+	if r.close != nil {
+		r.close()
+	}
+	if r.pool == nil {
+		return nil
+	}
 	return r.pool.Close()
 }
 
@@ -92,6 +100,13 @@ func (r *Repository) WithTransaction(ctx context.Context) (*Repository, error) {
 		Profile:   NewProfileRepositoryWithDB(tx),
 		Vector:    NewVectorSearcherWithDB(tx, r.pool.cfg.Embedding),
 		tx:        tx,
+		close: func() {
+			if tx != nil {
+				if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+					slog.Warn("failed to rollback orphaned transaction", "error", err)
+				}
+			}
+		},
 	}
 
 	return txRepo, nil
@@ -102,15 +117,25 @@ func (r *Repository) Commit() error {
 	if r.tx == nil {
 		return coreerrors.ErrNoTransaction
 	}
-	return r.tx.Commit()
+	err := r.tx.Commit()
+	if err == nil || err == sql.ErrTxDone {
+		r.tx = nil
+		r.close = nil
+	}
+	return err
 }
 
 // Rollback rolls back the transaction.
 func (r *Repository) Rollback() error {
 	if r.tx == nil {
-		return nil // No transaction to rollback
+		return nil
 	}
-	return r.tx.Rollback()
+	err := r.tx.Rollback()
+	if err == nil || err == sql.ErrTxDone {
+		r.tx = nil
+		r.close = nil
+	}
+	return err
 }
 
 // SaveSession saves a session and its results.

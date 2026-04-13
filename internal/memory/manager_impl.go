@@ -296,9 +296,14 @@ func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
+	inputStr, ok := task.Payload["input"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
+		inputStr = ""
+	}
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
 		"task_id", taskID,
-		"input_length", len(task.Payload["input"].(string)))
+		"input_length", len(inputStr))
 	return task, nil
 }
 
@@ -316,20 +321,27 @@ func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*mod
 		return nil, errors.Wrap(err, "distill task")
 	}
 
+	inputStr, ok := task.Payload["input"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
+		inputStr = ""
+	}
 	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
 		"task_id", taskID,
-		"input_length", len(task.Payload["input"].(string)))
+		"input_length", len(inputStr))
 	return task, nil
 }
 
 // StoreDistilledTask stores a distilled task with local vector embedding.
 func (m *memoryManager) StoreDistilledTask(ctx context.Context, taskID string, distilled *models.Task) error {
-	// Use new distillation engine if enabled
+	if distilled == nil {
+		return errors.New("distilled task cannot be nil")
+	}
+
 	if m.useNewDistill {
 		return m.storeDistilledTaskNew(ctx, taskID, distilled)
 	}
 
-	// Use old hash-based storage for backward compatibility
 	return m.storeDistilledTaskOld(ctx, taskID, distilled)
 }
 
@@ -358,14 +370,23 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 		"task_id", taskID,
 		"vector_dimension", len(vector))
 
+	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
+	contextMap, ok := distilled.Payload["context"].(map[string]interface{})
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task context is not a map", "task_id", taskID)
+		contextMap = nil
+	}
 	data := &DistilledTaskData{
 		TaskID:    taskID,
 		Input:     inputStr,
-		Output:    fmt.Sprintf("%v", distilled.Payload["output"]),
-		Context:   distilled.Payload["context"].(map[string]interface{}),
+		Output:    outputStr,
+		Context:   contextMap,
 		Vector:    vector,
 		CreatedAt: time.Now(),
 	}
+
+	// Evict oldest tasks if limit exceeded (LRU eviction)
+	m.evictOldestDistilledTask()
 
 	m.distilledTasks[taskID] = data
 
@@ -401,9 +422,14 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	}
 
 	// Extract metadata
-	userID, _ := distilled.Payload["user_id"].(string)
-	tenantID, _ := distilled.Payload["tenant_id"].(string)
-	if tenantID == "" {
+	userID, ok := distilled.Payload["user_id"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task user_id is not a string", "task_id", taskID)
+		userID = ""
+	}
+	tenantID, ok := distilled.Payload["tenant_id"].(string)
+	if !ok {
+		slog.Warn("⚠️  [Memory Distillation] Task tenant_id is not a string", "task_id", taskID)
 		tenantID = "default"
 	}
 
@@ -418,10 +444,26 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	// Store memories in experience repository
 	for _, mem := range memories {
 		// Convert distillation.Memory to distillation.Experience
-		problem, _ := mem.Metadata["problem"].(string)
-		solution, _ := mem.Metadata["solution"].(string)
-		confidence, _ := mem.Metadata["confidence"].(float64)
-		extractionMethodStr, _ := mem.Metadata["extraction_method"].(string)
+		problem, ok := mem.Metadata["problem"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory problem is not a string", "task_id", taskID)
+			problem = ""
+		}
+		solution, ok := mem.Metadata["solution"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory solution is not a string", "task_id", taskID)
+			solution = ""
+		}
+		confidence, ok := mem.Metadata["confidence"].(float64)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory confidence is not a float64", "task_id", taskID)
+			confidence = 0.0
+		}
+		extractionMethodStr, ok := mem.Metadata["extraction_method"].(string)
+		if !ok {
+			slog.Warn("⚠️  [Memory Distillation] Memory extraction_method is not a string", "task_id", taskID)
+			extractionMethodStr = "unknown"
+		}
 
 		// Default extraction method if not set
 		if extractionMethodStr == "" {
@@ -458,6 +500,35 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	return nil
 }
 
+// evictOldestDistilledTask removes the oldest distilled task when limit is reached.
+// This implements LRU (Least Recently Used) eviction policy for distilled tasks.
+// MUST be called while holding m.mu lock.
+func (m *memoryManager) evictOldestDistilledTask() {
+	if m.config.MaxDistilledTasks <= 0 {
+		return
+	}
+
+	if len(m.distilledTasks) <= m.config.MaxDistilledTasks {
+		return
+	}
+
+	// Find the oldest task
+	var oldestID string
+	var oldestTime time.Time
+	for id, data := range m.distilledTasks {
+		if oldestID == "" || data.CreatedAt.Before(oldestTime) {
+			oldestID = id
+			oldestTime = data.CreatedAt
+		}
+	}
+
+	// Delete the oldest task
+	if oldestID != "" {
+		delete(m.distilledTasks, oldestID)
+		slog.Debug("Evicted oldest distilled task", "task_id", oldestID, "total_tasks", len(m.distilledTasks))
+	}
+}
+
 // generateHashVector generates a simple hash-based vector from text.
 func (m *memoryManager) generateHashVector(text string) []float64 {
 	vector := make([]float64, m.vectorDim)
@@ -466,18 +537,22 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 		return vector
 	}
 
-	// Simple hash-based vector generation
-	hash := uint64(0)
-	for i, c := range text {
-		hash = hash*31 + uint64(c)
-		if i >= len(text)-1 {
-			break
-		}
+	// Generate multiple hash values using different seeds for better distribution
+	hashes := make([]uint64, (m.vectorDim+12)/13)
+	if len(hashes) == 0 {
+		return vector
+	}
+	for i := range hashes {
+		hashes[i] = m.hashWithSeed(text, uint64(i)*0x9e3779b97f4a7c15)
 	}
 
-	// Spread hash across vector dimensions
+	// Spread hash values across vector dimensions
 	for i := range vector {
-		vector[i] = float64((hash>>(i*5))%1000) / 1000.0
+		hashIdx := i / 13
+		hashIdx = hashIdx % len(hashes)
+		shift := (i % 13) * 5
+		// shift is always in range [0, 60], no need for >= 64 check
+		vector[i] = float64((hashes[hashIdx]>>shift)%1000) / 1000.0
 	}
 
 	// Normalize vector
@@ -494,6 +569,19 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 	}
 
 	return vector
+}
+
+// hashWithSeed generates a hash with a specific seed for better distribution.
+func (m *memoryManager) hashWithSeed(text string, seed uint64) uint64 {
+	hash := seed
+	for _, c := range text {
+		hash ^= uint64(c)
+		hash *= 0x100000001b3
+		hash ^= hash >> 33
+		hash *= 0xff51afd7ed558ccd
+		hash ^= hash >> 33
+	}
+	return hash
 }
 
 // SearchSimilarTasks searches for similar tasks using local cosine similarity.
@@ -651,13 +739,27 @@ func (m *memoryManager) cosineSimilarity(v1, v2 []float64) float64 {
 
 	// Optimization: Use single sqrt instead of two
 	// math.Sqrt(norm1) * math.Sqrt(norm2) == math.Sqrt(norm1 * norm2)
-	return dotProduct / math.Sqrt(norm1*norm2)
+	result := dotProduct / math.Sqrt(norm1*norm2)
+
+	// Check for NaN or Inf in the result
+	if math.IsNaN(result) || math.IsInf(result, 0) {
+		return 0.0
+	}
+
+	return result
 }
 
-// truncate truncates a string to the maximum length and adds "..." if truncated.
+// truncate truncates a string to the maximum length (in runes) and adds "..." if truncated.
+// This correctly handles multi-byte UTF-8 characters by using runes instead of bytes.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+
+	return string(runes[:maxLen]) + "..."
 }

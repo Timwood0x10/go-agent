@@ -44,6 +44,8 @@ type ProductionMemoryManager struct {
 	mu      sync.RWMutex
 	started bool
 	stopped bool
+	cancel  context.CancelFunc // Context cancellation function for graceful shutdown
+	baseCtx context.Context    // Base context for all operations
 
 	// Optional: keep in-memory cache for hot data
 	sessionCache map[string]*SessionData
@@ -170,6 +172,14 @@ func (m *ProductionMemoryManager) SetTenantID(tenantID string) error {
 }
 
 // Start starts the memory manager and background workers.
+// This method creates a new context for the memory manager and starts
+// the write buffer goroutine. The context is used for graceful shutdown.
+//
+// Thread-safety: Uses mutex to ensure only one goroutine can start the manager.
+//
+// Args:
+// ctx - context for cancellation.
+// Returns error if starting fails.
 func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -178,13 +188,14 @@ func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Start write buffer (write backpressure layer per design standard)
-	if err := m.writeBuffer.Start(ctx); err != nil {
+	// Create a new context for the memory manager lifecycle
+	// This allows us to cancel all operations during shutdown
+	m.baseCtx, m.cancel = context.WithCancel(ctx)
+
+	// Start write buffer in background goroutine
+	if err := m.writeBuffer.Start(m.baseCtx); err != nil {
 		return errors.Wrap(err, "start write buffer")
 	}
-
-	// Start background cleanup if needed
-	// This could include periodic cache cleanup, statistics collection, etc.
 
 	m.started = true
 	slog.Info("Production memory manager started")
@@ -192,6 +203,14 @@ func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 }
 
 // Stop stops the memory manager and cleans up resources.
+// This method cancels the memory manager context and waits for all
+// background goroutines to finish.
+//
+// Thread-safety: Uses mutex to ensure only one goroutine can stop the manager.
+//
+// Args:
+// ctx - context for cancellation (used for timeout).
+// Returns error if stopping fails.
 func (m *ProductionMemoryManager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -200,8 +219,15 @@ func (m *ProductionMemoryManager) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	// Stop write buffer
-	if err := m.writeBuffer.Stop(ctx); err != nil {
+	// Cancel the memory manager context to signal all goroutines to stop
+	if m.cancel != nil {
+		m.cancel()
+	}
+
+	// Stop write buffer with timeout
+	stopCtx, stopCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer stopCancel()
+	if err := m.writeBuffer.Stop(stopCtx); err != nil {
 		slog.Warn("Failed to stop write buffer", "error", err)
 	}
 

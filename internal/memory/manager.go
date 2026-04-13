@@ -68,6 +68,10 @@ type MemoryConfig struct {
 	// MaxTasks is the maximum number of tasks to store.
 	MaxTasks int
 
+	// MaxDistilledTasks is the maximum number of distilled tasks to store.
+	// Implements LRU eviction when limit is reached.
+	MaxDistilledTasks int
+
 	// SessionTTL is the time-to-live for sessions.
 	SessionTTL time.Duration
 
@@ -94,14 +98,15 @@ type Message struct {
 // DefaultMemoryConfig returns default configuration for MemoryManager.
 func DefaultMemoryConfig() *MemoryConfig {
 	return &MemoryConfig{
-		Enabled:        true,
-		Storage:        "memory",
-		MaxHistory:     10,
-		MaxSessions:    100,
-		MaxTasks:       1000,
-		SessionTTL:     24 * time.Hour,
-		TaskTTL:        7 * 24 * time.Hour,
-		VectorDim:      128, // 128-dimensional vector for simple hash-based embedding
-		EnablePostgres: false,
+		Enabled:           true,
+		Storage:           "memory",
+		MaxHistory:        10,
+		MaxSessions:       100,
+		MaxTasks:          1000,
+		MaxDistilledTasks: 5000, // Maximum 5000 distilled tasks with LRU eviction
+		SessionTTL:        24 * time.Hour,
+		TaskTTL:           7 * 24 * time.Hour,
+		VectorDim:         128, // 128-dimensional vector for simple hash-based embedding
+		EnablePostgres:    false,
 	}
 }

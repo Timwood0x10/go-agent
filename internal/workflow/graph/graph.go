@@ -36,9 +36,19 @@ type Graph struct {
 }
 
 // NewGraph creates a new graph with the given ID.
+//
+// NOTE: This function will panic if id is empty. This is intentional as it
+// indicates a programming error in the calling code. This constructor is
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - unique graph identifier, must not be empty.
+// Returns new graph instance.
 func NewGraph(id string) *Graph {
 	if id == "" {
-		panic("graph ID cannot be empty")
+		panic("graph ID cannot be empty: empty id is a programming error")
 	}
 	return &Graph{
 		id:        id,
@@ -51,12 +61,23 @@ func NewGraph(id string) *Graph {
 }
 
 // NewGraphWithTracer creates a new graph with a custom tracer.
+//
+// NOTE: This function will panic if id is empty or tracer is nil. This is intentional
+// as it indicates a programming error in the calling code. This constructor is
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - unique graph identifier, must not be empty.
+// tracer - observability tracer, must not be nil.
+// Returns new graph instance.
 func NewGraphWithTracer(id string, tracer observability.Tracer) *Graph {
 	if id == "" {
-		panic("graph ID cannot be empty")
+		panic("graph ID cannot be empty: empty id is a programming error")
 	}
 	if tracer == nil {
-		panic("tracer cannot be nil")
+		panic("tracer cannot be nil: nil tracer is a programming error")
 	}
 	return &Graph{
 		id:        id,
@@ -69,9 +90,20 @@ func NewGraphWithTracer(id string, tracer observability.Tracer) *Graph {
 }
 
 // NewGraphWithLimiter creates a new graph with a custom rate limiter.
+//
+// NOTE: This function will panic if id is empty. This is intentional as it
+// indicates a programming error in the calling code. This constructor is
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - unique graph identifier, must not be empty.
+// limiter - rate limiter for execution throttling.
+// Returns new graph instance.
 func NewGraphWithLimiter(id string, limiter ratelimit.Limiter) *Graph {
 	if id == "" {
-		panic("graph ID cannot be empty")
+		panic("graph ID cannot be empty: empty id is a programming error")
 	}
 	return &Graph{
 		id:        id,
@@ -84,30 +116,53 @@ func NewGraphWithLimiter(id string, limiter ratelimit.Limiter) *Graph {
 }
 
 // Node adds a node to the graph.
+//
+// NOTE: This method will panic if graph is nil, id is empty, or node is nil.
+// This is intentional as it indicates a programming error in the calling code.
+// These methods are used during workflow graph initialization (startup phase),
+// and invalid parameters represent fatal startup failures that should prevent
+// application launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - unique node identifier, must not be empty.
+// node - node instance, must not be nil.
+// Returns graph for method chaining.
 func (g *Graph) Node(id string, node Node) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	if id == "" {
-		panic("node ID cannot be empty")
+		panic("node ID cannot be empty: empty id is a programming error")
 	}
 	if node == nil {
-		panic("node cannot be nil")
+		panic("node cannot be nil: nil node is a programming error")
 	}
 	g.nodes[id] = node
 	return g
 }
 
 // Edge adds an edge from one node to another with optional condition.
+//
+// NOTE: This method will panic if graph is nil, from id is empty, or to id is empty.
+// This is intentional as it indicates a programming error in the calling code.
+// These methods are used during workflow graph initialization (startup phase),
+// and invalid parameters represent fatal startup failures that should prevent
+// application launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// from - source node ID, must not be empty.
+// to - target node ID, must not be empty.
+// cond - optional edge traversal condition.
+// Returns graph for method chaining.
 func (g *Graph) Edge(from, to string, cond ...Condition) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	if from == "" {
-		panic("from node ID cannot be empty")
+		panic("from node ID cannot be empty: empty id is a programming error")
 	}
 	if to == "" {
-		panic("to node ID cannot be empty")
+		panic("to node ID cannot be empty: empty id is a programming error")
 	}
 
 	edge := &Edge{from: from, to: to}
@@ -120,45 +175,85 @@ func (g *Graph) Edge(from, to string, cond ...Condition) *Graph {
 }
 
 // Start sets the starting node for the graph.
+//
+// NOTE: This method will panic if graph is nil or id is empty. This is intentional
+// as it indicates a programming error in the calling code. These methods are
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - starting node ID, must not be empty.
+// Returns graph for method chaining.
 func (g *Graph) Start(id string) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	if id == "" {
-		panic("start node ID cannot be empty")
+		panic("start node ID cannot be empty: empty id is a programming error")
 	}
 	g.start = id
 	return g
 }
 
 // SetScheduler sets a custom scheduler for the graph.
+//
+// NOTE: This method will panic if graph is nil or scheduler is nil. This is
+// intentional as it indicates a programming error in the calling code.
+// These methods are used during workflow graph initialization (startup phase),
+// and invalid parameters represent fatal startup failures that should prevent
+// application launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// scheduler - custom scheduler instance, must not be nil.
+// Returns graph for method chaining.
 func (g *Graph) SetScheduler(scheduler Scheduler) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	if scheduler == nil {
-		panic("scheduler cannot be nil")
+		panic("scheduler cannot be nil: nil scheduler is a programming error")
 	}
 	g.scheduler = scheduler
 	return g
 }
 
 // SetTracer sets a custom tracer for the graph.
+//
+// NOTE: This method will panic if graph is nil or tracer is nil. This is
+// intentional as it indicates a programming error in the calling code.
+// These methods are used during workflow graph initialization (startup phase),
+// and invalid parameters represent fatal startup failures that should prevent
+// application launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// tracer - custom tracer instance, must not be nil.
+// Returns graph for method chaining.
 func (g *Graph) SetTracer(tracer observability.Tracer) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	if tracer == nil {
-		panic("tracer cannot be nil")
+		panic("tracer cannot be nil: nil tracer is a programming error")
 	}
 	g.tracer = tracer
 	return g
 }
 
 // SetLimiter sets a custom rate limiter for the graph.
+//
+// NOTE: This method will panic if graph is nil. This is intentional as it
+// indicates a programming error in the calling code. These methods are
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// limiter - custom rate limiter instance (can be nil for no limiting).
+// Returns graph for method chaining.
 func (g *Graph) SetLimiter(limiter ratelimit.Limiter) *Graph {
 	if g == nil {
-		panic("graph is nil")
+		panic("graph is nil: nil receiver is a programming error")
 	}
 	g.limiter = limiter
 	return g

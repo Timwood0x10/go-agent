@@ -4,6 +4,8 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"log/slog"
+	"runtime"
 	"sync"
 	"time"
 
@@ -18,8 +20,6 @@ type Pool struct {
 	cfg          *Config
 	db           *sql.DB
 	mu           sync.RWMutex
-	openCount    int
-	idleCount    int
 	waitCount    int
 	waitDuration time.Duration
 }
@@ -45,10 +45,8 @@ func NewPool(cfg *Config) (*Pool, error) {
 	}
 
 	return &Pool{
-		cfg:       cfg,
-		db:        db,
-		openCount: 0,
-		idleCount: 0,
+		cfg: cfg,
+		db:  db,
 	}, nil
 }
 
@@ -62,8 +60,6 @@ func (p *Pool) Get(ctx context.Context) (*sql.Conn, error) {
 	}
 
 	p.mu.Lock()
-	p.openCount++
-	p.idleCount--
 	elapsed := time.Since(start)
 	p.waitDuration += elapsed
 	if elapsed > time.Second {
@@ -81,11 +77,6 @@ func (p *Pool) Release(conn *sql.Conn) {
 	}
 
 	conn.Close()
-	// nolint: errcheck // Connection is closed by defer
-	p.mu.Lock()
-	p.openCount--
-	p.idleCount++
-	p.mu.Unlock()
 }
 
 // WithConnection executes a function with a connection from the pool.
@@ -151,7 +142,6 @@ func (p *Pool) GetDB() *sql.DB {
 
 // Exec executes a query without returning rows.
 func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	// Add query timeout if not already set in context
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, p.cfg.QueryTimeout)
@@ -161,10 +151,12 @@ func (p *Pool) Exec(ctx context.Context, query string, args ...any) (sql.Result,
 	var result sql.Result
 	var execErr error
 
-	p.WithConnection(ctx, func(conn *sql.Conn) error {
+	if err := p.WithConnection(ctx, func(conn *sql.Conn) error {
 		result, execErr = conn.ExecContext(ctx, query, args...)
 		return execErr
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return result, execErr
 }
@@ -190,11 +182,21 @@ func (p *Pool) Query(ctx context.Context, query string, args ...any) (*ManagedRo
 		return nil, err
 	}
 
-	return &ManagedRows{
+	mr := &ManagedRows{
 		Rows: rows,
 		conn: conn,
 		pool: p,
-	}, nil
+	}
+	// Set finalizer to release connection if caller forgets to call Close()
+	runtime.SetFinalizer(mr, func(m *ManagedRows) {
+		if m.conn != nil {
+			slog.Warn("ManagedRows garbage collected without Close() being called, releasing connection")
+			m.pool.Release(m.conn)
+			m.conn = nil
+		}
+	})
+
+	return mr, nil
 }
 
 // ManagedRows wraps sql.Rows and manages connection lifecycle.
@@ -209,6 +211,7 @@ func (m *ManagedRows) Close() error {
 	if m.conn != nil {
 		m.pool.Release(m.conn)
 		m.conn = nil
+		runtime.SetFinalizer(m, nil)
 	}
 	return m.Rows.Close()
 }
@@ -222,17 +225,30 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 		defer cancel()
 	}
 
-	var row *sql.Row
+	var (
+		row     *sql.Row
+		connErr error
+	)
 
-	p.WithConnection(ctx, func(conn *sql.Conn) error {
+	connErr = p.WithConnection(ctx, func(conn *sql.Conn) error {
 		row = conn.QueryRowContext(ctx, query, args...)
-		return nil // Don't return error here, let sql.Row handle it
+		return nil
 	})
 
-	// Check if connection was acquired successfully
-	if row == nil {
-		// Return a row that will produce an error on Scan
-		return nil
+	// If connection acquisition failed, return a row that produces a clear error on Scan.
+	// We use a cancelled context with a descriptive query to help identify the error source.
+	// The caller should check the error from Scan to detect connection failures.
+	if connErr != nil || row == nil {
+		if connErr != nil {
+			slog.Warn("Failed to acquire database connection for QueryRow", "error", connErr)
+		}
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		// Return a row that will fail on Scan with "context canceled" error.
+		// The log above provides the actual error reason for debugging.
+		// Note: sql.Row does not allow wrapping errors, so we use this pattern
+		// to propagate the failure through the interface while logging the root cause.
+		return p.db.QueryRowContext(cancelCtx, "SELECT 1 WHERE 1=0")
 	}
 
 	return row

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"goagent/internal/core/models"
 	"goagent/internal/errors"
 )
@@ -55,13 +57,20 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		execution.Variables[k] = v
 	}
 
-	e.outputStore.Clear()
+	// Create independent OutputStore for this execution to prevent concurrent data corruption
+	localOutputStore := NewOutputStore()
 
-	stepChan := make(chan string, e.maxParallel)
 	resultChan := make(chan *StepResult, len(workflow.Steps))
 	errChan := make(chan error, 1)
 
-	go e.runSteps(ctx, execution, workflow, executionOrder, initialInput, stepChan, resultChan, errChan)
+	// Use errgroup to manage the runSteps goroutine
+	g, gctx := errgroup.WithContext(ctx)
+	done := make(chan struct{})
+	g.Go(func() error {
+		defer close(done)
+		e.runSteps(gctx, execution, workflow, executionOrder, initialInput, resultChan, errChan, localOutputStore)
+		return nil
+	})
 
 	var stepResults []*StepResult
 	for i := 0; i < len(workflow.Steps); i++ {
@@ -79,6 +88,8 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 				execution.Status = WorkflowStatusFailed
 				execution.Error = result.Error
 				execution.FinishedAt = time.Now()
+				// Wait for runSteps to finish before returning
+				<-done
 				return &WorkflowResult{
 					ExecutionID: execution.ID,
 					WorkflowID:  workflow.ID,
@@ -91,6 +102,8 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		case err := <-errChan:
 			execution.Status = WorkflowStatusFailed
 			execution.FinishedAt = time.Now()
+			// Wait for runSteps to finish before returning
+			<-done
 			return &WorkflowResult{
 				ExecutionID: execution.ID,
 				WorkflowID:  workflow.ID,
@@ -101,9 +114,14 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 		case <-ctx.Done():
 			execution.Status = WorkflowStatusCancelled
 			execution.FinishedAt = time.Now()
+			// Wait for runSteps to finish before returning
+			<-done
 			return nil, ctx.Err()
 		}
 	}
+
+	// Wait for runSteps to finish
+	<-done
 
 	execution.Status = WorkflowStatusCompleted
 	execution.FinishedAt = time.Now()
@@ -130,9 +148,9 @@ func (e *Executor) runSteps(
 	workflow *Workflow,
 	executionOrder []string,
 	initialInput string,
-	stepChan chan string,
 	resultChan chan *StepResult,
 	errChan chan error,
+	outputStore *OutputStore,
 ) {
 	stepIndex := 0
 	completed := make(map[string]bool)
@@ -140,43 +158,75 @@ func (e *Executor) runSteps(
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	// Submit steps according to execution order
+	sem := make(chan struct{}, e.maxParallel)
+
 	for stepIndex < len(executionOrder) {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			close(resultChan)
+			return
+		default:
+		}
+
 		stepID := executionOrder[stepIndex]
 		step := e.findStep(workflow.Steps, stepID)
 
-		// Check if step can be executed based on dependencies
 		if !e.canExecute(step, completed, &mu) {
-			// Cannot execute yet, check if this step was already processed
 			mu.Lock()
 			alreadyProcessed := processed[stepID]
 			mu.Unlock()
 
 			if alreadyProcessed {
-				// Already processed but not completed, move to next step
 				stepIndex++
 				continue
 			}
 
-			// Wait for dependency to complete
-			// Check if we have any active goroutines
-			wg.Wait()
-			continue
+			// Wait for some goroutines to complete, but with timeout to avoid deadlock
+			// Use errgroup to manage the wait goroutine
+			waitG, _ := errgroup.WithContext(ctx)
+			waitDone := make(chan struct{})
+			waitG.Go(func() error {
+				defer close(waitDone)
+				wg.Wait()
+				return nil
+			})
+
+			select {
+			case <-waitDone:
+				// Some goroutines completed, retry
+				continue
+			case <-time.After(5 * time.Second):
+				// Timeout: potential deadlock detected, abort workflow
+				errChan <- fmt.Errorf("workflow deadlock detected: step %s waiting for dependencies that may never complete", stepID)
+				wg.Wait()
+				// Wait for waitG to complete
+				_ = waitG.Wait()
+				close(resultChan)
+				return
+			case <-ctx.Done():
+				wg.Wait()
+				// Wait for waitG to complete
+				_ = waitG.Wait()
+				close(resultChan)
+				return
+			}
 		}
 
-		// Wait for capacity
-		if len(stepChan) >= e.maxParallel {
-			<-stepChan
-		}
+		sem <- struct{}{}
 
-		// Start executing the step
-		stepChan <- stepID
 		stepIndex++
 
+		// Capture current stepID for goroutine
+		sid := stepID
+
 		wg.Add(1)
-		go func(sid string) {
+		// Create local errgroup for this step execution
+		stepG, stepCtx := errgroup.WithContext(ctx)
+		stepG.Go(func() error {
 			defer func() {
-				<-stepChan
+				// Release semaphore and notify wait group
+				<-sem
 				wg.Done()
 
 				if r := recover(); r != nil {
@@ -189,11 +239,14 @@ func (e *Executor) runSteps(
 						Status: StepStatusFailed,
 						Error:  fmt.Sprintf("panic: %v", r),
 					}
-					resultChan <- result
+					select {
+					case resultChan <- result:
+					case <-stepCtx.Done():
+					}
 				}
 			}()
 
-			result := e.executeStep(ctx, workflow, sid, initialInput, completed)
+			result := e.executeStep(stepCtx, workflow, sid, initialInput, completed, outputStore)
 
 			mu.Lock()
 			processed[sid] = true
@@ -202,14 +255,28 @@ func (e *Executor) runSteps(
 			}
 			mu.Unlock()
 
-			resultChan <- result
-		}(stepID)
+			select {
+			case resultChan <- result:
+			case <-stepCtx.Done():
+				return stepCtx.Err()
+			}
+			return nil
+		})
+
+		// Don't wait for individual step, continue to next step
+		// The stepG.Wait() will be called when needed for deadlock detection
 	}
 
-	// Wait for all goroutines to complete
+	// Wait for all step goroutines to complete
 	wg.Wait()
 
-	// Check if workflow is complete
+	select {
+	case <-ctx.Done():
+		close(resultChan)
+		return
+	default:
+	}
+
 	mu.Lock()
 	allCompleted := len(completed) == len(workflow.Steps)
 	mu.Unlock()
@@ -219,7 +286,6 @@ func (e *Executor) runSteps(
 		return
 	}
 
-	// Check for incomplete workflow
 	pending := false
 	for _, sid := range executionOrder {
 		mu.Lock()
@@ -236,11 +302,12 @@ func (e *Executor) runSteps(
 	}
 
 	if pending {
-		errChan <- ErrWorkflowIncomplete
-		close(resultChan)
-	} else {
-		close(resultChan)
+		select {
+		case errChan <- ErrWorkflowIncomplete:
+		case <-ctx.Done():
+		}
 	}
+	close(resultChan)
 }
 
 // canExecute checks if a step can be executed.
@@ -272,6 +339,7 @@ func (e *Executor) executeStep(
 	stepID string,
 	initialInput string,
 	completed map[string]bool,
+	outputStore *OutputStore,
 ) *StepResult {
 	step := e.findStep(workflow.Steps, stepID)
 	if step == nil {
@@ -284,7 +352,11 @@ func (e *Executor) executeStep(
 
 	startTime := time.Now()
 
-	input := e.resolveInput(step, initialInput, completed)
+	completedCopy := make(map[string]bool)
+	for k, v := range completed {
+		completedCopy[k] = v
+	}
+	input := e.resolveInput(step, initialInput, completedCopy, outputStore)
 
 	output, err := e.executeWithRetry(ctx, step, input)
 
@@ -301,7 +373,7 @@ func (e *Executor) executeStep(
 		result.Error = err.Error()
 	}
 
-	e.outputStore.Set(stepID, &StepOutput{
+	outputStore.Set(stepID, &StepOutput{
 		StepID:    stepID,
 		Output:    output,
 		Variables: make(map[string]interface{}),
@@ -311,24 +383,24 @@ func (e *Executor) executeStep(
 }
 
 // resolveInput resolves the input for a step.
-func (e *Executor) resolveInput(step *Step, initialInput string, completed map[string]bool) string {
+func (e *Executor) resolveInput(step *Step, initialInput string, completed map[string]bool, outputStore *OutputStore) string {
 	if len(step.DependsOn) == 0 {
 		// For steps with no dependencies, replace {{.input}} with initialInput
 		if step.Input != "" {
-			return e.replaceTemplateVariables(step.Input, initialInput, nil)
+			return e.replaceTemplateVariables(step.Input, initialInput, nil, outputStore)
 		}
 		return initialInput
 	}
 
 	if step.Input != "" {
 		// For steps with dependencies, replace template variables with actual outputs
-		return e.replaceTemplateVariables(step.Input, initialInput, completed)
+		return e.replaceTemplateVariables(step.Input, initialInput, completed, outputStore)
 	}
 
 	// Fallback: concatenate all dependency outputs
 	var depsOutput string
 	for _, dep := range step.DependsOn {
-		if output, exists := e.outputStore.Get(dep); exists {
+		if output, exists := outputStore.Get(dep); exists {
 			if depsOutput != "" {
 				depsOutput += "\n\n"
 			}
@@ -344,7 +416,7 @@ func (e *Executor) resolveInput(step *Step, initialInput string, completed map[s
 }
 
 // replaceTemplateVariables replaces template variables in input with actual values.
-func (e *Executor) replaceTemplateVariables(input, initialInput string, completed map[string]bool) string {
+func (e *Executor) replaceTemplateVariables(input, initialInput string, completed map[string]bool, outputStore *OutputStore) string {
 	result := input
 
 	// Replace {{.input}} with initial input
@@ -356,7 +428,7 @@ func (e *Executor) replaceTemplateVariables(input, initialInput string, complete
 
 	// Collect outputs from completed steps
 	for stepID := range completed {
-		if output, exists := e.outputStore.Get(stepID); exists {
+		if output, exists := outputStore.Get(stepID); exists {
 			replacements[fmt.Sprintf("{{.%s}}", stepID)] = output.Output
 		}
 	}
@@ -411,7 +483,11 @@ func (e *Executor) executeWithRetry(ctx context.Context, step *Step, input strin
 
 // executeSingle executes a step once.
 func (e *Executor) executeSingle(ctx context.Context, step *Step, input string) (string, error) {
-	stepCtx, cancel := context.WithTimeout(ctx, step.Timeout)
+	timeout := step.Timeout
+	if timeout == 0 {
+		timeout = DefaultStepTimeout
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	executor := NewAgentExecutor(e.registry)

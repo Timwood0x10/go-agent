@@ -7,6 +7,8 @@ import (
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
+
+	"github.com/lib/pq"
 )
 
 // TenantGuard provides physical isolation for multi-tenant data access.
@@ -22,6 +24,12 @@ func NewTenantGuard(pool *Pool) *TenantGuard {
 
 // SetTenantContext sets the tenant context for the current database session.
 // This MUST be called for every tenant-specific operation to ensure physical isolation.
+//
+// NOTE: Uses SET LOCAL to set tenant context within the current transaction only.
+// This ensures tenant isolation works correctly with connection pooling, as SET LOCAL
+// only affects the current transaction and is reset when the transaction ends.
+// This prevents tenant context leakage across different connections in the pool.
+//
 // Args:
 // ctx - database operation context.
 // tenantID - tenant identifier, must be non-empty.
@@ -31,9 +39,10 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 		return coreerrors.ErrInvalidArgument
 	}
 
-	// SET statement does not support parameterized queries, need to concatenate string directly
-	// tenantID has been validated as non-empty string, so it's safe to use
-	query := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	quotedID := pq.QuoteLiteral(tenantID)
+	// Use SET LOCAL to ensure tenant context only affects current transaction
+	// This prevents cross-tenant data access in connection pool scenarios
+	query := fmt.Sprintf("SET LOCAL app.tenant_id TO %s", quotedID)
 	_, err := g.db.Exec(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "set tenant context")

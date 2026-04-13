@@ -25,6 +25,7 @@ var (
 	ErrHeartbeatMissed = errors.New("heartbeat missed")
 	ErrQueueFull       = errors.New("message queue is full")
 	ErrQueueEmpty      = errors.New("message queue is empty")
+	ErrQueueClosed     = errors.New("message queue is closed")
 )
 
 // Sentinel errors for Storage module.
@@ -79,8 +80,9 @@ var (
 	ErrLLMGenerateFailed           = errors.New("LLM generate failed")
 	ErrTaskPlannerNotInitialized   = errors.New("task planner not initialized")
 	ErrProfileParserNotInitialized = errors.New("profile parser not initialized")
-	ErrDispatchNotInitialized      = errors.New(("task dispatcher not initialized"))
+	ErrDispatchNotInitialized      = errors.New("task dispatcher not initialized")
 	ErrResultAggNotInitialized     = errors.New("result aggregator not initialized")
+	ErrDispatchFailed              = errors.New("task dispatch failed")
 )
 
 // ModelValidationErrors returns validation errors for models package.

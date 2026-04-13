@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"goagent/internal/errors"
 
 	"github.com/fsnotify/fsnotify"
@@ -32,11 +34,17 @@ type FileWatcher struct {
 	callbackID   uint64
 	mu           sync.RWMutex
 	pollInterval time.Duration // Fallback polling interval (only used if fsnotify fails)
+	wg           sync.WaitGroup
+	stopCtx      context.Context
+	stopCancel   context.CancelFunc
+	g            *errgroup.Group
 }
 
 // NewFileWatcher creates a new FileWatcher.
 func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *FileWatcher {
-	// Try to create fsnotify watcher
+	if loader == nil {
+		panic("loader cannot be nil")
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		slog.Warn("FileWatcher: fsnotify not available, falling back to polling", "error", err)
@@ -44,12 +52,16 @@ func NewFileWatcher(loader WorkflowLoader, workflows map[string]*Workflow) *File
 		slog.Info("FileWatcher: using fsnotify for real-time file monitoring")
 	}
 
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+
 	return &FileWatcher{
 		watcher:      watcher,
 		loader:       loader,
 		workflows:    workflows,
 		callbacks:    make([]callbackWithID, 0),
 		pollInterval: 5 * time.Second,
+		stopCtx:      stopCtx,
+		stopCancel:   stopCancel,
 	}
 }
 
@@ -58,6 +70,9 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 	if err := w.scanAndLoad(ctx, dir); err != nil {
 		return err
 	}
+
+	// Create errgroup for goroutine management
+	w.g, ctx = errgroup.WithContext(ctx)
 
 	// If we have fsnotify watcher, use event-driven approach
 	if w.watcher != nil {
@@ -69,10 +84,18 @@ func (w *FileWatcher) Watch(ctx context.Context, dir string) error {
 		// Watch subdirectories for workflow files
 		w.watchDirectory(ctx, dir)
 
-		go w.fsnotifyLoop(ctx, dir)
+		w.wg.Add(1)
+		w.g.Go(func() error {
+			w.fsnotifyLoop(dir)
+			return nil
+		})
 	} else {
 		// Fallback to polling
-		go w.watchLoop(ctx, dir)
+		w.wg.Add(1)
+		w.g.Go(func() error {
+			w.watchLoop(dir)
+			return nil
+		})
 	}
 
 	return nil
@@ -102,7 +125,8 @@ func (w *FileWatcher) watchDirectory(ctx context.Context, dir string) {
 }
 
 // fsnotifyLoop watches for file change events.
-func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
+func (w *FileWatcher) fsnotifyLoop(dir string) {
+	defer w.wg.Done()
 	defer func() {
 		if w.watcher != nil {
 			_ = w.watcher.Close()
@@ -111,7 +135,7 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.stopCtx.Done():
 			return
 		case event, ok := <-w.watcher.Events:
 			if !ok {
@@ -127,7 +151,7 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 				continue
 			}
 			// Reload on file change
-			if err := w.scanAndLoad(ctx, dir); err != nil {
+			if err := w.scanAndLoad(w.stopCtx, dir); err != nil {
 				continue
 			}
 		case err, ok := <-w.watcher.Errors:
@@ -140,19 +164,36 @@ func (w *FileWatcher) fsnotifyLoop(ctx context.Context, dir string) {
 }
 
 // watchLoop periodically checks for file changes (fallback when fsnotify unavailable).
-func (w *FileWatcher) watchLoop(ctx context.Context, dir string) {
+func (w *FileWatcher) watchLoop(dir string) {
+	defer w.wg.Done()
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.stopCtx.Done():
 			return
 		case <-ticker.C:
-			if err := w.scanAndLoad(ctx, dir); err != nil {
+			if err := w.scanAndLoad(w.stopCtx, dir); err != nil {
 				continue
 			}
 		}
+	}
+}
+
+// Close closes the file watcher and releases resources.
+func (w *FileWatcher) Close() {
+	if w.stopCancel != nil {
+		w.stopCancel()
+	}
+	w.wg.Wait()
+	// Wait for errgroup to complete (ignoring errors as we're shutting down)
+	if w.g != nil {
+		_ = w.g.Wait()
+	}
+	if w.watcher != nil {
+		_ = w.watcher.Close()
+		w.watcher = nil
 	}
 }
 
@@ -335,10 +376,13 @@ func (r *WorkflowReloader) onReload(workflows map[string]*Workflow) {
 func (r *WorkflowReloader) notifyCallbacks() {
 	r.mu.RLock()
 	workflows := r.workflows
-	callbacks := r.callbacks
+	callbacksCopy := make(map[string]ReloadCallback, len(r.callbacks))
+	for k, v := range r.callbacks {
+		callbacksCopy[k] = v
+	}
 	r.mu.RUnlock()
 
-	for _, callback := range callbacks {
+	for _, callback := range callbacksCopy {
 		callback(workflows)
 	}
 }
@@ -390,6 +434,7 @@ func (r *WorkflowReloader) StopWatching() {
 		r.cancel()
 	}
 	if r.watcher != nil {
+		r.watcher.Close()
 		r.watcher = nil
 	}
 }

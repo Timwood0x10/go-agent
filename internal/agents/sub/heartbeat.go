@@ -2,6 +2,7 @@ package sub
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"goagent/internal/protocol/ahp"
@@ -12,6 +13,8 @@ type heartbeatSender struct {
 	agentID      string
 	interval     time.Duration
 	stopCh       chan struct{}
+	stopOnce     sync.Once
+	doneCh       chan struct{} // Done channel to signal goroutine exit
 	heartbeatMon *ahp.HeartbeatMonitor
 }
 
@@ -24,12 +27,18 @@ func NewHeartbeatSender(agentID string, interval time.Duration, hbMon *ahp.Heart
 		agentID:      agentID,
 		interval:     interval,
 		stopCh:       make(chan struct{}),
+		doneCh:       make(chan struct{}),
 		heartbeatMon: hbMon,
 	}
 }
 
 // Start starts sending heartbeats.
+//
+// NOTE: This method blocks until context is cancelled or Stop() is called.
+// Callers should run this in a goroutine and use Done() to wait for exit.
 func (s *heartbeatSender) Start(ctx context.Context) {
+	defer close(s.doneCh)
+
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 
@@ -48,11 +57,15 @@ func (s *heartbeatSender) Start(ctx context.Context) {
 }
 
 // Stop stops sending heartbeats.
+// This method is idempotent and safe to call multiple times.
 func (s *heartbeatSender) Stop() {
-	select {
-	case <-s.stopCh:
-		return
-	default:
+	s.stopOnce.Do(func() {
 		close(s.stopCh)
-	}
+	})
+}
+
+// Done returns a channel that is closed when the heartbeat goroutine exits.
+// This allows callers to wait for graceful shutdown.
+func (s *heartbeatSender) Done() <-chan struct{} {
+	return s.doneCh
 }

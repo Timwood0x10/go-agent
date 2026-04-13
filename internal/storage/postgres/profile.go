@@ -7,8 +7,8 @@ import (
 	"time"
 
 	coreerrors "goagent/internal/core/errors"
-	"goagent/internal/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // ProfileRepository handles user profile persistence.

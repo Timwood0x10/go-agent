@@ -4,23 +4,26 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 	"text/template"
 
 	"goagent/internal/errors"
+
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
 
 // TemplateEngine handles prompt templates.
 type TemplateEngine struct {
-	funcs template.FuncMap
+	funcs map[string]interface{}
+	mu    sync.RWMutex
 }
 
 // NewTemplateEngine creates a new TemplateEngine.
 func NewTemplateEngine() *TemplateEngine {
 	titleCase := cases.Title(language.English)
 	return &TemplateEngine{
-		funcs: template.FuncMap{
+		funcs: map[string]interface{}{
 			"upper":   strings.ToUpper,
 			"lower":   strings.ToLower,
 			"title":   func(s string) string { return titleCase.String(s) },
@@ -34,7 +37,14 @@ func NewTemplateEngine() *TemplateEngine {
 
 // Render renders a template string with given data.
 func (e *TemplateEngine) Render(tmpl string, data interface{}) (string, error) {
-	t, err := template.New("prompt").Funcs(e.funcs).Parse(tmpl)
+	e.mu.RLock()
+	funcs := make(map[string]interface{}, len(e.funcs))
+	for k, v := range e.funcs {
+		funcs[k] = v
+	}
+	e.mu.RUnlock()
+
+	t, err := template.New("prompt").Funcs(template.FuncMap(funcs)).Parse(tmpl)
 	if err != nil {
 		return "", errors.Wrap(err, "parse template")
 	}
@@ -64,6 +74,8 @@ func (e *TemplateEngine) RenderFile(path string, data interface{}) (string, erro
 
 // RegisterFunc registers a custom function.
 func (e *TemplateEngine) RegisterFunc(name string, fn interface{}) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.funcs[name] = fn
 }
 
@@ -126,7 +138,10 @@ Return a JSON object with:
 
 // RenderRecommendation renders the recommendation prompt.
 func (e *TemplateEngine) RenderRecommendation(data map[string]interface{}) (string, error) {
-	schema, _ := GetRecommendResultSchema().ToJSONString()
+	schema, err := GetRecommendResultSchema().ToJSONString()
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize schema: %w", err)
+	}
 	data["Schema"] = schema
 	return e.Render(RecommendationPrompt, data)
 }

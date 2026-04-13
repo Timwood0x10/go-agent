@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 // Package services provides integration tests for retrieval services.
 package services
 

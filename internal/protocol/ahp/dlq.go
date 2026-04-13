@@ -2,6 +2,7 @@ package ahp
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -108,6 +109,19 @@ func (d *DLQ) Clear() {
 	d.messages = d.messages[:0]
 }
 
+// Remove removes an entry from the DLQ.
+func (d *DLQ) Remove(entry *DLQEntry) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for i, e := range d.messages {
+		if e == entry {
+			d.messages = append(d.messages[:i], d.messages[i+1:]...)
+			return
+		}
+	}
+}
+
 // RemoveBySession removes entries for a specific session.
 func (d *DLQ) RemoveBySession(sessionID string) {
 	d.mu.Lock()
@@ -161,6 +175,9 @@ func (p *DLQProcessor) Process(ctx context.Context) error {
 			p.mu.Unlock()
 			continue
 		}
+
+		p.dlq.Remove(entry)
+
 		p.mu.Lock()
 		p.processed++
 		p.mu.Unlock()
@@ -185,7 +202,12 @@ func (p *DLQProcessor) processEntry(ctx context.Context, entry *DLQEntry) error 
 
 // defaultHandler is the default handler for DLQ entries.
 func (p *DLQProcessor) defaultHandler(ctx context.Context, entry *DLQEntry) error {
-	// Default behavior: log and continue
+	slog.Warn("DLQ entry processed by default handler",
+		"session_id", entry.Message.SessionID,
+		"reason", entry.Reason,
+		"retries", entry.Retries,
+		"error", entry.Error,
+	)
 	return nil
 }
 

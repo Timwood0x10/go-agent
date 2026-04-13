@@ -131,8 +131,9 @@ func (m *Manager) StartShutdown(ctx context.Context) error {
 		m.mu.Unlock()
 
 		if err := m.executePhase(ctx, phase); err != nil {
-				return errors.Wrapf(err, "phase %s failed", phase)
-			}	}
+			return errors.Wrapf(err, "phase %s failed", phase)
+		}
+	}
 
 	return nil
 }
@@ -162,23 +163,27 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 		go func(cb Callback) {
 			defer m.wg.Done()
 
-			// Recover from panic to prevent one callback from breaking the entire shutdown
 			defer func() {
 				if r := recover(); r != nil {
 					if handler.onPanic != nil {
 						handler.onPanic(r)
 					}
-					panicChan <- r
+					select {
+					case panicChan <- r:
+					case <-phaseCtx.Done():
+					}
 				}
 			}()
 
 			if err := cb(phaseCtx); err != nil {
-				errChan <- err
+				select {
+				case errChan <- err:
+				case <-phaseCtx.Done():
+				}
 			}
 		}(callback)
 	}
 
-	// Wait for all callbacks or timeout
 	done := make(chan struct{})
 	go func() {
 		m.wg.Wait()
@@ -190,7 +195,6 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 		close(errChan)
 		close(panicChan)
 
-		// Check for panics first
 		panicCount := 0
 		for panicInfo := range panicChan {
 			panicCount++
@@ -199,11 +203,10 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 				"panic", panicInfo)
 		}
 
-		// Then check for errors
-		var errors []error
+		var errs []error
 		for err := range errChan {
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, err)
 			}
 		}
 
@@ -211,8 +214,8 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 			return fmt.Errorf("%d callback(s) panicked during shutdown phase %s", panicCount, phase)
 		}
 
-		if len(errors) > 0 {
-			return fmt.Errorf("%d callback(s) failed during shutdown phase %s: %v", len(errors), phase, errors)
+		if len(errs) > 0 {
+			return fmt.Errorf("%d callback(s) failed during shutdown phase %s: %v", len(errs), phase, errs)
 		}
 
 		return nil
@@ -220,6 +223,14 @@ func (m *Manager) executePhase(ctx context.Context, phase Phase) error {
 		if handler.onTimeout != nil {
 			handler.onTimeout()
 		}
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			slog.Warn("Timeout waiting for callbacks to complete during shutdown",
+				"phase", phase)
+		}
+		close(errChan)
+		close(panicChan)
 		return phaseCtx.Err()
 	}
 }

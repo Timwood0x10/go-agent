@@ -69,7 +69,7 @@ func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 		return "", coreerrors.ErrInvalidArgument
 	}
 
-	// Check if prompt is too long (max 10,000 characters)
+	// Check if prompt is too long (max 8192 characters)
 	const maxPromptLength = 8192
 	if len(prompt) > maxPromptLength {
 		return "", fmt.Errorf("prompt exceeds maximum length of %d characters", maxPromptLength)

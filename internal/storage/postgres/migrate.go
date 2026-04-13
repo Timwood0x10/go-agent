@@ -10,7 +10,6 @@ import (
 // Migrate runs database migrations.
 func Migrate(ctx context.Context, pool *Pool) error {
 	migrations := []string{
-		// User profiles table
 		`CREATE TABLE IF NOT EXISTS user_profiles (
 			user_id VARCHAR(255) PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
@@ -27,7 +26,6 @@ func Migrate(ctx context.Context, pool *Pool) error {
 			updated_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// Sessions table
 		`CREATE TABLE IF NOT EXISTS sessions (
 			session_id VARCHAR(255) PRIMARY KEY,
 			user_id VARCHAR(255) NOT NULL,
@@ -37,12 +35,12 @@ func Migrate(ctx context.Context, pool *Pool) error {
 			metadata JSONB,
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
-			expired_at TIMESTAMP,
-			INDEX idx_sessions_user_id (user_id),
-			INDEX idx_sessions_expired_at (expired_at)
+			expired_at TIMESTAMP
 		)`,
 
-		// Recommendations table
+		`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_expired_at ON sessions(expired_at)`,
+
 		`CREATE TABLE IF NOT EXISTS recommendations (
 			id SERIAL PRIMARY KEY,
 			session_id VARCHAR(255) UNIQUE NOT NULL,
@@ -55,20 +53,21 @@ func Migrate(ctx context.Context, pool *Pool) error {
 			season VARCHAR(50),
 			feedback JSONB,
 			metadata JSONB,
-			created_at TIMESTAMP DEFAULT NOW(),
-			INDEX idx_recommendations_user_id (user_id),
-			INDEX idx_recommendations_created_at (created_at)
+			created_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// Vector embeddings table (basic - requires pgvector extension)
+		`CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_recommendations_created_at ON recommendations(created_at)`,
+
 		`CREATE TABLE IF NOT EXISTS embeddings (
 			id VARCHAR(255) PRIMARY KEY,
 			table_name VARCHAR(100) NOT NULL,
 			embedding VECTOR(1536),
 			metadata JSONB,
-			created_at TIMESTAMP DEFAULT NOW(),
-			INDEX idx_embeddings_table_name (table_name)
+			created_at TIMESTAMP DEFAULT NOW()
 		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_embeddings_table_name ON embeddings(table_name)`,
 	}
 
 	for i, migration := range migrations {

@@ -4,7 +4,10 @@ package postgres
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
+
+	"goagent/internal/errors"
 )
 
 // EmbeddingReconciler provides eventual consistency for embedding operations.
@@ -15,7 +18,8 @@ type EmbeddingReconciler struct {
 	embeddingConfig  *EmbeddingConfig
 	interval         time.Duration
 	missingThreshold time.Duration
-	stopped          bool
+	stopCh           chan struct{}
+	stopOnce         sync.Once
 }
 
 // NewEmbeddingReconciler creates a new EmbeddingReconciler instance.
@@ -36,7 +40,7 @@ func NewEmbeddingReconciler(db *Pool, queue *EmbeddingQueue, embeddingConfig *Em
 		embeddingConfig:  embeddingConfig,
 		interval:         interval,
 		missingThreshold: missingThreshold,
-		stopped:          false,
+		stopCh:           make(chan struct{}),
 	}
 }
 
@@ -51,10 +55,15 @@ func (r *EmbeddingReconciler) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Stopping embedding reconciler")
+			slog.Info("Stopping embedding reconciler due to context cancellation")
 			return
-
+		case <-r.stopCh:
+			slog.Info("Stopping embedding reconciler due to Stop() call")
+			return
 		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
 			if err := r.Reconcile(ctx); err != nil {
 				slog.Error("Embedding reconciliation failed", "error", err)
 			}
@@ -128,6 +137,11 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 		reconciledCount++
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate orphaned tasks", "error", err)
+		return errors.Wrap(err, "iterate orphaned tasks")
+	}
+
 	if reconciledCount > 0 {
 		slog.Info("Reconciled orphaned embedding tasks", "count", reconciledCount)
 	}
@@ -136,6 +150,9 @@ func (r *EmbeddingReconciler) Reconcile(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down the reconciler.
+// This method is idempotent and safe to call multiple times.
 func (r *EmbeddingReconciler) Stop() {
-	r.stopped = true
+	r.stopOnce.Do(func() {
+		close(r.stopCh)
+	})
 }

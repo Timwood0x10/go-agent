@@ -226,11 +226,13 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err != nil {
 		return errors.Wrap(err, "begin transaction")
 	}
+	committed := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			slog.Error("Failed to rollback transaction", "error", err)
+		if !committed {
+			if err := tx.Rollback(); err != nil {
+				slog.Error("Failed to rollback transaction", "error", err)
+			}
 		}
-
 	}()
 
 	for i, chunk := range chunks {
@@ -283,6 +285,7 @@ func (r *KnowledgeRepository) CreateBatch(ctx context.Context, chunks []*storage
 	if err := tx.Commit(); err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}
+	committed = true
 
 	return nil
 }
@@ -514,6 +517,11 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 		chunks = append(chunks, chunk)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate knowledge chunks", "error", err)
+		return nil, errors.Wrap(err, "iterate knowledge chunks")
+	}
+
 	slog.Info("Vector search completed", "rows_scanned", rowCount, "chunks_returned", len(chunks))
 
 	return chunks, nil
@@ -567,6 +575,11 @@ func (r *KnowledgeRepository) SearchByKeyword(ctx context.Context, query, tenant
 		chunks = append(chunks, chunk)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate knowledge chunks", "error", err)
+		return nil, errors.Wrap(err, "iterate knowledge chunks")
+	}
+
 	return chunks, nil
 }
 
@@ -606,6 +619,11 @@ func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, te
 			continue
 		}
 		chunks = append(chunks, chunk)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate knowledge chunks", "error", err)
+		return nil, errors.Wrap(err, "iterate knowledge chunks")
 	}
 
 	return chunks, nil
@@ -659,6 +677,11 @@ func (r *KnowledgeRepository) SearchBySubstring(ctx context.Context, query, tena
 			continue
 		}
 		chunks = append(chunks, chunk)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate knowledge chunks", "error", err)
+		return nil, errors.Wrap(err, "iterate knowledge chunks")
 	}
 
 	return chunks, nil

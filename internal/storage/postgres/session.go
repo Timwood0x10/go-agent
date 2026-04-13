@@ -7,8 +7,8 @@ import (
 	"time"
 
 	coreerrors "goagent/internal/core/errors"
-	"goagent/internal/errors"
 	"goagent/internal/core/models"
+	"goagent/internal/errors"
 )
 
 // SessionRepository handles session persistence.
@@ -201,6 +201,10 @@ func (r *SessionRepository) ListByUserID(ctx context.Context, userID string, lim
 		}
 
 		sessions = append(sessions, &session)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate sessions")
 	}
 
 	return sessions, nil

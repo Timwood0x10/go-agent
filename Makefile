@@ -1,6 +1,6 @@
 # Makefile for GO Agent Framework
 
-.PHONY: all lint test test-race check check-core check-tools help clean install
+.PHONY: all lint test test-race check check-core check-tools help clean install ci
 
 # Default target
 all: lint test
@@ -9,6 +9,56 @@ all: lint test
 install:
 	go mod download
 	go get ./...
+
+# CI target - runs all CI checks locally (matches .github/workflows/ci.yml)
+ci: ci-deps ci-fmt ci-vet ci-lint ci-build ci-test-race
+	@echo ""
+	@echo "✅ All CI checks PASSED"
+
+# CI dependency checks
+ci-deps:
+	@echo "Checking dependencies..."
+	@go mod verify
+	@echo "Dependencies: OK"
+
+# CI format check
+ci-fmt:
+	@echo "Checking code formatting..."
+	@if [ -n "$$(gofmt -l .)" ]; then \
+		echo "ERROR: Code not formatted. Run 'make fmt'"; \
+		gofmt -l .; \
+		exit 1; \
+	fi
+	@echo "Formatting: OK"
+
+# CI vet check
+ci-vet:
+	@echo "Running go vet..."
+	@go vet ./...
+	@echo "Vet: OK"
+
+# CI linter
+ci-lint:
+	@echo "Running golangci-lint..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=10m --out-format=github-actions; \
+		echo "Linting: OK"; \
+	else \
+		echo "ERROR: golangci-lint not installed. Install with: brew install golangci-lint"; \
+		exit 1; \
+	fi
+
+# CI build check
+ci-build:
+	@echo "Building all packages..."
+	@go build -v ./...
+	@echo "Build: OK"
+
+# CI tests with race detection
+ci-test-race:
+	@echo "Running tests with race detection..."
+	@go test -race -short ./...
+	@echo "Tests: OK"
 
 # Format code
 fmt:
@@ -113,16 +163,19 @@ help:
 	@echo "  build         - Build server binary"
 	@echo "  build-all     - Build all binaries"
 	@echo "  clean         - Clean build artifacts"
-	@echo "  ci            - Run CI checks (install, fmt, lint, test-race)"
+	@echo "  ci            - Run full CI checks locally (deps, fmt, vet, lint, build, test-race)"
 	@echo "  help          - Show this help message"
+	@echo ""
+	@echo "CI sub-targets:"
+	@echo "  ci-deps       - Verify module dependencies"
+	@echo "  ci-fmt        - Check code formatting"
+	@echo "  ci-vet        - Run go vet"
+	@echo "  ci-lint       - Run golangci-lint"
+	@echo "  ci-build      - Build all packages"
+	@echo "  ci-test-race  - Run tests with race detection"
 	@echo ""
 	@echo "Required tools:"
 	@echo "  - go: https://go.dev/dl/"
 	@echo "  - goimports: go install golang.org/x/tools/cmd/goimports@latest"
 	@echo "  - staticcheck: go install honnef.co/go/tools/cmd/staticcheck@latest"
 	@echo "  - golangci-lint: brew install golangci-lint (macOS)"
-
-# CI target (used in CI pipelines)
-ci: install fmt lint test-race
-	@echo ""
-	@echo "CI checks: PASSED"

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -21,6 +22,9 @@ type OpenAIAdapter struct {
 
 // NewOpenAIAdapter creates a new OpenAIAdapter.
 func NewOpenAIAdapter(config *Config) *OpenAIAdapter {
+	if config == nil {
+		config = &Config{}
+	}
 	if config.BaseURL == "" {
 		config.BaseURL = "https://api.openai.com/v1"
 	}
@@ -64,8 +68,12 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 	if err != nil {
 		return "", errors.Wrap(err, "send request")
 	}
-	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
-	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("close response body failed", "err", err)
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return "", errors.Wrap(errors.Newf("openai error: %s", respBody), "API request failed")
@@ -120,8 +128,12 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
 	}
-	// nolint: errcheck // Response body is closed by defer	defer resp.Body.Close()
-	// nolint: errcheck // Response body is closed by defer	// nolint: errcheck // Response body is closed by defer
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("close response body failed", "err", err)
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("openai error: %s", respBody)

@@ -3,6 +3,7 @@ package ahp
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"goagent/internal/core/errors"
@@ -10,9 +11,13 @@ import (
 
 // MessageQueue represents an in-memory message queue for agent communication.
 type MessageQueue struct {
-	messages chan *AHPMessage
-	agentID  string
-	opts     *QueueOptions
+	messages     chan *AHPMessage
+	agentID      string
+	opts         *QueueOptions
+	backupBuffer []*AHPMessage
+	backupMu     sync.Mutex
+	closed       atomic.Bool
+	closeOnce    sync.Once
 }
 
 // QueueOptions holds the configuration options for the message queue.
@@ -37,29 +42,45 @@ func NewMessageQueue(agentID string, opts *QueueOptions) *MessageQueue {
 		opts = DefaultQueueOptions()
 	}
 	return &MessageQueue{
-		messages: make(chan *AHPMessage, opts.MaxSize),
-		agentID:  agentID,
-		opts:     opts,
+		messages:     make(chan *AHPMessage, opts.MaxSize),
+		agentID:      agentID,
+		opts:         opts,
+		backupBuffer: make([]*AHPMessage, 0),
 	}
 }
 
 // Enqueue adds a message to the queue.
 func (q *MessageQueue) Enqueue(ctx context.Context, msg *AHPMessage) error {
+	if q.closed.Load() {
+		return errors.ErrQueueClosed
+	}
 	select {
 	case q.messages <- msg:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Queue is full
 		return errors.ErrQueueFull
 	}
 }
 
 // Dequeue removes and returns a message from the queue.
+// Messages in the backup buffer are prioritized over the main queue.
 func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
+	q.backupMu.Lock()
+	if len(q.backupBuffer) > 0 {
+		msg := q.backupBuffer[0]
+		q.backupBuffer = q.backupBuffer[1:]
+		q.backupMu.Unlock()
+		return msg, nil
+	}
+	q.backupMu.Unlock()
+
 	select {
-	case msg := <-q.messages:
+	case msg, ok := <-q.messages:
+		if !ok {
+			return nil, errors.ErrQueueClosed
+		}
 		return msg, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -67,9 +88,22 @@ func (q *MessageQueue) Dequeue(ctx context.Context) (*AHPMessage, error) {
 }
 
 // DequeueWithTimeout removes and returns a message with timeout.
+// Messages in the backup buffer are prioritized over the main queue.
 func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, error) {
+	q.backupMu.Lock()
+	if len(q.backupBuffer) > 0 {
+		msg := q.backupBuffer[0]
+		q.backupBuffer = q.backupBuffer[1:]
+		q.backupMu.Unlock()
+		return msg, nil
+	}
+	q.backupMu.Unlock()
+
 	select {
-	case msg := <-q.messages:
+	case msg, ok := <-q.messages:
+		if !ok {
+			return nil, errors.ErrQueueClosed
+		}
 		return msg, nil
 	case <-time.After(timeout):
 		return nil, errors.ErrQueueEmpty
@@ -77,30 +111,53 @@ func (q *MessageQueue) DequeueWithTimeout(timeout time.Duration) (*AHPMessage, e
 }
 
 // Peek returns the first message without removing it.
-// Uses non-blocking select to avoid deadlock.
-func (q *MessageQueue) Peek() *AHPMessage {
-	// Use non-blocking receive to peek without removing
+// Returns nil if the queue is empty or closed.
+//
+// This method uses a backup buffer to ensure messages are never lost.
+// If the message cannot be put back into the queue immediately, it is
+// stored in a backup buffer and will be prioritized for the next Dequeue.
+//
+// Returns:
+//   - (*AHPMessage, nil): successfully peeked message
+//   - (nil, nil): queue is empty
+func (q *MessageQueue) Peek() (*AHPMessage, error) {
+	if q.closed.Load() {
+		return nil, errors.ErrQueueClosed
+	}
+
+	q.backupMu.Lock()
+	if len(q.backupBuffer) > 0 {
+		msg := q.backupBuffer[0]
+		q.backupMu.Unlock()
+		return msg, nil
+	}
+	q.backupMu.Unlock()
+
 	select {
 	case msg, ok := <-q.messages:
 		if !ok {
-			return nil // Channel closed
+			return nil, errors.ErrQueueClosed
 		}
-		// Put the message back to channel (non-blocking)
 		select {
 		case q.messages <- msg:
-			return msg
+			return msg, nil
 		default:
-			// Channel full, message is lost but return it anyway
-			return msg
+			q.backupMu.Lock()
+			q.backupBuffer = append(q.backupBuffer, msg)
+			q.backupMu.Unlock()
+			return msg, nil
 		}
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
-// Size returns the current number of messages in the queue.
+// Size returns the current number of messages in the queue (including backup buffer).
 func (q *MessageQueue) Size() int {
-	return len(q.messages)
+	q.backupMu.Lock()
+	backupSize := len(q.backupBuffer)
+	q.backupMu.Unlock()
+	return len(q.messages) + backupSize
 }
 
 // Capacity returns the maximum capacity of the queue.
@@ -130,7 +187,10 @@ func (q *MessageQueue) AgentID() string {
 
 // Close closes the queue and drains remaining messages.
 func (q *MessageQueue) Close() {
-	close(q.messages)
+	q.closeOnce.Do(func() {
+		q.closed.Store(true)
+		close(q.messages)
+	})
 }
 
 // QueueRegistry manages multiple message queues for different agents.

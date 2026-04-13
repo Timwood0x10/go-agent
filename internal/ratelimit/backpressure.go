@@ -11,11 +11,13 @@ import (
 type Backpressure struct {
 	queue      chan *BackpressureRequest
 	mu         sync.RWMutex
+	wg         sync.WaitGroup
 	active     int
 	maxActive  int
 	queueSize  int
 	dropPolicy DropPolicy
 	metrics    *BackpressureMetrics
+	cancelFunc context.CancelFunc
 }
 
 // BackpressureRequest represents a request in the queue.
@@ -72,20 +74,17 @@ func (bp *Backpressure) Submit(ctx context.Context, key string, weight int) (*Ba
 
 	bp.mu.Lock()
 
-	// Check if we can process immediately
-	if bp.active < bp.maxActive {
+	if bp.active+weight <= bp.maxActive {
 		bp.active += weight
 		bp.metrics.Accepted++
+		result.Allowed = true
 		bp.mu.Unlock()
 
-		result.Allowed = true
 		return result, nil
 	}
 
-	bp.mu.Unlock()
-
-	// Try to queue
 	bp.metrics.Queued++
+	bp.mu.Unlock()
 
 	resultChan := make(chan *BackpressureResult, 1)
 
@@ -117,8 +116,37 @@ func (bp *Backpressure) Submit(ctx context.Context, key string, weight int) (*Ba
 }
 
 // Start starts the processing loop.
+//
+// NOTE: This method starts a goroutine to process requests. Use Stop() to gracefully
+// shutdown the processing loop and wait for all requests to complete.
 func (bp *Backpressure) Start(ctx context.Context, handler func(context.Context, string) error) {
-	go bp.processLoop(ctx, handler)
+	bp.mu.Lock()
+	if bp.cancelFunc != nil {
+		bp.mu.Unlock()
+		return // Already started
+	}
+
+	// Create a cancellable context for the processing loop
+	processCtx, cancel := context.WithCancel(ctx)
+	bp.cancelFunc = cancel
+	bp.mu.Unlock()
+
+	bp.wg.Add(1)
+	go func() {
+		defer bp.wg.Done()
+		bp.processLoop(processCtx, handler)
+	}()
+}
+
+// Stop gracefully stops the processing loop and waits for it to exit.
+func (bp *Backpressure) Stop() {
+	bp.mu.Lock()
+	if bp.cancelFunc != nil {
+		bp.cancelFunc()
+		bp.cancelFunc = nil
+	}
+	bp.mu.Unlock()
+	bp.wg.Wait()
 }
 
 // processLoop processes queued requests.
@@ -158,6 +186,10 @@ func (bp *Backpressure) Metrics() *BackpressureMetrics {
 }
 
 // Reset resets the backpressure state.
+//
+// NOTE: This method drains all queued requests and returns an error result to each.
+// Uses non-blocking send with select+default to avoid deadlock when Result channel
+// is already full (e.g., if request was already processed by processLoop).
 func (bp *Backpressure) Reset() {
 	bp.mu.Lock()
 	defer bp.mu.Unlock()
@@ -165,15 +197,24 @@ func (bp *Backpressure) Reset() {
 	bp.metrics = &BackpressureMetrics{}
 	bp.active = 0
 
-	// Drain queue
+	// Drain queue with non-blocking send to avoid deadlock
+drainLoop:
 	for len(bp.queue) > 0 {
 		select {
 		case req := <-bp.queue:
-			req.Result <- &BackpressureResult{
+			// Non-blocking send: if Result channel is already full (request already processed),
+			// skip this send to avoid deadlock. The caller will get the original result.
+			select {
+			case req.Result <- &BackpressureResult{
 				Allowed: false,
 				Error:   ErrReset,
+			}:
+			default:
+				// Channel already full, request already processed, skip send
 			}
 		default:
+			// No more items in queue
+			break drainLoop
 		}
 	}
 }
@@ -210,9 +251,11 @@ type AdaptiveLimiter struct {
 
 // NewAdaptiveLimiter creates a new AdaptiveLimiter.
 func NewAdaptiveLimiter(base Limiter, minRate, maxRate float64) *AdaptiveLimiter {
-	// Extract current rate from base limiter
+	if base == nil {
+		panic("base limiter cannot be nil")
+	}
 	rate := base.Rate()
-	burst := int(rate) // Default burst to rate
+	burst := int(rate)
 
 	config := &LimiterConfig{
 		Rate:    rate,

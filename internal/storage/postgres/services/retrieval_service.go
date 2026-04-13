@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
@@ -125,19 +126,21 @@ type RetrievalTrace struct {
 // RetrievalService provides intelligent retrieval across multiple data sources.
 // It implements hybrid search (vector + keyword), query rewriting, and time-based decay.
 type RetrievalService struct {
-	db               *postgres.Pool
-	embeddingClient  *embedding.EmbeddingClient
-	llmClient        *llm.Client
-	tenantGuard      *postgres.TenantGuard
-	retrievalGuard   *postgres.RetrievalGuard
-	kbRepo           *repositories.KnowledgeRepository
-	expRepo          *repositories.ExperienceRepository
-	toolRepo         *repositories.ToolRepository
-	logger           *slog.Logger
-	queryPriority    *QueryPriorityConfig
-	embeddingCache   map[string][]float64
-	embeddingCacheMu sync.RWMutex
-	synonymRules     map[string][]string
+	db                       *postgres.Pool
+	embeddingClient          *embedding.EmbeddingClient
+	llmClient                *llm.Client
+	tenantGuard              *postgres.TenantGuard
+	retrievalGuard           *postgres.RetrievalGuard
+	kbRepo                   *repositories.KnowledgeRepository
+	expRepo                  *repositories.ExperienceRepository
+	toolRepo                 *repositories.ToolRepository
+	logger                   *slog.Logger
+	queryPriority            *QueryPriorityConfig
+	embeddingCache           map[string][]float64
+	embeddingCacheMu         sync.RWMutex
+	embeddingCacheSizeLimit  int      // Maximum cache entries
+	embeddingCacheAccessList []string // LRU access list for eviction
+	synonymRules             map[string][]string
 
 	// Experience-specific services
 	distillationService *experience.DistillationService
@@ -167,18 +170,20 @@ func NewRetrievalService(
 	toolRepo *repositories.ToolRepository,
 ) *RetrievalService {
 	return &RetrievalService{
-		db:              pool,
-		embeddingClient: embeddingClient,
-		llmClient:       llmClient,
-		tenantGuard:     tenantGuard,
-		retrievalGuard:  retrievalGuard,
-		kbRepo:          kbRepo,
-		expRepo:         expRepo,
-		toolRepo:        toolRepo,
-		logger:          slog.Default(),
-		queryPriority:   DefaultQueryPriorityConfig(),
-		embeddingCache:  make(map[string][]float64),
-		synonymRules:    loadSynonymRules(),
+		db:                       pool,
+		embeddingClient:          embeddingClient,
+		llmClient:                llmClient,
+		tenantGuard:              tenantGuard,
+		retrievalGuard:           retrievalGuard,
+		kbRepo:                   kbRepo,
+		expRepo:                  expRepo,
+		toolRepo:                 toolRepo,
+		logger:                   slog.Default(),
+		queryPriority:            DefaultQueryPriorityConfig(),
+		embeddingCache:           make(map[string][]float64),
+		embeddingCacheSizeLimit:  1000, // Limit cache to 1000 entries (~8-12MB)
+		embeddingCacheAccessList: make([]string, 0, 1000),
+		synonymRules:             loadSynonymRules(),
 	}
 }
 
@@ -516,6 +521,10 @@ func (s *RetrievalService) getEmbedding(ctx context.Context, query string) []flo
 
 // getEmbeddingCached retrieves embedding with caching to reduce LLM calls.
 // This can reduce 50-75% of embedding computations for repeated queries.
+//
+// Thread-safety: Uses read-write mutex to protect cache access.
+// Implements LRU eviction to prevent unbounded memory growth.
+//
 // Args:
 // ctx - operation context.
 // query - query text.
@@ -540,12 +549,24 @@ func (s *RetrievalService) getEmbeddingCached(ctx context.Context, query string)
 		return nil
 	}
 
-	// 3. Store in cache (write lock)
+	// 3. Store in cache with LRU eviction (write lock)
 	s.embeddingCacheMu.Lock()
-	s.embeddingCache[query] = embedding
-	s.embeddingCacheMu.Unlock()
+	defer s.embeddingCacheMu.Unlock()
 
-	s.logger.Debug("Embedding cache miss, computed and cached", "query", truncateForLog(query, 30))
+	// Check if eviction is needed
+	if len(s.embeddingCache) >= s.embeddingCacheSizeLimit {
+		if len(s.embeddingCacheAccessList) > 0 {
+			oldestKey := s.embeddingCacheAccessList[0]
+			delete(s.embeddingCache, oldestKey)
+			s.embeddingCacheAccessList = s.embeddingCacheAccessList[1:]
+			s.logger.Debug("Embedding cache eviction", "evicted_key", truncateForLog(oldestKey, 30))
+		}
+	}
+
+	s.embeddingCache[query] = embedding
+	s.embeddingCacheAccessList = append(s.embeddingCacheAccessList, query)
+	s.logger.Debug("Embedding cache miss, stored in cache", "query", truncateForLog(query, 30), "cache_size", len(s.embeddingCache))
+
 	return embedding
 }
 
@@ -885,29 +906,38 @@ func (s *RetrievalService) calculateSimilarity(s1, s2 string) float64 {
 	return float64(intersection) / float64(union)
 }
 
-// replaceCaseInsensitive replaces a substring case-insensitively.
+// replaceCaseInsensitive replaces all occurrences of old substring with new string, ignoring case.
+// This correctly handles multi-byte UTF-8 characters by using strings.Contains with lowercasing.
+//
 // Args:
 // s - original string.
 // old - substring to replace.
 // new - replacement string.
 // Returns string with replacement applied.
 func replaceCaseInsensitive(s, old, new string) string {
+	if old == "" {
+		return s
+	}
+
 	sLower := toLower(s)
 	oldLower := toLower(old)
 
-	result := ""
+	result := strings.Builder{}
 	i := 0
-	for i < len(sLower) {
-		if i <= len(sLower)-len(oldLower) && sLower[i:i+len(oldLower)] == oldLower {
-			result += new
-			i += len(oldLower)
+	for i < len(s) {
+		// Find next occurrence of old substring
+		if i <= len(s)-len(old) && sLower[i:i+len(old)] == oldLower {
+			result.WriteString(new)
+			i += len(old)
 		} else {
-			result += string(s[i])
-			i++
+			// Write one rune at a time to handle multi-byte characters
+			_, size := utf8.DecodeRuneInString(s[i:])
+			result.WriteString(s[i : i+size])
+			i += size
 		}
 	}
 
-	return result
+	return result.String()
 }
 
 // tokenize splits a string into words.
@@ -960,7 +990,8 @@ func (s *RetrievalService) searchSingleQuery(ctx context.Context, q WeightedQuer
 	defer cancel()
 
 	// Use database timeout from retrieval guard
-	searchCtx, _ = s.retrievalGuard.WithDBTimeout(searchCtx)
+	searchCtx, dbCancel := s.retrievalGuard.WithDBTimeout(searchCtx)
+	defer dbCancel() // FIX: Preserve and call cancel to prevent resource leak
 
 	// Create errgroup for parallel search (per design standard)
 	eg, ctx := errgroup.WithContext(searchCtx)

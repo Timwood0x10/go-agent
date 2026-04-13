@@ -5,6 +5,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"goagent/internal/errors"
 )
 
 // ConfigFile defines the structure for error strategy configuration file.
@@ -121,14 +123,20 @@ func validateStrategy(strategy *ErrorStrategy) error {
 }
 
 // SetStrategy sets or updates an error strategy for a specific error code.
-func SetStrategy(code string, strategy ErrorStrategy) {
+//
+// Args:
+// code - error code identifier.
+// strategy - error strategy configuration.
+// Returns error if strategy validation fails.
+func SetStrategy(code string, strategy ErrorStrategy) error {
 	if err := validateStrategy(&strategy); err != nil {
-		panic(err)
+		return errors.Wrapf(err, "invalid strategy for code %s", code)
 	}
 
 	globalRegistry.mu.Lock()
 	defer globalRegistry.mu.Unlock()
 	globalRegistry.strategies[code] = strategy
+	return nil
 }
 
 // GetStrategy returns the error strategy for the given error code.

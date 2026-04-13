@@ -68,5 +68,12 @@ func (s *Session) Progress() float64 {
 	if len(s.Tasks) == 0 {
 		return 0.0
 	}
-	return float64(len(s.Results)) / float64(len(s.Tasks))
+	// Count only successful results
+	successCount := 0
+	for _, result := range s.Results {
+		if result != nil && result.Success {
+			successCount++
+		}
+	}
+	return float64(successCount) / float64(len(s.Tasks))
 }

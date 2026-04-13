@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 )
@@ -17,10 +18,11 @@ type SlidingWindowLimiter struct {
 
 // NewSlidingWindowLimiter creates a new SlidingWindowLimiter.
 func NewSlidingWindowLimiter(config *LimiterConfig) Limiter {
+	maxRequests := int(math.Ceil(config.Rate))
 	return &SlidingWindowLimiter{
 		requests:    make([]time.Time, 0),
 		windowSize:  time.Second,
-		maxRequests: int(config.Rate),
+		maxRequests: maxRequests,
 		config:      config,
 	}
 }
@@ -68,6 +70,13 @@ func (l *SlidingWindowLimiter) Wait(ctx context.Context) error {
 			}
 		} else {
 			l.mu.Unlock()
+			// Window is empty but rate limit hit - wait a short time before retry
+			// This prevents busy-waiting when the window is empty
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(l.windowSize / 10):
+			}
 		}
 	}
 }

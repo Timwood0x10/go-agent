@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/core/models"
@@ -183,6 +184,11 @@ func (r *RecommendRepository) ListByUserID(ctx context.Context, userID string, l
 		}
 
 		results = append(results, &result)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate recommendations", "error", err)
+		return nil, errors.Wrap(err, "iterate recommendations")
 	}
 
 	return results, nil

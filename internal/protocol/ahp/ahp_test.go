@@ -561,7 +561,10 @@ func TestQueueMethods(t *testing.T) {
 		msg := NewMessage(AHPMethodTask, "leader", "sub1", "task1", "session1")
 		queue.Enqueue(context.Background(), msg)
 
-		peeked := queue.Peek()
+		peeked, err := queue.Peek()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 		if peeked == nil {
 			t.Errorf("expected message")
 		}
@@ -573,7 +576,10 @@ func TestQueueMethods(t *testing.T) {
 	t.Run("peek empty", func(t *testing.T) {
 		queue := NewMessageQueue("agent1", nil)
 
-		peeked := queue.Peek()
+		peeked, err := queue.Peek()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 		if peeked != nil {
 			t.Errorf("expected nil for empty queue")
 		}

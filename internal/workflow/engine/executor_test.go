@@ -343,7 +343,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		}
 
 		completed := make(map[string]bool)
-		input := executor.resolveInput(step1, "initial input", completed)
+		input := executor.resolveInput(step1, "initial input", completed, outputStore)
 		if input != "step1 input" {
 			t.Errorf("Expected 'step1 input', got %s", input)
 		}
@@ -355,7 +355,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 			Input:     "step2 input",
 		}
 
-		input = executor.resolveInput(step2, "initial input", completed)
+		input = executor.resolveInput(step2, "initial input", completed, outputStore)
 		if input != "step2 input" {
 			t.Errorf("Expected 'step2 input', got %s", input)
 		}
@@ -372,7 +372,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 			Output: "step1 output",
 		})
 
-		input = executor.resolveInput(step3, "initial input", completed)
+		input = executor.resolveInput(step3, "initial input", completed, outputStore)
 		if input != "step1 output" {
 			t.Errorf("Expected 'step1 output', got %s", input)
 		}
@@ -408,7 +408,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		completed := make(map[string]bool)
 		result := executor.executeStep(context.Background(), &Workflow{
 			Steps: []*Step{step},
-		}, "step1", "initial input", completed)
+		}, "step1", "initial input", completed, outputStore)
 
 		if result.Status != StepStatusCompleted {
 			t.Errorf("Expected status %s, got %s", StepStatusCompleted, result.Status)
@@ -456,7 +456,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		completed := make(map[string]bool)
 		result := executor.executeStep(context.Background(), &Workflow{
 			Steps: []*Step{step},
-		}, "step1", "initial input", completed)
+		}, "step1", "initial input", completed, outputStore)
 
 		if result.Status == StepStatusCompleted {
 			t.Error("Expected failure due to timeout")

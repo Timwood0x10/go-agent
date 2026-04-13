@@ -101,6 +101,10 @@ func (v *VectorSearcher) Search(ctx context.Context, table string, embedding []f
 		results = append(results, &result)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate search results")
+	}
+
 	if len(results) == 0 {
 		return nil, coreerrors.ErrRecordNotFound
 	}

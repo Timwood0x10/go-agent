@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"goagent/internal/errors"
+
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -51,24 +53,25 @@ type EmbeddingCache struct {
 	redis   RedisClient
 	memory  *MemoryCache
 	ttl     time.Duration
-	enabled bool
+	enabled atomic.Bool
 }
 
 // NewEmbeddingCache creates a new embedding cache.
 // If redisClient is nil, it will use in-memory cache only.
 func NewEmbeddingCache(redisClient RedisClient, ttl time.Duration) *EmbeddingCache {
-	return &EmbeddingCache{
-		redis:   redisClient,
-		memory:  NewMemoryCache(),
-		ttl:     ttl,
-		enabled: true, // Always enabled (memory cache is always available)
+	c := &EmbeddingCache{
+		redis:  redisClient,
+		memory: NewMemoryCache(),
+		ttl:    ttl,
 	}
+	c.enabled.Store(true)
+	return c
 }
 
 // Get retrieves an embedding from cache.
 // It tries Redis first, then falls back to memory cache.
 func (c *EmbeddingCache) Get(ctx context.Context, key *CacheKey) ([]float64, bool) {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil, false
 	}
 
@@ -102,7 +105,7 @@ func (c *EmbeddingCache) Get(ctx context.Context, key *CacheKey) ([]float64, boo
 // Set stores an embedding in cache.
 // It stores in both Redis and memory cache (if available).
 func (c *EmbeddingCache) Set(ctx context.Context, key *CacheKey, embedding []float64) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -131,7 +134,7 @@ func (c *EmbeddingCache) Set(ctx context.Context, key *CacheKey, embedding []flo
 
 // Delete removes an embedding from cache.
 func (c *EmbeddingCache) Delete(ctx context.Context, key *CacheKey) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -152,7 +155,7 @@ func (c *EmbeddingCache) Delete(ctx context.Context, key *CacheKey) error {
 
 // Clear removes all embeddings from cache.
 func (c *EmbeddingCache) Clear(ctx context.Context) error {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return nil
 	}
 
@@ -185,7 +188,7 @@ func (c *EmbeddingCache) Close() {
 
 // GetStats returns cache statistics.
 func (c *EmbeddingCache) GetStats(ctx context.Context) (*CacheStats, error) {
-	if !c.enabled {
+	if !c.enabled.Load() {
 		return &CacheStats{Enabled: false}, nil
 	}
 
@@ -222,17 +225,17 @@ type CacheStats struct {
 
 // Enable enables the cache.
 func (c *EmbeddingCache) Enable() {
-	c.enabled = true
+	c.enabled.Store(true)
 }
 
 // Disable disables the cache.
 func (c *EmbeddingCache) Disable() {
-	c.enabled = false
+	c.enabled.Store(false)
 }
 
 // IsEnabled returns whether the cache is enabled.
 func (c *EmbeddingCache) IsEnabled() bool {
-	return c.enabled
+	return c.enabled.Load()
 }
 
 // MemoryCache provides in-memory caching as a fallback.

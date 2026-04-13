@@ -92,7 +92,7 @@ func defaultSensitivePatterns() []SensitivePattern {
 		},
 		{
 			Type:        SensitiveFieldTypePassword,
-			Pattern:     regexp.MustCompile(`(?i)(password|passwd|pwd)[:\s]+["']?([^"'\s]+)["']?`),
+			Pattern:     regexp.MustCompile(`(?i)\b(password|passwd|pwd)\b[:\s]+["']?([^"'\s]+)["']?`),
 			MaskFunc:    maskPassword,
 			Description: "Passwords",
 		},
@@ -292,9 +292,13 @@ func maskString(s string, preserveLength int) string {
 
 	length := len(s)
 
-	// If string is too short or exactly the length to preserve, return as-is
+	if length <= preserveLength {
+		return strings.Repeat("*", length)
+	}
+
 	if length <= preserveLength*2 {
-		return s
+		prefix := s[:preserveLength]
+		return prefix + strings.Repeat("*", length-preserveLength)
 	}
 
 	prefix := s[:preserveLength]
@@ -332,6 +336,9 @@ func (l *SafeLogger) Log(message string) {
 
 // Logf logs a formatted message with sensitive information sanitized.
 func (l *SafeLogger) Logf(format string, args ...interface{}) {
+	// Sanitize format string first to catch sensitive data in format
+	sanitizedFormat := l.sanitizer.Sanitize(format)
+
 	// Convert args to strings and sanitize them
 	sanitizedArgs := make([]interface{}, len(args))
 	for i, arg := range args {
@@ -342,7 +349,7 @@ func (l *SafeLogger) Logf(format string, args ...interface{}) {
 		}
 	}
 
-	// Format the message
-	message := fmt.Sprintf(format, sanitizedArgs...)
+	// Format the message with sanitized format and args
+	message := fmt.Sprintf(sanitizedFormat, sanitizedArgs...)
 	l.underlying(message)
 }

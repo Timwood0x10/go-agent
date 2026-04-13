@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	coreerrors "goagent/internal/core/errors"
@@ -18,7 +19,6 @@ import (
 type EmbeddingQueue struct {
 	db              *Pool
 	embeddingConfig *EmbeddingConfig
-	stopped         bool
 }
 
 // EmbeddingTask represents a single embedding task.
@@ -43,7 +43,6 @@ func NewEmbeddingQueue(pool *Pool, embeddingConfig *EmbeddingConfig) *EmbeddingQ
 	return &EmbeddingQueue{
 		db:              pool,
 		embeddingConfig: embeddingConfig,
-		stopped:         false,
 	}
 }
 
@@ -109,14 +108,20 @@ func (q *EmbeddingQueue) FetchPendingTasks(ctx context.Context, limit int) ([]*E
 		return nil, errors.Wrap(err, "fetch pending tasks")
 	}
 	defer rows.Close()
-	// nolint: errcheck // Rows are closed by defer
+
 	tasks := make([]*EmbeddingTask, 0)
 	for rows.Next() {
 		task := &EmbeddingTask{}
 		if err := rows.Scan(&task.TaskID, &task.Table, &task.Content, &task.TenantID, &task.Model, &task.Version); err != nil {
+			slog.Error("Failed to scan embedding task row", "error", err)
 			continue
 		}
 		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate embedding tasks", "error", err)
+		return nil, errors.Wrap(err, "iterate embedding tasks")
 	}
 
 	return tasks, nil

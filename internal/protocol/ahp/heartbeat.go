@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"goagent/internal/core/errors"
 	"goagent/internal/core/models"
 )
 
@@ -122,13 +123,16 @@ func (m *HeartbeatMonitor) ListAgents() []string {
 
 // HeartbeatSender sends periodic heartbeats.
 type HeartbeatSender struct {
-	agentID  string
-	interval time.Duration
-	queue    *MessageQueue
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	stopped  bool
+	agentID   string
+	interval  time.Duration
+	queue     *MessageQueue
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	stopOnce  sync.Once
+	startOnce sync.Once
+	started   bool
+	mu        sync.Mutex
 }
 
 // NewHeartbeatSender creates a new HeartbeatSender.
@@ -136,18 +140,35 @@ func NewHeartbeatSender(agentID string, interval time.Duration, queue *MessageQu
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
+	noOpCancel := func() {}
 	return &HeartbeatSender{
 		agentID:  agentID,
 		interval: interval,
 		queue:    queue,
+		cancel:   noOpCancel,
 	}
 }
 
+// Validate ensures the HeartbeatSender is properly configured.
+func (s *HeartbeatSender) Validate() error {
+	if s.queue == nil {
+		return errors.ErrQueueNotInitialized
+	}
+	return nil
+}
+
 // Start starts sending heartbeats.
+// This method is idempotent - calling it multiple times has no additional effect.
 func (s *HeartbeatSender) Start(ctx context.Context) {
-	s.ctx, s.cancel = context.WithCancel(ctx)
-	s.wg.Add(1)
-	go s.run()
+	s.startOnce.Do(func() {
+		s.mu.Lock()
+		s.ctx, s.cancel = context.WithCancel(ctx)
+		s.started = true
+		s.mu.Unlock()
+
+		s.wg.Add(1)
+		go s.run()
+	})
 }
 
 // run is the main heartbeat sending loop.
@@ -162,9 +183,6 @@ func (s *HeartbeatSender) run() {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			if s.stopped {
-				return
-			}
 			s.sendHeartbeat()
 		}
 	}
@@ -172,19 +190,27 @@ func (s *HeartbeatSender) run() {
 
 // sendHeartbeat sends a heartbeat message.
 func (s *HeartbeatSender) sendHeartbeat() {
+	if s.queue == nil {
+		return
+	}
 	msg := NewHeartbeatMessage(s.agentID)
 	if err := s.queue.Enqueue(s.ctx, msg); err != nil {
-		// Log error but continue
 		return
 	}
 }
 
 // Stop stops sending heartbeats.
+// This method is idempotent - calling it multiple times has no additional effect.
 func (s *HeartbeatSender) Stop() {
-	if s.stopped {
+	s.mu.Lock()
+	if !s.started {
+		s.mu.Unlock()
 		return
 	}
-	s.stopped = true
-	s.cancel()
-	s.wg.Wait()
+	s.mu.Unlock()
+
+	s.stopOnce.Do(func() {
+		s.cancel()
+		s.wg.Wait()
+	})
 }

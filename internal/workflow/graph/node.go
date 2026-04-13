@@ -25,9 +25,19 @@ type AgentNode struct {
 }
 
 // NewAgentNode creates a new agent node.
+//
+// NOTE: This function will panic if agent is nil. This is intentional as it
+// indicates a programming error in the calling code. These constructors are
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// agent - agent instance, must not be nil.
+// Returns new agent node.
 func NewAgentNode(agent base.Agent) *AgentNode {
 	if agent == nil {
-		panic("agent cannot be nil")
+		panic("agent cannot be nil: nil agent is a programming error")
 	}
 	return &AgentNode{agent: agent}
 }
@@ -62,9 +72,19 @@ type ToolNode struct {
 }
 
 // NewToolNode creates a new tool node.
+//
+// NOTE: This function will panic if tool is nil. This is intentional as it
+// indicates a programming error in the calling code. These constructors are
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// tool - tool instance, must not be nil.
+// Returns new tool node.
 func NewToolNode(tool core.Tool) *ToolNode {
 	if tool == nil {
-		panic("tool cannot be nil")
+		panic("tool cannot be nil: nil tool is a programming error")
 	}
 	return &ToolNode{tool: tool}
 }
@@ -104,12 +124,23 @@ type FuncNode struct {
 }
 
 // NewFuncNode creates a new function node.
+//
+// NOTE: This function will panic if id is empty or fn is nil. This is intentional
+// as it indicates a programming error in the calling code. These constructors are
+// used during workflow graph initialization (startup phase), and invalid
+// parameters represent fatal startup failures that should prevent application
+// launch. This follows the coding standard allowing panic for fatal startup errors.
+//
+// Args:
+// id - unique node identifier, must not be empty.
+// fn - function to execute, must not be nil.
+// Returns new function node.
 func NewFuncNode(id string, fn func(context.Context, *State) error) *FuncNode {
 	if id == "" {
-		panic("node id cannot be empty")
+		panic("node id cannot be empty: empty id is a programming error")
 	}
 	if fn == nil {
-		panic("function cannot be nil")
+		panic("function cannot be nil: nil function is a programming error")
 	}
 	return &FuncNode{id: id, fn: fn}
 }

@@ -74,7 +74,6 @@ func (t *HTTPRequest) Execute(ctx context.Context, params map[string]interface{}
 		method = "GET"
 	}
 
-	// Parse headers
 	headers := make(map[string]string)
 	if headersParam, ok := params["headers"].(map[string]interface{}); ok {
 		for k, v := range headersParam {
@@ -84,18 +83,19 @@ func (t *HTTPRequest) Execute(ctx context.Context, params map[string]interface{}
 		}
 	}
 
-	// Set timeout
 	timeout := getInt(params, "timeout", 30)
+	var reqCtx context.Context
+	var cancel context.CancelFunc
 	if timeout > 0 {
-		t.client.Timeout = time.Duration(timeout) * time.Second
+		reqCtx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	} else {
+		reqCtx, cancel = context.WithCancel(ctx)
 	}
+	defer cancel()
 
-	// Prepare request body
 	var bodyReader io.Reader
 	if body, ok := params["body"].(string); ok && body != "" {
-		// Check if body is JSON
 		if strings.Contains(body, "{") || strings.Contains(body, "[") {
-			// Validate JSON
 			var js interface{}
 			if err := json.Unmarshal([]byte(body), &js); err != nil {
 				return core.NewErrorResult(fmt.Sprintf("invalid JSON body: %v", err)), nil
@@ -104,7 +104,7 @@ func (t *HTTPRequest) Execute(ctx context.Context, params map[string]interface{}
 		bodyReader = bytes.NewBufferString(body)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	req, err := http.NewRequestWithContext(reqCtx, method, url, bodyReader)
 	if err != nil {
 		return core.NewErrorResult(fmt.Sprintf("failed to create request: %v", err)), nil
 	}

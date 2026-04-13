@@ -12,6 +12,8 @@ import (
 
 	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
+
+	"github.com/lib/pq"
 )
 
 // DistilledMemory represents a distilled memory from conversation history.
@@ -87,15 +89,16 @@ func (r *DistilledMemoryRepository) Create(ctx context.Context, memory *Distille
 		"content_preview", truncateString(memory.Content, 50))
 
 	// Set tenant context for RLS
-	// SET statement does not support parameterized queries, need to use string concatenation
-	query := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
+	// SET statement does not support parameterized queries, need to use pq.QuoteLiteral
+	quotedTenantID := pq.QuoteLiteral(memory.TenantID)
+	query := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err := r.db.ExecContext(ctx, query); err != nil {
-		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context",
+		slog.ErrorContext(ctx, "Failed to set tenant context",
 			"tenant_id", memory.TenantID,
 			"error", err)
 		return errors.Wrap(err, "set tenant context")
 	}
-	slog.InfoContext(ctx, "✅ [Storage] Tenant context set successfully", "tenant_id", memory.TenantID)
+	slog.InfoContext(ctx, "Tenant context set successfully", "tenant_id", memory.TenantID)
 
 	// Convert metadata to JSON
 	metadataJSON, err := json.Marshal(memory.Metadata)
@@ -154,15 +157,16 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 		"limit", limit)
 
 	// Set tenant context for RLS
-	// SET statement does not support parameterized queries, need to use string concatenation
-	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	// SET statement does not support parameterized queries, need to use pq.QuoteLiteral
+	quotedTenantID := pq.QuoteLiteral(tenantID)
+	setQuery := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
-		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in SearchByVector",
+		slog.ErrorContext(ctx, "Failed to set tenant context in SearchByVector",
 			"tenant_id", tenantID,
 			"error", err)
 		return nil, errors.Wrap(err, "set tenant context")
 	}
-	slog.InfoContext(ctx, "✅ [Storage] Tenant context set in SearchByVector", "tenant_id", tenantID)
+	slog.InfoContext(ctx, "Tenant context set in SearchByVector", "tenant_id", tenantID)
 
 	query := `
 		SELECT id, tenant_id, user_id, session_id, content, embedding::text,
@@ -220,7 +224,12 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 		memories = append(memories, memory)
 	}
 
-	slog.InfoContext(ctx, "✅ [Storage] SearchByVector query completed",
+	if err := rows.Err(); err != nil {
+		slog.WarnContext(ctx, "Failed to iterate search results", "error", err)
+		return nil, errors.Wrap(err, "iterate search results")
+	}
+
+	slog.InfoContext(ctx, "SearchByVector query completed",
 		"tenant_id", tenantID,
 		"memories_found", len(memories))
 
@@ -250,10 +259,11 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 		"limit", limit)
 
 	// Set tenant context for RLS
-	// SET statement does not support parameterized queries, need to use string concatenation
-	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	// SET statement does not support parameterized queries, need to use pq.QuoteLiteral
+	quotedTenantID := pq.QuoteLiteral(tenantID)
+	setQuery := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err = r.db.ExecContext(ctx, setQuery); err != nil {
-		slog.ErrorContext(ctx, "❌ [Storage] Failed to set tenant context in GetByUserID",
+		slog.ErrorContext(ctx, "Failed to set tenant context in GetByUserID",
 			"tenant_id", tenantID,
 			"error", err)
 		return nil, errors.Wrap(err, "set tenant context")
@@ -314,7 +324,12 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 		memories = append(memories, memory)
 	}
 
-	slog.InfoContext(ctx, "✅ [Storage] GetByUserID query completed",
+	if err := rows.Err(); err != nil {
+		slog.WarnContext(ctx, "Failed to iterate memories", "error", err)
+		return nil, errors.Wrap(err, "iterate memories")
+	}
+
+	slog.InfoContext(ctx, "GetByUserID query completed",
 		"tenant_id", tenantID,
 		"user_id", userID,
 		"memories_found", len(memories))
@@ -348,7 +363,8 @@ func (r *DistilledMemoryRepository) UpdateAccessCount(ctx context.Context, id st
 // Returns list of memories ordered by importance (descending).
 func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantID, memoryType string, limit int) ([]*DistilledMemory, error) {
 	// Set tenant context for RLS
-	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	quotedTenantID := pq.QuoteLiteral(tenantID)
+	setQuery := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
 		return nil, errors.Wrap(err, "set tenant context")
 	}
@@ -403,6 +419,10 @@ func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantI
 		memories = append(memories, memory)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate memories")
+	}
+
 	return memories, nil
 }
 
@@ -434,7 +454,8 @@ func (r *DistilledMemoryRepository) Update(ctx context.Context, memory *Distille
 	}
 
 	// Set tenant context for RLS
-	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", memory.TenantID)
+	quotedTenantID := pq.QuoteLiteral(memory.TenantID)
+	setQuery := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
 		return errors.Wrap(err, "set tenant context")
 	}
@@ -493,7 +514,8 @@ func (r *DistilledMemoryRepository) Delete(ctx context.Context, tenantID, id str
 	}
 
 	// Set tenant context for RLS
-	setQuery := fmt.Sprintf("SET app.tenant_id TO '%s'", tenantID)
+	quotedTenantID := pq.QuoteLiteral(tenantID)
+	setQuery := fmt.Sprintf("SET app.tenant_id TO %s", quotedTenantID)
 	if _, err := r.db.ExecContext(ctx, setQuery); err != nil {
 		return errors.Wrap(err, "set tenant context")
 	}

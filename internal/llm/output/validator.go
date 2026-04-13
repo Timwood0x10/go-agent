@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sync"
 
 	"goagent/internal/core/models"
 )
@@ -12,7 +13,8 @@ import (
 // Validator validates data against schemas.
 type Validator struct {
 	customValidators map[string]ValidatorFunc
-	schemaType       string // "fashion", "travel"
+	schemaType       string   // "fashion", "travel"
+	regexCache       sync.Map // Cache compiled regex patterns
 }
 
 // ValidatorFunc is a custom validation function.
@@ -101,8 +103,10 @@ func (v *Validator) validateValue(data interface{}, schema *Schema, path string)
 			return fmt.Errorf("%s: length %d exceeds maximum %d", path, len(str), *schema.MaxLength)
 		}
 		if schema.Pattern != "" {
-			re := regexp.MustCompile(schema.Pattern)
-			if !re.MatchString(str) {
+			// Use cached regex pattern for better performance
+			re, _ := v.regexCache.LoadOrStore(schema.Pattern, regexp.MustCompile(schema.Pattern))
+			regex := re.(*regexp.Regexp)
+			if !regex.MatchString(str) {
 				return fmt.Errorf("%s: does not match pattern %s", path, schema.Pattern)
 			}
 		}
@@ -449,19 +453,27 @@ func toInt64(v interface{}) (int64, bool) {
 	case int32:
 		return int64(val), true
 	case float64:
-		if val >= float64(^uint64(0)>>1) || val < float64(^int64(0)) {
+		// Check if value is within int64 range
+		if val <= float64(^uint64(0)>>1) && val >= float64(^int64(0)) {
 			return int64(val), true
 		}
+		// Value exceeds int64 range, reject it
+		return 0, false
 	case float32:
-		if float64(val) >= float64(^uint64(0)>>1) || float64(val) < float64(^int64(0)) {
+		// Check if value is within int64 range
+		if float64(val) <= float64(^uint64(0)>>1) && float64(val) >= float64(^int64(0)) {
 			return int64(val), true
 		}
+		// Value exceeds int64 range, reject it
+		return 0, false
 	case uint:
 		return int64(val), true
 	case uint64:
 		if val <= uint64(int64(^uint64(0)>>1)) {
 			return int64(val), true
 		}
+		// Value exceeds int64 range, reject it
+		return 0, false
 	case uint32:
 		return int64(val), true
 		// Reject string type to avoid ambiguous type conversion

@@ -18,6 +18,58 @@ func NewResultFormatter() *ResultFormatter {
 	return &ResultFormatter{}
 }
 
+// getStringParam safely gets a string parameter with default value.
+func getStringParam(params map[string]interface{}, key string, defaultValue string) string {
+	if value, ok := params[key].(string); ok {
+		return value
+	}
+	return defaultValue
+}
+
+// getIntParam safely gets an int parameter with default value.
+func getIntParam(dataMap map[string]interface{}, key string, defaultValue int) int {
+	if value, ok := dataMap[key].(int); ok {
+		return value
+	}
+	if value, ok := dataMap[key].(float64); ok {
+		return int(value)
+	}
+	return defaultValue
+}
+
+// getInt64Param safely gets an int64 parameter with default value.
+func getInt64Param(dataMap map[string]interface{}, key string, defaultValue int64) int64 {
+	if value, ok := dataMap[key].(int64); ok {
+		return value
+	}
+	if value, ok := dataMap[key].(int); ok {
+		return int64(value)
+	}
+	if value, ok := dataMap[key].(float64); ok {
+		return int64(value)
+	}
+	return defaultValue
+}
+
+// getFloat64Param safely gets a float64 parameter with default value.
+func getFloat64Param(dataMap map[string]interface{}, key string, defaultValue float64) float64 {
+	if value, ok := dataMap[key].(float64); ok {
+		return value
+	}
+	if value, ok := dataMap[key].(int); ok {
+		return float64(value)
+	}
+	return defaultValue
+}
+
+// getBoolParam safely gets a bool parameter with default value.
+func getBoolParam(dataMap map[string]interface{}, key string, defaultValue bool) bool {
+	if value, ok := dataMap[key].(bool); ok {
+		return value
+	}
+	return defaultValue
+}
+
 // Format formats a tool result into a user-friendly string.
 func (rf *ResultFormatter) Format(toolName string, params map[string]interface{}, result core.Result, duration time.Duration) string {
 	// Check if result is successful
@@ -94,7 +146,7 @@ func (rf *ResultFormatter) formatCalculator(params map[string]interface{}, data 
 		return "计算工具返回了意外的数据格式"
 	}
 
-	expression, _ := params["expression"].(string)
+	expression := getStringParam(params, "expression", "")
 	resultValue, exists := dataMap["result"]
 
 	if !exists {
@@ -106,7 +158,7 @@ func (rf *ResultFormatter) formatCalculator(params map[string]interface{}, data 
 
 // formatFileTools formats file tools result.
 func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("文件操作 (%s) 执行完成", operation)
@@ -114,11 +166,11 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 
 	switch operation {
 	case "read":
-		filePath, _ := params["file_path"].(string)
+		filePath := getStringParam(params, "file_path", "")
 		if content, exists := dataMap["content"]; exists {
 			if contentStr, ok := content.(string); ok {
-				lineCount, _ := dataMap["line_count"].(int)
-				totalLines, _ := dataMap["total_lines"].(int)
+				lineCount := getIntParam(dataMap, "line_count", 0)
+				totalLines := getIntParam(dataMap, "total_lines", 0)
 
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "文件: %s\n", filePath)
@@ -135,10 +187,10 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 		}
 		return fmt.Sprintf("文件 %s 读取完成", filePath)
 	case "write":
-		bytesWritten, _ := dataMap["bytes_written"].(int)
+		bytesWritten := getIntParam(dataMap, "bytes_written", 0)
 		return fmt.Sprintf("文件写入完成，写入了 %d 字节", bytesWritten)
 	case "list":
-		directory, _ := params["directory_path"].(string)
+		directory := getStringParam(params, "directory_path", "")
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "目录: %s\n", directory)
 
@@ -148,7 +200,7 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 			if len(dirList) > 0 {
 				sb.WriteString("\n目录:\n")
 				for _, dir := range dirList {
-					name, _ := dir["name"].(string)
+					name := getStringParam(dir, "name", "")
 					fmt.Fprintf(&sb, "  📁 %s\n", name)
 				}
 			}
@@ -160,8 +212,8 @@ func (rf *ResultFormatter) formatFileTools(params map[string]interface{}, data i
 			if len(fileList) > 0 {
 				sb.WriteString("\n文件:\n")
 				for _, file := range fileList {
-					name, _ := file["name"].(string)
-					size, _ := file["size"].(int64)
+					name := getStringParam(file, "name", "")
+					size := getInt64Param(file, "size", 0)
 					fmt.Fprintf(&sb, "  📄 %s (%d bytes)\n", name, size)
 				}
 			}
@@ -191,7 +243,7 @@ func (rf *ResultFormatter) formatIDGenerator(params map[string]interface{}, data
 		return "ID生成工具执行完成"
 	}
 
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 
 	switch operation {
 	case "generate_uuid":
@@ -214,8 +266,8 @@ func (rf *ResultFormatter) formatHTTPRequest(params map[string]interface{}, data
 		return "HTTP 请求完成"
 	}
 
-	url, _ := params["url"].(string)
-	statusCode, _ := dataMap["status_code"].(float64)
+	url := getStringParam(params, "url", "")
+	statusCode := getFloat64Param(dataMap, "status_code", 0)
 
 	if statusCode > 0 {
 		return fmt.Sprintf("HTTP 请求完成: %s (状态码: %.0f)", url, statusCode)
@@ -226,28 +278,25 @@ func (rf *ResultFormatter) formatHTTPRequest(params map[string]interface{}, data
 
 // formatTextProcessor formats text processor result.
 func (rf *ResultFormatter) formatTextProcessor(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	return fmt.Sprintf("文本处理操作 (%s) 执行完成", operation)
 }
 
 // formatJSONTools formats JSON tools result.
 func (rf *ResultFormatter) formatJSONTools(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	return fmt.Sprintf("JSON 处理操作 (%s) 执行完成", operation)
 }
 
 // formatDataValidation formats data validation result.
 func (rf *ResultFormatter) formatDataValidation(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
 	}
 
-	valid, exists := dataMap["valid"].(bool)
-	if !exists {
-		return fmt.Sprintf("数据验证 (%s) 执行完成", operation)
-	}
+	valid := getBoolParam(dataMap, "valid", false)
 
 	if valid {
 		return "数据验证通过：格式正确"
@@ -258,20 +307,20 @@ func (rf *ResultFormatter) formatDataValidation(params map[string]interface{}, d
 
 // formatDataTransform formats data transform result.
 func (rf *ResultFormatter) formatDataTransform(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	return fmt.Sprintf("数据转换操作 (%s) 执行完成", operation)
 }
 
 // formatRegexTool formats regex tool result.
 func (rf *ResultFormatter) formatRegexTool(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("正则操作 (%s) 执行完成", operation)
 	}
 
 	if operation == "match" {
-		matched, _ := dataMap["matched"].(bool)
+		matched := getBoolParam(dataMap, "matched", false)
 		if matched {
 			return "正则匹配成功"
 		}
@@ -283,7 +332,7 @@ func (rf *ResultFormatter) formatRegexTool(params map[string]interface{}, data i
 
 // formatLogAnalyzer formats log analyzer result.
 func (rf *ResultFormatter) formatLogAnalyzer(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("日志分析操作 (%s) 执行完成", operation)
@@ -296,10 +345,9 @@ func (rf *ResultFormatter) formatLogAnalyzer(params map[string]interface{}, data
 		}
 		return "日志解析完成"
 	case "find_errors":
-		if errorCount, exists := dataMap["error_count"]; exists {
-			if count, ok := errorCount.(int); ok {
-				return fmt.Sprintf("发现 %d 个错误", count)
-			}
+		count := getIntParam(dataMap, "error_count", 0)
+		if count > 0 {
+			return fmt.Sprintf("发现 %d 个错误", count)
 		}
 		return "错误查找完成"
 	case "extract_metrics":
@@ -316,7 +364,7 @@ func (rf *ResultFormatter) formatLogAnalyzer(params map[string]interface{}, data
 
 // formatCodeRunner formats code runner result.
 func (rf *ResultFormatter) formatCodeRunner(params map[string]interface{}, data interface{}) string {
-	operation, _ := params["operation"].(string)
+	operation := getStringParam(params, "operation", "")
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("代码执行 (%s) 完成", operation)

@@ -96,7 +96,7 @@ func (p *PriceRange) IsValid() bool {
 // Contains checks if the price is within range.
 func (p *PriceRange) Contains(price float64) bool {
 	if !p.IsValid() {
-		return true
+		return false
 	}
 	return price >= p.Min && price <= p.Max
 }

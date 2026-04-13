@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 // package graph - integration tests for observability and ratelimit.
 
 package graph

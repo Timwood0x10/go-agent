@@ -2,8 +2,9 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
-	"time"
 )
 
 // SemaphoreLimiter implements semaphore-based rate limiting.
@@ -37,6 +38,7 @@ func (l *SemaphoreLimiter) Acquire(ctx context.Context, key string) error {
 }
 
 // Release releases a semaphore slot.
+// Logs a warning if no slot is available to release (indicates potential bug in caller).
 func (l *SemaphoreLimiter) Release(key string) {
 	select {
 	case <-l.sem:
@@ -46,6 +48,9 @@ func (l *SemaphoreLimiter) Release(key string) {
 		}
 		l.mu.Unlock()
 	default:
+		slog.Warn("SemaphoreLimiter.Release: no slot available to release",
+			"key", key,
+			"hint", "this indicates a bug: releasing more times than acquired")
 	}
 }
 
@@ -125,38 +130,35 @@ func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimite
 }
 
 // Acquire acquires weighted slots.
+// Uses sync.Cond for efficient waiting without busy-looping.
+// Context cancellation is checked at each wake-up.
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
+	// Validate weight to prevent semaphore violation
+	if weight <= 0 {
+		return fmt.Errorf("weight must be positive, got %d", weight)
+	}
+
 	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	if l.available >= weight {
-		l.available -= weight
-		l.used += weight
-		l.weighted[key] += weight
-		l.mu.Unlock()
-		return nil
-	}
-
-	// Wait for available slots with proper signaling
-	// Release lock while waiting, re-check after wakeup
 	for l.available < weight {
-		l.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-			l.mu.Lock()
-			// Re-check condition after waking up
-			if l.available >= weight {
-				l.available -= weight
-				l.used += weight
-				l.weighted[key] += weight
-				l.mu.Unlock()
-				return nil
-			}
+		// Check context cancellation before waiting
+		if err := ctx.Err(); err != nil {
+			return err
 		}
+
+		// Wait() releases the lock and waits for signal, then reacquires lock on wake-up
+		l.cond.Wait()
 	}
 
-	l.mu.Unlock()
+	// Check context one more time after acquiring the lock
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	l.available -= weight
+	l.used += weight
+	l.weighted[key] += weight
 	return nil
 }
 

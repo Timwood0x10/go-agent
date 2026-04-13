@@ -32,9 +32,17 @@ func (a *resultAggregator) Aggregate(ctx context.Context, results []*models.Task
 	successCount := 0
 
 	for _, result := range results {
+		if result == nil {
+			continue
+		}
 		if result.Success {
 			successCount++
-			allItems = append(allItems, result.Items...)
+			// Filter out nil items to prevent panic in sort
+			for _, item := range result.Items {
+				if item != nil {
+					allItems = append(allItems, item)
+				}
+			}
 		}
 	}
 

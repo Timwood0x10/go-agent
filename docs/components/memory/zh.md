@@ -483,28 +483,44 @@ func (s *ImportanceScorer) ScoreMemory(memoryType MemoryType, problem, solution 
 
 **冲突检测**:
 ```go
-func (r *ConflictResolver) DetectConflict(ctx context.Context, exp *Experience, tenantID string) (*Experience, error) {
-    // 生成问题-解决方案的 Embedding
-    embeddingText := fmt.Sprintf("%s → %s", exp.Problem, exp.Solution)
-    embedding, err := r.embedder.EmbedWithPrefix(ctx, embeddingText, "memory:")
-    if err != nil {
-        return nil, err
+// DetectConflict 检测与现有记忆的冲突
+// 参数:
+//   - ctx: 操作上下文
+//   - vector: 用于搜索相似记忆的嵌入向量
+//   - tenantID: 租户ID，用于多租户隔离
+// 返回:
+//   - *Experience: 冲突的记忆，如果没有冲突则为nil
+//   - error: 遇到的错误
+func (r *ConflictResolver) DetectConflict(ctx context.Context, vector []float64, tenantID string) (*Experience, error) {
+    if r.repo == nil {
+        return nil, nil // 未配置仓库
     }
-    
+
+    if len(vector) == 0 {
+        return nil, nil // 未提供向量
+    }
+
     // 向量检索相似记忆
-    similarExperiences, err := r.repo.SearchByVector(ctx, embedding, tenantID, r.searchLimit)
+    similar, err := r.repo.SearchByVector(ctx, vector, tenantID, r.searchLimit)
     if err != nil {
-        return nil, err
+        return nil, errors.Wrap(err, "failed to search for similar memories")
     }
-    
-    // 检查是否有高相似度记忆
-    for _, similar := range similarExperiences {
-        similarity := r.calculateCosineSimilarity(embedding, similar.Embedding)
+
+    if len(similar) == 0 {
+        return nil, nil
+    }
+
+    // 检查是否有超过冲突阈值的相似记忆
+    for i := range similar {
+        if len(similar[i].Vector) == 0 {
+            continue
+        }
+        similarity := r.cosineSimilarity(vector, similar[i].Vector)
         if similarity > r.conflictThreshold {
-            return &similar, nil
+            return &similar[i], nil
         }
     }
-    
+
     return nil, nil
 }
 ```

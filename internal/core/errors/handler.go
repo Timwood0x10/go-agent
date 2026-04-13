@@ -91,6 +91,9 @@ func (h *Handler) RetryWithBackoff(ctx context.Context, appErr *AppError, attemp
 
 // FormatError formats an error for logging or display.
 func FormatError(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
 	if appErr, ok := err.(*AppError); ok {
 		var sb strings.Builder
 		sb.WriteString("[")

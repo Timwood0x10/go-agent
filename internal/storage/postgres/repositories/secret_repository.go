@@ -174,6 +174,11 @@ func (r *SecretRepository) List(ctx context.Context, tenantID string) ([]*storag
 		secrets = append(secrets, secret)
 	}
 
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate secrets", "error", err)
+		return nil, errors.Wrap(err, "iterate secrets")
+	}
+
 	return secrets, nil
 }
 
@@ -344,9 +349,10 @@ func (r *SecretRepository) decrypt(ciphertext []byte) ([]byte, error) {
 // - Need rollback mechanism if rotation fails mid-way
 // Args:
 // ctx - database operation context.
+// tenantID - tenant identifier for multi-tenant isolation.
 // newKey - new encryption key (32 bytes for AES-256-GCM).
 // Returns number of updated secrets or error if operation fails.
-func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64, error) {
+func (r *SecretRepository) RotateKey(ctx context.Context, tenantID string, newKey []byte) (int64, error) {
 	if len(newKey) != 32 {
 		return 0, fmt.Errorf("new key must be 32 bytes for AES-256-GCM")
 	}
@@ -356,22 +362,26 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	if err != nil {
 		return 0, errors.Wrap(err, "begin transaction")
 	}
+	committed := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			// nolint: errcheck // Transaction rollback error is logged but not critical
-			slog.Error("Failed to rollback transaction", "error", err)
+		if !committed {
+			if err := tx.Rollback(); err != nil {
+				// nolint: errcheck // Transaction rollback error is logged but not critical
+				slog.Error("Failed to rollback transaction", "error", err)
+			}
 		}
 	}()
 
-	// Retrieve all secrets with FOR UPDATE lock (per design standard)
+	// Retrieve secrets for specific tenant with FOR UPDATE lock (per design standard)
 	query := `
 		SELECT id, tenant_id, key, value, key_version, algorithm
 		FROM secrets
+		WHERE tenant_id = $1
 		ORDER BY key_version ASC
 		FOR UPDATE
 	`
 
-	rows, err := tx.QueryContext(ctx, query)
+	rows, err := tx.QueryContext(ctx, query, tenantID)
 	if err != nil {
 		return 0, errors.Wrap(err, "fetch secrets for rotation")
 	}
@@ -392,6 +402,11 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 
 		secret.Value = valueBytes
 		secrets = append(secrets, secret)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("Failed to iterate secrets", "error", err)
+		return 0, errors.Wrap(err, "iterate secrets")
 	}
 
 	// For each secret: decrypt with old key, re-encrypt with new key (per design standard)
@@ -429,6 +444,7 @@ func (r *SecretRepository) RotateKey(ctx context.Context, newKey []byte) (int64,
 	if err := tx.Commit(); err != nil {
 		return 0, errors.Wrap(err, "commit transaction")
 	}
+	committed = true
 
 	// Add audit logging for key rotation events (per design standard)
 	slog.Info("Secret key rotation completed", "updated_secrets", updatedCount, "timestamp", time.Now())
