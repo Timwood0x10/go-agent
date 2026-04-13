@@ -20,13 +20,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.5
           args: --timeout=10m
 
   test:
@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Download dependencies
@@ -67,7 +67,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Build
@@ -111,12 +111,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Create pgvector extension
         run: |
-          docker exec postgres psql -U postgres -d goagent -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          docker exec pgvector psql -U postgres -d goagent -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run integration tests
         run: go test -race -tags=integration ./...
@@ -131,7 +131,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Run Gosec Security Scanner
