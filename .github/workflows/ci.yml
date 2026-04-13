@@ -24,9 +24,9 @@ jobs:
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.64.5
+          version: latest
           args: --timeout=10m
 
   test:
@@ -116,7 +116,7 @@ jobs:
 
       - name: Create pgvector extension
         run: |
-          docker exec pgvector psql -U postgres -d goagent -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          docker exec postgres psql -U postgres -d goagent -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run integration tests
         run: go test -race -tags=integration ./...
