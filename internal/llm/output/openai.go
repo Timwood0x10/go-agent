@@ -11,7 +11,6 @@ import (
 
 	"goagent/internal/core/models"
 	"goagent/internal/errors"
-	gerr "goagent/internal/errors"
 )
 
 // OpenAIAdapter implements LLMAdapter for OpenAI.
@@ -137,9 +136,9 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, gerr.Wrap(err, "read response body")
+			return nil, errors.Wrap(err, "read response body")
 		}
-		return nil, gerr.Wrapf(err, "API request failed: openai error: %s", respBody)
+		return nil, errors.Wrapf(err, "API request failed: openai error: %s", respBody)
 	}
 
 	var result OpenAIChatResponse

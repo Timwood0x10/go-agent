@@ -57,6 +57,25 @@ jobs:
           name: goagent
           fail_ci_if_error: false
 
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Run core coverage check
+        run: make test-core
+
+      - name: Run tools coverage check
+        run: make test-tools
+
   build:
     name: Build
     runs-on: ubuntu-latest

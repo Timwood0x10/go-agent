@@ -3,21 +3,56 @@ package builtin
 import (
 	"context"
 	"fmt"
+	"time"
 
-	apicore "goagent/api/core"
 	"goagent/internal/tools/resources/base"
 	"goagent/internal/tools/resources/core"
 )
+
+// RetrievalResult represents a retrieval search result.
+// This is defined locally to avoid internal -> api dependency.
+type RetrievalResult struct {
+	ID       string
+	Score    float64
+	Content  string
+	Source   string
+	Metadata map[string]interface{}
+}
+
+// Metadata type alias for compatibility
+type Metadata map[string]interface{}
+
+// KnowledgeSearcher defines the interface for searching knowledge base.
+type KnowledgeSearcher interface {
+	Search(ctx context.Context, tenantID, query string) ([]*RetrievalResult, error)
+}
+
+// KnowledgeItem represents a knowledge base item.
+type KnowledgeItem struct {
+	ID        string
+	TenantID  string
+	Content   string
+	Source    string
+	Category  string
+	Tags      []string
+	Embedding []float32
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Metadata  Metadata
+}
+
+// KnowledgeService defines the interface for knowledge CRUD operations.
+type KnowledgeService interface {
+	GetKnowledge(ctx context.Context, tenantID, itemID string) (*KnowledgeItem, error)
+	UpdateKnowledge(ctx context.Context, tenantID string, item *KnowledgeItem) (*KnowledgeItem, error)
+	AddKnowledge(ctx context.Context, item *KnowledgeItem) (*KnowledgeItem, error)
+	DeleteKnowledge(ctx context.Context, tenantID, itemID string) error
+}
 
 // KnowledgeSearch searches the knowledge base for relevant information.
 type KnowledgeSearch struct {
 	*base.BaseTool
 	searcher KnowledgeSearcher
-}
-
-// KnowledgeSearcher defines the interface for searching knowledge base.
-type KnowledgeSearcher interface {
-	Search(ctx context.Context, tenantID, query string) ([]*apicore.RetrievalResult, error)
 }
 
 // NewKnowledgeSearch creates a new KnowledgeSearch tool.
@@ -96,11 +131,11 @@ func (t *KnowledgeSearch) Execute(ctx context.Context, params map[string]interfa
 // KnowledgeUpdate updates an existing knowledge item to correct errors or outdated information.
 type KnowledgeUpdate struct {
 	*base.BaseTool
-	service apicore.RetrievalService
+	service KnowledgeService
 }
 
 // NewKnowledgeUpdate creates a new KnowledgeUpdate tool.
-func NewKnowledgeUpdate(service apicore.RetrievalService) *KnowledgeUpdate {
+func NewKnowledgeUpdate(service KnowledgeService) *KnowledgeUpdate {
 	params := &core.ParameterSchema{
 		Type: "object",
 		Properties: map[string]*core.Parameter{
@@ -189,7 +224,7 @@ func (t *KnowledgeUpdate) Execute(ctx context.Context, params map[string]interfa
 	reason := getString(params, "reason")
 	if reason != "" {
 		if existing.Metadata == nil {
-			existing.Metadata = make(apicore.Metadata)
+			existing.Metadata = make(Metadata)
 		}
 		existing.Metadata["update_reason"] = reason
 	}
@@ -211,11 +246,11 @@ func (t *KnowledgeUpdate) Execute(ctx context.Context, params map[string]interfa
 // KnowledgeAdd adds new knowledge to the knowledge base.
 type KnowledgeAdd struct {
 	*base.BaseTool
-	service apicore.RetrievalService
+	service KnowledgeService
 }
 
 // NewKnowledgeAdd creates a new KnowledgeAdd tool.
-func NewKnowledgeAdd(service apicore.RetrievalService) *KnowledgeAdd {
+func NewKnowledgeAdd(service KnowledgeService) *KnowledgeAdd {
 	params := &core.ParameterSchema{
 		Type: "object",
 		Properties: map[string]*core.Parameter{
@@ -263,7 +298,7 @@ func (t *KnowledgeAdd) Execute(ctx context.Context, params map[string]interface{
 		return core.NewErrorResult("content is required"), nil
 	}
 
-	item := &apicore.KnowledgeItem{
+	item := &KnowledgeItem{
 		TenantID: tenantID,
 		Content:  content,
 	}
@@ -300,11 +335,11 @@ func (t *KnowledgeAdd) Execute(ctx context.Context, params map[string]interface{
 // KnowledgeDelete removes a knowledge item from the knowledge base.
 type KnowledgeDelete struct {
 	*base.BaseTool
-	service apicore.RetrievalService
+	service KnowledgeService
 }
 
 // NewKnowledgeDelete creates a new KnowledgeDelete tool.
-func NewKnowledgeDelete(service apicore.RetrievalService) *KnowledgeDelete {
+func NewKnowledgeDelete(service KnowledgeService) *KnowledgeDelete {
 	params := &core.ParameterSchema{
 		Type: "object",
 		Properties: map[string]*core.Parameter{

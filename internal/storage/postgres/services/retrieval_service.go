@@ -341,7 +341,8 @@ func (s *RetrievalService) validateRequest(req *SearchRequest) error {
 // This uses deterministic matching to cover semantic retrieval for precise queries.
 func (s *RetrievalService) isPrecisionMode(query string) bool {
 	// Short queries use exact/keyword matching for precision
-	if len(query) <= 10 {
+	// Use rune count instead of byte length for proper Unicode support
+	if utf8.RuneCountInString(query) <= 10 {
 		return true
 	}
 
@@ -1856,16 +1857,7 @@ func truncateForLog(s string, maxLen int) string {
 }
 
 func toLower(s string) string {
-	// Simple lowercase conversion
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c = c + ('a' - 'A')
-		}
-		result[i] = c
-	}
-	return string(result)
+	return strings.ToLower(s)
 }
 
 func contains(s, substr string) bool {

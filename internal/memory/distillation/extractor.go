@@ -474,7 +474,6 @@ func (e *ExperienceExtractor) parseUserProfile(text string) string {
 	professionPatterns := []string{
 		"developer", "engineer", "programmer", "architect", "designer",
 		"manager", "analyst", "consultant", "specialist", "expert",
-		"developer", "engineer", "programmer", "architect", "designer",
 	}
 
 	lower = strings.ToLower(profile)
@@ -487,7 +486,6 @@ func (e *ExperienceExtractor) parseUserProfile(text string) string {
 
 	// Extract skills/tech stack
 	skillsPatterns := []string{
-		"like ", "love ", "prefer ", "use ", "work with ",
 		"like ", "love ", "prefer ", "use ", "work with ",
 	}
 
