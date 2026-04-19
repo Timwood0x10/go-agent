@@ -48,7 +48,7 @@ PORT=8000
 ## Tech Stack
 
 ### Core Technologies
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **Database**: PostgreSQL 15+ with pgvector extension
 - **Concurrency**: errgroup, sync
 - **Protocol**: Custom AHP Protocol
@@ -67,7 +67,7 @@ PORT=8000
 | **Embedding Service** | Vector embedding generation | `services/embedding/` |
 
 ### Dependencies
-- `github.com/lib/pq` - PostgreSQL driver
+- `github.com/jackc/pgx/v5` - PostgreSQL driver
 - `github.com/google/uuid` - UUID generation
 - `github.com/stretchr/testify` - Testing framework
 - `golang.org/x/sync` - Concurrent extensions

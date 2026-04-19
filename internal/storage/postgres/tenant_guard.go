@@ -4,11 +4,10 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
-
-	"github.com/lib/pq"
 )
 
 // TenantGuard provides physical isolation for multi-tenant data access.
@@ -39,7 +38,8 @@ func (g *TenantGuard) SetTenantContext(ctx context.Context, tenantID string) err
 		return coreerrors.ErrInvalidArgument
 	}
 
-	quotedID := pq.QuoteLiteral(tenantID)
+	// Manually escape single quotes for SQL literal
+	quotedID := "'" + strings.ReplaceAll(tenantID, "'", "''") + "'"
 	// Use SET LOCAL to ensure tenant context only affects current transaction
 	// This prevents cross-tenant data access in connection pool scenarios
 	query := fmt.Sprintf("SET LOCAL app.tenant_id TO %s", quotedID)

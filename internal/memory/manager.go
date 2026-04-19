@@ -75,8 +75,11 @@ type MemoryConfig struct {
 	// SessionTTL is the time-to-live for sessions.
 	SessionTTL time.Duration
 
-	// TaskTTL is the time-to-live for tasks.
+	// TaskTTL is time-to-live for tasks.
 	TaskTTL time.Duration
+
+	// DistilledTaskTTL is time-to-live for distilled tasks.
+	DistilledTaskTTL time.Duration
 
 	// VectorDim is the dimension of the vector (for local embedding).
 	VectorDim int

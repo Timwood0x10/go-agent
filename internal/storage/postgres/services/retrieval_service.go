@@ -18,13 +18,12 @@ import (
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
+	"goagent/internal/experience"
 	"goagent/internal/llm"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
 	"goagent/internal/storage/postgres/repositories"
-
-	"goagent/api/experience"
 )
 
 // SearchRequest represents a search request with configuration.
@@ -387,7 +386,6 @@ func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchReque
 		return []*SearchResult{}
 	}
 	s.logger.Debug("Precision search: using vector fallback", "count", len(vector))
-
 	return vector
 }
 

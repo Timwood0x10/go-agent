@@ -16,16 +16,14 @@ import (
 // Executor executes workflows based on DAG ordering.
 type Executor struct {
 	registry    *AgentRegistry
-	outputStore *OutputStore
 	maxParallel int
 	stepTimeout time.Duration
 }
 
 // NewExecutor creates a new Executor.
-func NewExecutor(registry *AgentRegistry, outputStore *OutputStore) *Executor {
+func NewExecutor(registry *AgentRegistry) *Executor {
 	return &Executor{
 		registry:    registry,
-		outputStore: outputStore,
 		maxParallel: DefaultMaxParallel,
 		stepTimeout: 5 * time.Minute,
 	}

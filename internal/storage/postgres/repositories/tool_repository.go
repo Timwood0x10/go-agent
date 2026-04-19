@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/lib/pq"
-
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
 	"goagent/internal/storage/postgres"
@@ -182,7 +180,7 @@ func (r *ToolRepository) GetByID(ctx context.Context, id string) (*storage_model
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 		&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-		&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+		&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 		&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 	)
 
@@ -228,7 +226,7 @@ func (r *ToolRepository) GetByName(ctx context.Context, name, tenantID string) (
 	err := r.db.QueryRowContext(ctx, query, name, tenantID).Scan(
 		&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 		&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-		&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+		&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 		&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 	)
 
@@ -357,7 +355,7 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt, &similarity,
 		)
 		if err != nil {
@@ -425,7 +423,7 @@ func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID st
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
@@ -485,7 +483,7 @@ func (r *ToolRepository) ListAll(ctx context.Context, tenantID string, limit int
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
@@ -546,7 +544,7 @@ func (r *ToolRepository) ListByAgentType(ctx context.Context, agentType, tenantI
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {
@@ -676,7 +674,7 @@ func (r *ToolRepository) ListByTags(ctx context.Context, tags []string, tenantID
 		err := rows.Scan(
 			&tool.ID, &tool.TenantID, &tool.Name, &tool.Description,
 			&embeddingStr, &tool.EmbeddingModel, &tool.EmbeddingVersion,
-			&tool.AgentType, pq.Array(&tool.Tags), &tool.UsageCount, &tool.SuccessRate,
+			&tool.AgentType, &tool.Tags, &tool.UsageCount, &tool.SuccessRate,
 			&tool.LastUsedAt, &metadataStr, &tool.CreatedAt,
 		)
 		if err != nil {

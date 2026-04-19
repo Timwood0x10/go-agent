@@ -19,8 +19,7 @@ import (
 func TestExecutorCoverage(t *testing.T) {
 	t.Run("create executor", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		if executor == nil {
 			t.Error("Executor should not be nil")
@@ -38,8 +37,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 	t.Run("execute simple workflow", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		// Register a mock agent
 		registry.Register("test-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
@@ -87,8 +85,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 	t.Run("execute workflow with dependencies", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		registry.Register("test-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "test-agent", func(ctx context.Context, input any) (any, error) {
@@ -149,8 +146,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 	t.Run("execute workflow with agent error", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		registry.Register("failing-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "failing-agent", func(ctx context.Context, input any) (any, error) {
@@ -183,8 +179,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 	t.Run("execute workflow with invalid agent type", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		workflow := &Workflow{
 			ID:   "wf4",
@@ -211,8 +206,7 @@ func TestExecutorCoverage(t *testing.T) {
 
 	t.Run("execute workflow with context cancellation", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		registry.Register("slow-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "slow-agent", func(ctx context.Context, input any) (any, error) {
@@ -260,8 +254,7 @@ func TestExecutorCoverage(t *testing.T) {
 func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 	t.Run("find step by ID", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		workflow := &Workflow{
 			Steps: []*Step{
@@ -289,8 +282,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 
 	t.Run("can execute step", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		step1 := &Step{ID: "step1", DependsOn: []string{}}
 		step2 := &Step{ID: "step2", DependsOn: []string{"step1"}}
@@ -333,8 +325,8 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 
 	t.Run("resolve input for step", func(t *testing.T) {
 		registry := NewAgentRegistry()
+		executor := NewExecutor(registry)
 		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
 
 		// Test step with no dependencies and input
 		step1 := &Step{
@@ -380,8 +372,8 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 
 	t.Run("execute single step", func(t *testing.T) {
 		registry := NewAgentRegistry()
+		executor := NewExecutor(registry)
 		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
 
 		registry.Register("test-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "test-agent", func(ctx context.Context, input any) (any, error) {
@@ -421,8 +413,8 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 
 	t.Run("execute step with timeout", func(t *testing.T) {
 		registry := NewAgentRegistry()
+		executor := NewExecutor(registry)
 		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
 
 		// Register an agent that will take longer than the timeout
 		registry.Register("slow-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
@@ -471,8 +463,7 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 func TestRetryLogicCoverage(t *testing.T) {
 	t.Run("execute with retry policy", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		attemptCount := 0
 		registry.Register("flaky-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
@@ -522,8 +513,7 @@ func TestRetryLogicCoverage(t *testing.T) {
 
 	t.Run("execute with retry policy exhausted", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		registry.Register("failing-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "failing-agent", func(ctx context.Context, input any) (any, error) {
@@ -550,8 +540,7 @@ func TestRetryLogicCoverage(t *testing.T) {
 
 	t.Run("execute without retry policy", func(t *testing.T) {
 		registry := NewAgentRegistry()
-		outputStore := NewOutputStore()
-		executor := NewExecutor(registry, outputStore)
+		executor := NewExecutor(registry)
 
 		registry.Register("test-agent", func(ctx context.Context, config interface{}) (base.Agent, error) {
 			return NewMockAgent("test", "test-agent", func(ctx context.Context, input any) (any, error) {

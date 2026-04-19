@@ -5,7 +5,7 @@ An interactive multi-agent dialog system demonstrating agent communication, tool
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **LLM Provider**: Ollama (llama3.2) or other OpenAI API-compatible services
 - **Configuration Format**: YAML
 - **ACE Engine**: Agent Capability Engine for tool filtering

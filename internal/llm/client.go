@@ -16,6 +16,17 @@ import (
 	"goagent/internal/errors"
 )
 
+// HTTPError represents an HTTP request error.
+type HTTPError struct {
+	StatusCode int
+	Message    string
+}
+
+// Error returns the error message.
+func (e *HTTPError) Error() string {
+	return e.Message
+}
+
 // ProviderType represents the LLM provider type.
 type ProviderType string
 
@@ -201,7 +212,10 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return "", &HTTPError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("unexpected status code: %d, body: %s", resp.StatusCode, string(body)),
+		}
 	}
 
 	var response struct {

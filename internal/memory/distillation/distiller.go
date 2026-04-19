@@ -420,10 +420,44 @@ func (d *Distiller) DistillConversation(ctx context.Context, conversationID stri
 				"old_confidence", conflict.Confidence,
 				"conflict_content", truncateString(conflict.Problem, 50))
 			d.metrics.ConflictResolved.Add(1)
-		}
 
-		// Keep the memory
-		finalMemories = append(finalMemories, memory)
+			// Apply the resolution strategy
+			switch strategy {
+			case ReplaceOld:
+				// Replace the old memory with the new one
+				finalMemories = append(finalMemories, memory)
+				slog.DebugContext(ctx, "🔄 [Memory Distillation] Replaced old memory with new one",
+					"conversation_id", conversationID,
+					"memory_index", idx)
+			case KeepBoth:
+				// Keep both memories - add the old one back and then the new one
+				// Convert the conflicting experience back to memory format
+				oldMemory := Memory{
+					ID:         uuid.New().String(),
+					Content:    conflict.Problem,
+					Metadata:   map[string]interface{}{"solution": conflict.Solution},
+					Type:       memory.Type,
+					Importance: conflict.Confidence,
+					Vector:     conflict.Vector,
+					CreatedAt:  time.Now(),
+				}
+				finalMemories = append(finalMemories, oldMemory)
+				finalMemories = append(finalMemories, memory)
+				slog.DebugContext(ctx, "📝 [Memory Distillation] Kept both old and new memories",
+					"conversation_id", conversationID,
+					"memory_index", idx)
+			default:
+				// Fallback to keeping the new memory
+				finalMemories = append(finalMemories, memory)
+				slog.WarnContext(ctx, "⚠️ [Memory Distillation] Unknown resolution strategy, defaulting to keep new memory",
+					"conversation_id", conversationID,
+					"memory_index", idx,
+					"strategy", string(strategy))
+			}
+		} else {
+			// No conflict, keep the memory
+			finalMemories = append(finalMemories, memory)
+		}
 	}
 
 	// Step 5: Final Top-N filtering (after conflict resolution)

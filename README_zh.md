@@ -47,7 +47,7 @@ PORT=8000
 ## 技术栈
 
 ### 核心技术
-- **语言**: Go 1.21+
+- **语言**: Go 1.26+
 - **数据库**: PostgreSQL 15+ with pgvector 扩展
 - **并发**: errgroup, sync
 - **协议**: 自定义 AHP 协议
@@ -66,7 +66,7 @@ PORT=8000
 | **Embedding 服务** | 向量嵌入生成 | `services/embedding/` |
 
 ### 依赖库
-- `github.com/lib/pq` - PostgreSQL 驱动
+- `github.com/jackc/pgx/v5` - PostgreSQL 驱动
 - `github.com/google/uuid` - UUID 生成
 - `github.com/stretchr/testify` - 测试框架
 - `golang.org/x/sync` - 并发扩展

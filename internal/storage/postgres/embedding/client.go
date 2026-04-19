@@ -19,6 +19,17 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
+// HTTPError represents an HTTP request error.
+type HTTPError struct {
+	StatusCode int
+	Message    string
+}
+
+// Error returns the error message.
+func (e *HTTPError) Error() string {
+	return e.Message
+}
+
 // EmbeddingClient provides vector embedding functionality with caching.
 
 type EmbeddingClient struct {
@@ -274,7 +285,10 @@ func (c *EmbeddingClient) callEmbeddingService(ctx context.Context, text, prefix
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+		return nil, &HTTPError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("service returned status %d: %s", resp.StatusCode, string(body)),
+		}
 	}
 
 	var result struct {
@@ -321,7 +335,10 @@ func (c *EmbeddingClient) callEmbeddingBatchService(ctx context.Context, texts [
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("service returned status %d: %s", resp.StatusCode, string(body))
+		return nil, &HTTPError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("service returned status %d: %s", resp.StatusCode, string(body)),
+		}
 	}
 
 	var result struct {
@@ -359,7 +376,10 @@ func (c *EmbeddingClient) HealthCheck(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("service returned status %d", resp.StatusCode)
+		return &HTTPError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("service returned status %d", resp.StatusCode),
+		}
 	}
 
 	return nil

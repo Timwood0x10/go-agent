@@ -202,7 +202,7 @@ memory:
   vector_dim: 128    # Vector dimension for local hash-based embedding
   postgres:
     enabled: false
-    dsn: "host=localhost port=5432 user=styleagent password=password dbname=styleagent sslmode=disable"
+    dsn: "host=localhost port=5432 user=goagent password=password dbname=goagent sslmode=disable"
 
 # Storage Configuration
 storage:

@@ -276,6 +276,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 				"error", err,
 				"session_id", sessionID,
 				"impact", "message will not be available in conversation history")
+			return nil, errors.Wrap(err, "failed to add user message to memory")
 		}
 
 		// Build input with context
@@ -285,9 +286,9 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 				"error", err,
 				"session_id", sessionID,
 				"impact", "agent will not have previous context")
-		} else {
-			strInput = inputWithContext
+			return nil, errors.Wrap(err, "failed to build context")
 		}
+		strInput = inputWithContext
 
 		// Search similar tasks for context
 		similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, strInput, 3)
@@ -295,6 +296,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			slog.Warn("Failed to search similar tasks - proceeding without task context",
 				"error", err,
 				"impact", "agent will not have similar task examples")
+			return nil, errors.Wrap(err, "failed to search similar tasks")
 		} else if len(similarTasks) > 0 {
 			slog.Debug("Found similar tasks", "count", len(similarTasks))
 			contextStr := "\n\nSimilar previous tasks:\n"
@@ -371,21 +373,24 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	}
 
 	// Memory: Update task output and add result to memory
+	resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
 	if a.memoryManager != nil && taskID != "" {
-		resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
 		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
 			slog.Warn("Failed to update task output - proceeding without output tracking",
 				"error", err,
 				"task_id", taskID,
 				"impact", "task output will not be available for analysis")
+			return nil, errors.Wrap(err, "failed to update task output")
 		}
-
-		// Add assistant response to memory
+	}
+	// Add assistant response to memory
+	if a.memoryManager != nil {
 		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "assistant", resultStr); err != nil {
 			slog.Warn("Failed to add assistant message to memory - proceeding without history logging",
 				"error", err,
 				"session_id", a.sessionID,
 				"impact", "response will not be available in conversation history")
+			return nil, errors.Wrap(err, "failed to add assistant message to memory")
 		}
 
 		// Async distillation with timeout context derived from request context.

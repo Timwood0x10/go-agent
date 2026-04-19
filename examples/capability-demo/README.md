@@ -5,7 +5,7 @@ This example demonstrates the **Agent Capability Engine (ACE)** workflow, which 
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **LLM Provider**: Ollama (llama3.2) or other OpenAI API-compatible services
 - **Configuration Format**: YAML
 - **Capability Detection**: Keyword matching + LLM intent analysis

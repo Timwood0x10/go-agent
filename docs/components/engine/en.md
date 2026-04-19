@@ -175,7 +175,7 @@ type Executor struct {
     stepTimeout time.Duration
 }
 
-func NewExecutor(registry *AgentRegistry, outputStore *OutputStore) *Executor
+func NewExecutor(registry *AgentRegistry) *Executor
 
 // Execute executes a workflow
 func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput string) (*WorkflowResult, error)

@@ -92,7 +92,7 @@ func defaultSensitivePatterns() []SensitivePattern {
 		},
 		{
 			Type:        SensitiveFieldTypePassword,
-			Pattern:     regexp.MustCompile(`(?i)\b(password|passwd|pwd)\b[:\s]+["']?([^"'\s]+)["']?`),
+			Pattern:     regexp.MustCompile(`(?i)\b(password|passwd|pwd)\b[=:\s]+["']?([^"'\s]+)["']?`),
 			MaskFunc:    maskPassword,
 			Description: "Passwords",
 		},
