@@ -178,8 +178,6 @@ func indexOf(s, substr string) int {
 // This is a replacement for fmt.Sprintf that ensures the table name is valid.
 func safeFormatTable(table string) string {
 	if err := sanitizeSQLTable(table); err != nil {
-		// If validation fails, return empty string to prevent injection
-		// The calling code should handle this appropriately
 		return ""
 	}
 	return table

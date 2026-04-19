@@ -16,8 +16,8 @@ var taskIDCounter uint64
 
 // getRandomSuffix returns a random suffix for extra uniqueness.
 func getRandomSuffix() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
-	return fmt.Sprintf("%04d", n.Int64())
+	n, _ := rand.Int(rand.Reader, big.NewInt(100000000))
+	return fmt.Sprintf("%08d", n.Int64())
 }
 
 // generateTaskID generates a unique task ID.

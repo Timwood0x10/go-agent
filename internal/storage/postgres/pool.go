@@ -240,7 +240,7 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 	// The caller should check the error from Scan to detect connection failures.
 	if connErr != nil || row == nil {
 		if connErr != nil {
-			slog.Warn("Failed to acquire database connection for QueryRow", "error", connErr)
+			slog.Error("Failed to acquire database connection for QueryRow", "error", connErr)
 		}
 		cancelCtx, cancel := context.WithCancel(context.Background())
 		cancel()

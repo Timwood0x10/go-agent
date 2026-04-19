@@ -318,13 +318,19 @@ func (m *TaskMemory) Distill(ctx context.Context, taskID string) (*models.Task, 
 		return nil, ErrTaskNotFound
 	}
 
+	// Deep copy context to prevent external modification of internal state
+	contextCopy := make(map[string]interface{}, len(task.Context))
+	for k, v := range task.Context {
+		contextCopy[k] = v
+	}
+
 	distilled := &models.Task{
 		TaskID:   taskID,
 		Priority: 0,
 		Payload: map[string]any{
 			"input":   task.Input,
 			"output":  task.Output,
-			"context": task.Context,
+			"context": contextCopy,
 		},
 		CreatedAt: task.CreatedAt,
 	}

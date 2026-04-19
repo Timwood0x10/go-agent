@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -612,7 +613,7 @@ func formatImportanceScores(memories []Memory) string {
 	for i, mem := range memories {
 		scores[i] = fmt.Sprintf("%.2f", mem.Importance)
 	}
-	return "[" + fmt.Sprintf("%s", scores) + "]"
+	return "[" + strings.Join(scores, ", ") + "]"
 }
 
 // formatMemoryTypes formats memory types for logging.

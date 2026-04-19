@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -14,6 +15,9 @@ import (
 )
 
 // Executor executes workflows based on DAG ordering.
+// OutputStore is execution-scoped (created per Execute call) rather than
+// executor-scoped, ensuring thread-safety and preventing data races
+// when multiple workflows execute concurrently.
 type Executor struct {
 	registry    *AgentRegistry
 	maxParallel int
@@ -492,7 +496,10 @@ func (e *Executor) executeSingle(ctx context.Context, step *Step, input string) 
 	return executor.Execute(stepCtx, step, input, &models.TaskContext{})
 }
 
-// generateExecutionID generates a unique execution ID.
+// generateExecutionID generates a unique execution ID using atomic counter.
+var executionIDCounter uint64
+
 func generateExecutionID() string {
-	return fmt.Sprintf("exec-%d", time.Now().UnixNano())
+	id := atomic.AddUint64(&executionIDCounter, 1)
+	return fmt.Sprintf("exec-%d-%d", time.Now().UnixNano(), id)
 }

@@ -31,6 +31,8 @@ type CircuitBreaker struct {
 	halfOpenSuccess  int
 	halfOpenInflight atomic.Int32
 	lastCleanupTime  time.Time
+	stopCh           chan struct{}
+	cleanupStopped   atomic.Bool
 }
 
 // NewCircuitBreaker creates a new CircuitBreaker instance.
@@ -45,6 +47,7 @@ func NewCircuitBreaker(failureThreshold int, openTimeout time.Duration) *Circuit
 		successThreshold: 3,
 		openTimeout:      openTimeout,
 		lastCleanupTime:  time.Now(),
+		stopCh:           make(chan struct{}),
 	}
 
 	// Start cleanup goroutine to prevent halfOpenInflight leaks
@@ -65,9 +68,10 @@ func (cb *CircuitBreaker) AllowRequest() error {
 
 	case CircuitBreakerStateOpen:
 		if time.Since(cb.lastFailureTime) > cb.openTimeout {
-			// Move to half-open state
+			// Move to half-open state and reset counter
 			cb.state = CircuitBreakerStateHalfOpen
 			cb.halfOpenSuccess = 0
+			cb.halfOpenInflight.Store(0) // Reset inflight counter
 			return nil
 		}
 		return errors.ErrCircuitBreakerOpen
@@ -155,8 +159,20 @@ func (cb *CircuitBreaker) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
 	defer ticker.Stop()
 
-	for range ticker.C {
-		cb.cleanupHalfOpenInflight()
+	for {
+		select {
+		case <-cb.stopCh:
+			return
+		case <-ticker.C:
+			cb.cleanupHalfOpenInflight()
+		}
+	}
+}
+
+// Close stops the cleanup goroutine and closes the circuit breaker.
+func (cb *CircuitBreaker) Close() {
+	if cb.cleanupStopped.CompareAndSwap(false, true) {
+		close(cb.stopCh)
 	}
 }
 

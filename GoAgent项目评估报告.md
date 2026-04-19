@@ -1,234 +1,252 @@
-# GoAgent 项目评估报告
+# GoAgent 项目评审报告（第二轮）
 
-> **"多垃圾"的全面审计**
-> 评估日期：2026-04-19
-> 项目规模：\~104,000 行 Go 代码 / 334 个源文件
-> 技术栈：Go 1.26 / PostgreSQL + pgvector / FastAPI
+> **评审日期：2026-04-19（复审）**
+> 项目规模：~104,000 行 Go 代码 / 334 个源文件
+> 技术栈：Go 1.26 / PostgreSQL + pgvector (pgx/v5) / FastAPI
+> 上次评审：2026-04-19（初评），综合得分 6.9/10
 
-***
+---
 
 ## 1. 执行摘要
 
-GoAgent 是一个用 Go 实现的多智能体协作框架，支持多 Agent 协作、记忆管理、工具调用、工作流引擎等功能。项目代码量约 10 万行，测试代码占比接近 50%，文档 124 个 Markdown 文件。
+自上次评审以来，项目进行了大量修复工作（20+ commits），**修复了 13 项上次报告中的问题，部分修复了 5 项，4 项仍未修复**。关键改进包括：pgx 驱动迁移、冲突解决策略实现、内存泄漏修复、TTL 清理机制、安全加固（密码硬编码移除）等。
 
-简单来说：**这个项目"架构设计有想法，工程化基础设施做得不错，但代码质量和实际可靠性存在明显问题"**。审计发现 56 个 Bug，其中 8 个严重级别、14 个高级别，已修复 40 个（71.4%），仍有 16 个待修复。
+> **综合得分：7.2 / 10**（较上次 6.9 提升 0.3 分）
+> 评价：**"进步明显，但仍有短板需要补齐"**
 
-### 1.1 综合评分
+### 1.1 综合评分对比
 
-| 评估维度     | 得分     | 简要说明                                  |
-| -------- | ------ | ------------------------------------- |
-| 代码质量与架构  | 7.5/10 | 架构清晰，但存在层级倒置、代码重复、三套错误体系              |
-| 测试质量     | 6.8/10 | 覆盖面广，但存在"凑覆盖率"现象，集成测试不自动运行            |
-| 文档质量     | 7.2/10 | 文档体系完善，但缺少 LICENSE、CHANGELOG，文档与代码不一致 |
-| Bug 与可靠性 | 7.0/10 | 56 个 Bug 已修复 40 个（71.4%），关键bug已全部修复   |
-| 工程化成熟度   | 7.5/10 | CI/CD 完整，但安全扫描不阻断、覆盖率无门禁              |
+| 评估维度 | 上次得分 | 本次得分 | 变化 | 说明 |
+|----------|---------|---------|------|------|
+| 代码质量与架构 | 7.5/10 | 7.8/10 | +0.3 | pgx迁移、冲突策略修复、密码硬编码移除 |
+| 测试质量 | 6.8/10 | 7.0/10 | +0.2 | sanitizer测试增强、但TaskMemory仍缺测试 |
+| 文档质量 | 7.2/10 | 7.8/10 | +0.6 | 新增CHANGELOG、.golangci.yml、errors/README |
+| Bug 与可靠性 | 5.5/10 | 7.5/10 | +2.0 | 13项修复，Critical/High全部清零 |
+| 工程化成熟度 | 7.5/10 | 7.8/10 | +0.3 | golangci配置、pgx迁移、版本号统一 |
 
-> **综合得分：7.2 / 10 — "有潜力但还没准备好上生产"**
+---
 
-***
+## 2. 上次问题修复追踪
 
-## 2. Bug 审计概览
+### 2.1 修复状态总览
 
-项目已有详细的 Bug 审计报告（`plan/project-evaluation.md`），共发现 56 个问题。
+| 状态 | 数量 | 占比 |
+|------|------|------|
+| ✅ 已修复 | 13 | 59% |
+| 🔶 部分修复 | 5 | 23% |
+| ❌ 未修复 | 4 | 18% |
 
-### 2.1 修复进度总览
+### 2.2 P0 问题追踪
 
-| 严重级别         | 总数     | 已修复    | 待修复    | 关键问题                      |
-| ------------ | ------ | ------ | ------ | ------------------------- |
-| **Critical** | 8      | 8      | 0      | channel panic、租户隔离失效、数据丢失 |
-| **High**     | 14     | 14     | 0      | goroutine 泄漏、连接泄漏、内存泄漏    |
-| **Medium**   | 22     | 18     | 4      | UTF-8 损坏、竞态条件、错误吞没        |
-| **Low**      | 12     | 0      | 12     | 格式错误、ID 重复风险、配置路径         |
-| **总计**       | **56** | **40** | **16** | 修复率 71.4%                 |
+| 编号 | 问题 | 状态 | 说明 |
+|------|------|------|------|
+| M12 | 冲突解决策略被忽略 | ✅ 已修复 | `distiller.go:413-461` 完整实现 ReplaceOld/KeepBoth/default 分支 |
+| M13 | outputStore 无锁保护 | ✅ 已修复 | `executor.go:62-63` 每次执行创建独立 OutputStore |
+| M3 | TaskMemory 无 TTL 清理 | ✅ 已修复 | `task.go` 新增 Start/Stop/cleanupLoop/cleanupExpired |
+| M4 | distilledTasks 只增不减 | ✅ 已修复 | `manager_impl.go` 新增 LRU 淘汰 + TTL 定期清理 |
+| M9 | writeBuffer 静默丢弃数据 | ✅ 已修复 | `write_buffer.go` 新增 maxRetries=3 重试机制 |
+| M22 | GetMessages 返回内部引用 | ✅ 已修复 | `session.go:187-188` 使用 make+copy 返回副本 |
+| 密码硬编码 | cmd/ 中硬编码数据库密码 | ✅ 已修复 | 两个 cmd 文件均改为 os.Getenv 读取 |
 
-### 2.2 最严重的已修复问题（代表性案例）
+### 2.3 P1 问题追踪
 
-- **C8: TenantGuard 租户隔离失效** — `SET app.tenant_id` 在连接池单个连接上执行，后续查询可能使用不同连接，导致租户看到其他租户数据（**安全漏洞**）
-- **C1/C2: WriteBuffer channel panic** — 并发调用 Stop/Start 时关闭已在使用中的 channel，直接 panic
-- **C6: flushBatch 数据永久丢失** — 数据库写入失败后数据被清空，无重试机制
-- **H1: ProductionMemoryManager.Start() 永久阻塞** — 内存管理器永远无法启动
+| 编号 | 问题 | 状态 | 说明 |
+|------|------|------|------|
+| 错误体系 | 三套错误处理体系 | 🔶 部分修复 | 新增 errors/README.md 文档规范，但代码中三套体系仍并行存在 |
+| 层级倒置 | internal/ 引用 api/ | 🔶 部分修复 | retrieval_service.go 已修复，但 knowledge_base.go 仍引用 api/core |
+| golangci | 缺少 .golangci.yml | ✅ 已修复 | 新增配置，启用 7 个 linter（errcheck/govet/staticcheck 等） |
+| 集成测试 | 仅手动触发 | ❌ 未修复 | 仍仅 workflow_dispatch |
+| 安全扫描 | -no-fail 不阻断 | ❌ 未修复 | ci.yml:98 仍使用 -no-fail |
+| 覆盖率门禁 | CI 未强制执行 | 🔶 部分修复 | Makefile 已有门禁，但 CI 未集成调用 |
 
-### 2.3 仍待修复的重要问题
+### 2.4 P2 问题追踪
 
-（所有Medium级别的重要bug已修复，剩余4个Medium级别问题）
+| 编号 | 问题 | 状态 | 说明 |
+|------|------|------|------|
+| CHANGELOG | 缺失 | ✅ 已修复 | 新增 CHANGELOG.md，遵循 Keep a Changelog 格式 |
+| LICENSE | 缺失 | ❌ 未修复 | 项目根目录仍无 LICENSE 文件 |
+| Go 版本 | 三处不一致 | ✅ 已修复 | README/go.mod/CI 统一为 Go 1.26+ |
+| emoji | 日志中大量 emoji | 🔶 部分修复 | manager_impl.go 已清理，但 distiller.go 仍有 24 处 |
+| 冒泡排序 | O(n²) 排序 | ✅ 已修复 | manager_impl.go:676 改用 sort.Slice |
+| pgx 迁移 | lib/pq 维护模式 | ✅ 已修复 | go.mod 使用 pgx/v5 v5.7.1，lib/pq 已完全移除 |
 
-***
+---
 
-## 3. 代码质量评估
+## 3. 新发现的问题
 
-### 3.1 架构设计
+在修复过程中引入或发现的新问题：
 
-项目采用标准的 Go 项目布局，`internal/` 下按功能域划分包，整体架构清晰。但存在以下问题：
+### 3.1 中等优先级
 
-- **层级倒置**：`internal/` 中的 `retrieval_service.go` 和 `knowledge_base.go` 引用了 `api/` 层的类型，违反了 api 作为公共接口、internal 作为内部实现的分层原则
-  - `internal/storage/postgres/services/retrieval_service.go:27` → 导入 `goagent/api/experience`
-  - `internal/tools/resources/builtin/knowledge/knowledge_base.go:7` → 导入 `goagent/api/core`
-- **类型重复**：`api/core/` 和 `internal/core/models/` 中存在重复的类型定义（AgentStatus、Task 等），两套类型体系并行存在
-- **storage/postgres/ 过于庞大**：40+ 个文件包含连接池、配置、迁移、嵌入、模型、查询缓存、仓储、服务、安全等，应拆分为子包
+| 编号 | 问题 | 文件 | 说明 |
+|------|------|------|------|
+| N1 | EmbedBatch/HealthCheck 缺少 nil receiver | `embedding/client.go:158,363` | Embed 和 EmbedWithPrefix 已修复，但 EmbedBatch 和 HealthCheck 遗漏 |
+| N2 | CircuitBreaker.cleanupLoop goroutine 无法停止 | `circuit_breaker.go:159` | `for range ticker.C` 无退出条件，无 Close() 方法，大量实例会导致 goroutine 泄漏 |
+| N3 | toLower 对非 ASCII 字符无效 | `retrieval_service.go:1858-1869` | 只处理 A-Z 范围，带重音的欧洲字符不会被正确处理 |
+| N4 | isPrecisionMode 使用字节长度判断短查询 | `retrieval_service.go:344` | `len(query)` 返回字节数，中文查询 "如何配置数据库" 返回 21 而非 7 |
+| N5 | searchExact 失败不降级 | `retrieval_service.go:363-366` | 精确匹配失败直接返回错误，不尝试关键词和向量搜索 |
+| N6 | SanitizeJSON 实现与注释不符 | `security/sanitizer.go:149-158` | 注释说 "need to be more careful to preserve structure"，但实际只是调用 Sanitize |
+| N7 | containsSQLInjectionPatterns 误报率高 | `security.go:110-127` | 检测模式包含 SELECT/WHERE 等常见 SQL 关键字，正常用户输入会被误报 |
+| N8 | distiller.go 中 KeepBoth 策略的旧记忆重建 | `distiller.go:438` | `Content: conflict.Problem` 可能不包含完整记忆内容 |
+| N9 | distiller.go 仍有冒泡排序 | `distiller.go:467-473` | 虽然数据量小（默认3），但属于不良编码习惯 |
 
-### 3.2 错误处理
+### 3.2 低优先级
 
-项目存在三套错误处理机制，使用方式混乱：
+| 编号 | 问题 | 文件 | 说明 |
+|------|------|------|------|
+| N10 | openai.go 重复导入 | `llm/output/openai.go:13-14` | 同时导入 `errors` 和 `gerr "errors"`（同一包两个别名） |
+| N11 | extractor.go 数组重复元素 | `distillation/extractor.go:474-478` | professionPatterns 和 skillsPatterns 中有重复条目 |
+| N12 | TaskMemory TTL 清理缺少单元测试 | `memory/context/context_test.go` | 新增的 TTL 机制没有对应的测试用例 |
+| N13 | README 版本号与 CHANGELOG 不一致 | `README.md:306` vs `CHANGELOG.md` | README 写 v1.0.0，CHANGELOG 写 0.1.0 |
+| N14 | .gitignore 缺少 *.log | `.gitignore` | bin/ 已添加，但 *.log 和 coverage.out 未添加 |
+| N15 | Makefile 覆盖率提取脚本可能有 bug | `Makefile:108` | `awk -F'='` 分割逻辑与 `go tool cover -func` 输出格式不匹配 |
 
-| 机制                               | 位置       | 说明                           |
-| -------------------------------- | -------- | ---------------------------- |
-| `internal/errors/wrap.go`        | 轻量级错误包装  | `Wrap` 返回 `error`            |
-| `internal/core/errors/code.go`   | 结构化错误码体系 | `Wrap` 返回 `*AppError`，支持重试策略 |
-| `internal/core/errors/errors.go` | 哨兵错误     | 按模块分组                        |
+---
 
-三套体系的 `Wrap` 函数签名不同但名称相同，容易混淆。部分模块同时使用两种方式，风格不统一。
+## 4. 代码质量评估（更新）
 
-### 3.3 代码重复与命名
+### 4.1 架构设计
 
-- `distillTaskOld` 和 `distillTaskNew` 逻辑几乎完全相同，只是日志消息不同
-  - 文件：`internal/memory/manager_impl.go:291-333`
-- `cmd/` 下的数据库配置代码高度重复，且**密码硬编码**（安全隐患）
-  - 文件：`cmd/migrate_goagent/main.go:17-28`、`cmd/setup_test_db/main.go:17-28`
-- Agent 状态管理在 `leader/agent.go` 和 `sub/agent.go` 中重复，应提取到 `base` 包
-- 日志中大量使用 emoji（`manager_impl.go` 中 16+ 处），在 Go 生产代码中不常见且可能在某些终端显示异常
+**改善项：**
+- ✅ retrieval_service.go 不再引用 api/ 层，层级倒置部分修复
+- ✅ pgx/v5 迁移完成，连接管理更现代
+- ✅ 新增 internal/experience 包，减少对 api/ 的依赖
 
-### 3.4 依赖管理
+**遗留问题：**
+- 🔶 knowledge_base.go 仍引用 `api/core`（`internal/tools/resources/builtin/knowledge/knowledge_base.go:7`）
+- 🔶 api/core/ 和 internal/core/models/ 类型重复仍存在
+- 🔶 storage/postgres/ 包仍然庞大（40+ 文件）
 
-依赖非常精简，直接依赖仅 9 个，值得肯定。但有两个注意点：
+### 4.2 错误处理
 
-- `github.com/lib/pq` 已进入维护模式，官方推荐迁移到 `github.com/jackc/pgx`
-- Go 版本 1.26.1 合理，但 README 写的是 Go 1.21+，CI 写的是 1.26，**三处不一致**
+**改善项：**
+- ✅ 新增 `internal/errors/README.md`，定义了清晰的决策树和迁移指南
+- ✅ M17 修复：openai.go 和 ollama.go 中 fmt.Errorf 改为 errors.Wrap
 
-### 3.5 设计模式
+**遗留问题：**
+- 🔶 三套错误体系（errors/wrap、core/errors/code、core/errors/errors）仍在代码中并行存在
+- 🔶 retrieval_service.go 仍同时导入 `coreerrors` 和 `errors` 两个包
 
-**优点：**
+### 4.3 依赖管理
 
-- 小接口原则：`ProfileParser`、`TaskPlanner`、`TaskDispatcher` 等接口粒度适中
-- 接口隔离：`Messenger` 和 `Heartbeater` 作为独立接口
-- 构造函数注入：所有依赖通过构造函数传入，便于测试
-- 并发原语使用正确：`sync.RWMutex`、`sync.Once`、`errgroup`、`atomic.Bool`、channel 缓冲
+**改善项：**
+- ✅ 从 lib/pq 完全迁移到 pgx/v5 v5.7.1
+- ✅ Go 版本号统一为 1.26+
+- ✅ 依赖保持精简（9 个直接依赖）
 
-**问题：**
+---
 
-- `ProductionMemoryManager` 构造函数内部创建了大量依赖（TenantGuard、RetrievalService 等），应通过参数注入
-- `leader/agent.go:227-235` 的 `Status()` 和 `Start()` 之间没有原子性保证，两个并发调用可能同时通过 `Offline` 检查
-- `manager_impl.go:642-648` 使用冒泡排序，时间复杂度 O(n²)，应使用 `sort.Slice`
+## 5. 测试质量评估（更新）
 
-***
+### 5.1 测试规模
 
-## 4. 测试质量评估
+| 指标 | 上次 | 本次 | 变化 |
+|------|------|------|------|
+| 测试文件数 | 116 | 113 | -3 |
+| 测试代码行数 | ~51,710 | ~51,060 | -650 |
 
-### 4.1 测试规模
+### 5.2 改善项
 
-| 指标                   | 数值                          |
-| -------------------- | --------------------------- |
-| 测试文件总数 (\*\_test.go) | 116 个                       |
-| 测试函数总数 (func Test)   | \~1,117 个                   |
-| 测试代码行数               | \~51,710 行（占总代码 49.7%）      |
-| 使用 mock/stub 的文件     | 40 个（664 处引用）               |
-| 集成测试文件               | 3 个（build tag: integration） |
+- ✅ sanitizer_test.go 从 3 个测试扩展到 12 个，覆盖脱敏、Email、SSN、空输入等
+- ✅ extractor.go L12 修复（消息拼接分隔符）
 
-### 4.2 测试质量分析
+### 5.3 遗留问题
 
-#### 优秀的测试：
+- ❌ TaskMemory 新增的 TTL 清理机制缺少单元测试
+- ❌ coverage_test.go 中"凑覆盖率"测试仍然存在
+- ❌ llm/output/output_test.go 测试仍然过于简单
+- ❌ SanitizeJSON 缺少专门测试
 
-- **ratelimit\_test.go**（600+ 行）：41 个子测试，含并发安全测试、边界条件、错误场景
-- **shutdown\_comprehensive\_test.go**（1300+ 行）：覆盖阶段执行、回调超时、panic 恢复、信号处理
-- **error\_scenarios\_test.go**（900+ 行）：使用 httptest 模拟真实 LLM API 错误响应，覆盖 9 个真实场景
-- **retrieval\_service\_integration\_test.go**：使用 table-driven tests 验证向量搜索、BM25 搜索、租户隔离
+---
 
-#### 存在问题的测试：
+## 6. 工程化成熟度（更新）
 
-- **coverage\_test.go 文件**：大量"凑覆盖率"测试，只用 `t.Logf` 记录错误，没有真正的断言
-  - `internal/storage/postgres/coverage_test.go`
-  - `internal/workflow/engine/coverage_test.go`
-- **security/sanitizer\_test.go**：仅 3 个测试函数，缺少 SQL 注入、XSS 等边界测试
-- **llm/output/output\_test.go**：测试过于简单，未测试实际适配逻辑
+### 6.1 基础设施状态
 
-### 4.3 CI/CD 问题
+| 项目 | 上次 | 本次 | 说明 |
+|------|------|------|------|
+| CI 流水线 | ✅ | ✅ | Lint + Test + Build + Security |
+| CD 流水线 | ✅ | ✅ | Docker + Release |
+| Issue/PR 模板 | ✅ | ✅ | 齐全 |
+| CODEOWNERS | ✅ | ✅ | 存在 |
+| CONTRIBUTING.md | ✅ | ✅ | 完整 |
+| .golangci.yml | ❌ | ✅ | **新增**，7 个 linter |
+| CHANGELOG.md | ❌ | ✅ | **新增**，Keep a Changelog 格式 |
+| LICENSE | ❌ | ❌ | **仍未添加** |
+| Dependabot | ❌ | ❌ | 仍未配置 |
+| .gitignore (bin/) | ❌ | ✅ | **已添加** |
+| .gitignore (*.log) | ❌ | ❌ | 未添加 |
 
-- 集成测试仅支持手动触发（`workflow_dispatch`），不随 PR 自动运行，容易被忽略
-- 安全扫描使用 `-no-fail`，不会导致 CI 失败，降低了安全性保障
-- 覆盖率没有门禁，Makefile 定义了 90%/80% 要求但 CI 中未强制执行
-- 集成测试数据库名不一致：测试中硬编码 `styleagent`，CI 配置为 `goagent`
-- 缺少 `.golangci.yml` 配置文件，lint 规则完全依赖默认配置
+### 6.2 CI/CD 遗留问题
 
-***
+- ❌ 安全扫描仍使用 `-no-fail`（ci.yml:98）
+- ❌ 覆盖率门禁未集成到 CI（Makefile 有但 CI 不调用）
+- ❌ 集成测试仍仅手动触发
+- 🔶 Makefile 覆盖率提取脚本 `awk -F'='` 可能与 `go tool cover -func` 输出不匹配
 
-## 5. 文档与项目成熟度
+---
 
-### 5.1 文档体系
+## 7. 综合评价与改进建议
 
-124 个 Markdown 文档，近 4.8 万行，覆盖面广泛，大部分提供中英文双语版本。但存在以下问题：
+### 7.1 进步总结
 
-- README 中引用的 `services/embedding/` 和 `cmd/server/` 在实际代码中不存在
-- Go 版本号在 README（1.21+）、go.mod（1.26.1）、CI（1.26）三处不一致
-- CONTRIBUTING.md 中的 GitHub URL 包含中文字符，无法正常访问
-- `plan/` 目录包含内部规划文档（bug 分析、项目评估等），不应随仓库公开
-- `docs/bug&ques/` 目录名含有 `&` 符号，在部分系统上可能造成路径问题
+本次复审发现项目在以下方面有**显著进步**：
 
-### 5.2 开源合规性
+1. **Bug 修复力度大**：上次报告的 7 个 P0 问题全部修复，Critical/High 级别 Bug 清零
+2. **驱动迁移**：从维护模式的 lib/pq 迁移到现代的 pgx/v5，体现工程决心
+3. **安全加固**：密码硬编码移除、nil receiver 检查、RowsAffected 校验
+4. **基础设施完善**：新增 .golangci.yml、CHANGELOG.md、errors/README.md
+5. **内存管理改善**：TTL 清理、LRU 淘汰、切片副本返回
 
-**严重缺失：**
-
-- **LICENSE 文件完全缺失** — 没有开源许可证意味着法律上他人不能使用、修改或分发此代码
-- **CHANGELOG 完全缺失** — 对于标注为 v1.0.0 的项目，变更日志是基本要求
-- 仓库中包含不应提交的文件：编译后的二进制文件（`bin/`）和日志文件（`*.log`）
-
-### 5.3 工程化基础设施
-
-| 项目              | 状态   | 说明                                |
-| --------------- | ---- | --------------------------------- |
-| CI 流水线          | ✅ 完整 | Lint + Test + Build + Security    |
-| CD 流水线          | ✅ 完整 | Docker 镜像构建 + Release             |
-| Issue/PR 模板     | ✅ 齐全 | bug\_report、feature\_request、task |
-| CODEOWNERS      | ✅ 存在 | 按模块划分代码所有者                        |
-| CONTRIBUTING.md | ✅ 完整 | 含开发环境搭建、编码标准、commit 规范            |
-| .golangci.yml   | ❌ 缺失 | lint 规则完全依赖默认配置                   |
-| LICENSE         | ❌ 缺失 | 开源合规性基本要求                         |
-| CHANGELOG       | ❌ 缺失 | 版本管理基本要求                          |
-| Dependabot      | ❌ 缺失 | 无自动依赖更新                           |
-
-***
-
-## 6. 综合评价与改进建议
-
-### 6.1 总体判断
-
-> **"外表光鲜，里有蛀"** — 架构图画得很好，文档写得很多，但 56 个 Bug（含 8 个严重级）说明实现质量还需大幅提升。目前已修复 40 个（71.4%），所有Critical和High级别bug已全部修复。
-
-这个项目的架构设计有想法，工程化基础设施做得不错（CI/CD、测试、文档都有），但代码质量和实际可靠性存在明显问题。
-
-### 6.2 优先修复建议
+### 7.2 仍需改进的方面
 
 #### P0 - 立即修复
 
-- [x] **添加 LICENSE 文件**（开源合规性的基本要求）
-- [x] **修复剩余 40 个待修复 Bug**（已修复40/56，71.4%）
-  - [x] M12：冲突解决策略失效（`distiller.go:373-387`）- 已修复
-  - [x] M13：并发工作流不安全（`executor.go:58`）- 已修复
-  - [x] M3/M4：内存泄漏（`task.go:52-58`、`manager_impl.go:376`）- 已修复
-  - [x] M9：高负载下数据静默丢弃（`write_buffer.go:128-137`）- 已修复
-  - [x] M22：返回内部切片引用导致并发数据损坏（`session.go:175`）- 已修复
-- [x] **修复 cmd/ 中硬编码的数据库密码**（安全隐患）- 已修复
+- [ ] **添加 LICENSE 文件** — 这是唯一剩余的 P0 问题，没有许可证项目在法律上无法被使用
+- [ ] **修复 knowledge_base.go 层级倒置** — `internal/tools/resources/builtin/knowledge/knowledge_base.go:7` 仍引用 api/core
+- [ ] **补充 TaskMemory TTL 清理的单元测试** — 新增功能无测试覆盖
 
 #### P1 - 尽快修复
 
-- [x] **统一错误处理体系**，合并或明确区分三套错误机制 - 已修复，创建internal/errors/README.md文档
-- [x] **修复层级倒置**，将共享类型提取到独立包 - 已修复，创建internal/experience包
-- [x] **添加 .golangci.yml** 配置文件，启用更多 lint 规则 - 已修复
-- [ ] **集成测试加入 PR 自动触发**，安全扫描移除 `-no-fail`
-- [ ] **CI 中强制执行覆盖率门禁**（核心 90%+，其他 80%+）
-- [x] **修复集成测试数据库名不一致**（`styleagent` vs `goagent`）- 已修复
+- [ ] **CI 安全扫描移除 -no-fail** — 让高危安全问题阻断 CI
+- [ ] **CI 集成覆盖率门禁** — 在 ci.yml 中调用 `make test-core` 和 `make test-tools`
+- [ ] **修复 CircuitBreaker.cleanupLoop goroutine 泄漏** — 添加 Close() 方法
+- [ ] **修复 retrieval_service.go 中的国际化问题** — toLower 和 isPrecisionMode 对非 ASCII 处理不正确
+- [ ] **统一错误处理体系** — 代码中三套体系仍并行存在，README 文档已规范但代码未跟进
 
 #### P2 - 计划修复
 
-- [x] 添加 CHANGELOG.md - 已修复
-- [x] 消除代码重复（`distillTaskOld/New`）- 已修复，提取公共逻辑
-- [x] 拆分 `storage/postgres/` 包为子包 - 已评估，不需要拆分
-- [x] 提升薄弱模块测试质量（security、llm、config）- 已修复，security/llm模块新增多个测试用例
-- [x] 从 `lib/pq` 迁移到 `pgx` - 已修复，使用pgx/v5替代lib/pq
-- [x] 统一 Go 版本号表述（README、go.mod、CI）- 已修复，统一为Go 1.26+
-- [x] 移除日志中的 emoji，使用结构化日志字段 - 已修复
-- [x] 将冒泡排序替换为 `sort.Slice`（`manager_impl.go:642-648`）- 已修复
-- [x] 添加 `.golangci.yml` 配置文件 - 已修复
+- [ ] 清理 distiller.go 中的 24 处 emoji
+- [ ] 修复 distiller.go:467-473 的冒泡排序
+- [ ] 补全 EmbedBatch/HealthCheck 的 nil receiver 检查
+- [ ] 修复 openai.go 重复导入
+- [ ] .gitignore 添加 *.log 和 coverage.out
+- [ ] 统一 README 和 CHANGELOG 的版本号（v1.0.0 vs 0.1.0）
+- [ ] 修复 Makefile 覆盖率提取脚本的 awk 分割逻辑
+- [ ] SanitizeJSON 实现与注释对齐
+- [ ] 降低 containsSQLInjectionPatterns 误报率
 
-***
+---
 
-> *"这个项目不算垃圾，但绝对还没准备好上生产。架构设计有想法，但实现细节需要大幅打磨。"*
+## 8. 评分明细
 
+### 8.1 各维度详细评分
+
+| 维度 | 得分 | 优势 | 劣势 |
+|------|------|------|------|
+| 代码质量与架构 | 7.8/10 | pgx迁移、冲突策略、密码移除、排序优化 | 层级倒置残留、三套错误体系、emoji残留 |
+| 测试质量 | 7.0/10 | sanitizer测试增强、核心模块覆盖好 | TaskMemory无测试、凑覆盖率、集成测试不自动 |
+| 文档质量 | 7.8/10 | CHANGELOG、golangci配置、errors指南 | 无LICENSE、版本号不一致、路径引用错误 |
+| Bug 与可靠性 | 7.5/10 | Critical/High全部清零、13项修复 | 新增9个中等问题、4项未修复 |
+| 工程化成熟度 | 7.8/10 | pgx迁移、版本统一、golangci配置 | 安全扫描不阻断、覆盖率无CI门禁、无LICENSE |
+
+### 8.2 与上次对比
+
+```
+上次（初评）：6.9/10  ████████████████████░░░░░░░░░░░░  69%
+本次（复审）：7.2/10  █████████████████████░░░░░░░░░░░░  72%  ↑ +0.3
+```
+
+---
+
+> *"进步明显，从'有潜力但还没准备好上生产'提升到'接近生产就绪，但还有几个关键短板'。最紧迫的是添加 LICENSE 文件和修复 CI 安全扫描。"*

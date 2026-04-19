@@ -95,4 +95,4 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: '-no-fail ./...'
+          args: './...'

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -249,7 +250,7 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 	// Check if precision mode should be used
 	if s.isPrecisionMode(req.Query) {
 		s.logger.Info("Using precision mode", "query", req.Query)
-		return s.searchPrecision(ctx, req), nil
+		return s.searchPrecision(ctx, req)
 	}
 
 	// Set default plan if not provided
@@ -354,39 +355,39 @@ func (s *RetrievalService) isPrecisionMode(query string) bool {
 
 // searchPrecision executes the precision retrieval pipeline.
 // It follows strict order: Exact Match -> Keyword -> Vector (fallback)
-func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchRequest) []*SearchResult {
+func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
 	s.logger.Debug("Executing precision search pipeline", "query", req.Query)
 
 	// 1. Exact Match (highest priority)
 	exact, err := s.searchExact(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute exact match search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "exact match search")
 	}
 	if len(exact) > 0 {
 		s.logger.Debug("Precision search: exact match found", "count", len(exact))
-		return exact
+		return exact, nil
 	}
 
 	// 2. Keyword Search (second priority)
 	keyword, err := s.searchKeyword(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute keyword search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "keyword search")
 	}
 	if len(keyword) > 0 {
 		s.logger.Debug("Precision search: keyword match found", "count", len(keyword))
-		return keyword
+		return keyword, nil
 	}
 
 	// 3. Vector Search (fallback)
 	vector, err := s.searchVector(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute vector search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "vector search")
 	}
 	s.logger.Debug("Precision search: using vector fallback", "count", len(vector))
-	return vector
+	return vector, nil
 }
 
 // searchExact performs exact substring matching.
@@ -688,6 +689,7 @@ func (s *RetrievalService) buildQueries(ctx context.Context, original string, pl
 // loadSynonymRules loads synonym rules from configuration file.
 // This provides better maintainability and allows runtime configuration.
 // Returns map of original terms to their synonyms.
+// Uses CONFIG_PATH environment variable if set, otherwise uses relative path.
 func loadSynonymRules() map[string][]string {
 	// Default rules if config file not found
 	defaultRules := map[string][]string{
@@ -699,8 +701,18 @@ func loadSynonymRules() map[string][]string {
 		"api":      {"interface", "web service"},
 	}
 
-	// Try to load from config file
-	configPath := "configs/synonyms.yaml"
+	// Use environment variable if set, otherwise fall back to relative path
+	configPath := os.Getenv("SYNONYM_CONFIG_PATH")
+	if configPath == "" {
+		// Try to get the absolute path based on executable location
+		execPath, err := os.Executable()
+		if err == nil {
+			configPath = filepath.Join(filepath.Dir(execPath), "..", "..", "configs", "synonyms.yaml")
+		} else {
+			configPath = "configs/synonyms.yaml"
+		}
+	}
+
 	if _, err := os.Stat(configPath); err != nil {
 		return defaultRules
 	}

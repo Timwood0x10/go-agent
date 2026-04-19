@@ -187,10 +187,14 @@ func (e *ExperienceExtractor) extractCrossTurnExperience(user, a1, m2, a2 Messag
 		return nil
 	}
 
-	// Combine problem context
+	// Combine problem context with proper sentence boundary
 	problem := user.Content
 	if m2.Role == "user" && !e.noiseFilter.IsNoise(m2.Content) {
-		problem += " " + m2.Content
+		// Add sentence separator to prevent words joining at boundary
+		if !strings.HasSuffix(problem, ". ") && !strings.HasSuffix(problem, "? ") && !strings.HasSuffix(problem, "! ") {
+			problem += ". "
+		}
+		problem += m2.Content
 	}
 
 	// Extract solution
