@@ -299,7 +299,7 @@ registry.Register("sub", func(ctx context.Context, cfg interface{}) (base.Agent,
 })
 
 // Create Executor
-executor := engine.NewExecutor(registry, engine.NewOutputStore())
+executor := engine.NewExecutor(registry)
 
 // Load workflow
 loader := engine.NewYAMLFileLoader()
