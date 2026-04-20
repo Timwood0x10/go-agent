@@ -5,7 +5,7 @@ This is a local knowledge base example based on the goagent storage module. It d
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **Database**: PostgreSQL 16 + pgvector extension
 - **Embedding Service**: Ollama (qwen3-embedding:0.6b) or Custom Python Service
 - **LLM**: Ollama (llama3.2:latest) for answer generation
@@ -864,7 +864,7 @@ func (kb *KnowledgeBase) UpdateDocument(ctx context.Context, tenantID, docID str
 
 ## Tech Stack
 
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **Database**: PostgreSQL 16 + pgvector
 - **Embedding Service**: Ollama (qwen3-embedding:0.6b) or Custom Python Service
 - **LLM**: Ollama (llama3.2:latest) for answer generation

@@ -8,12 +8,16 @@ on:
         required: false
         default: 'false'
         type: boolean
+  pull_request:
+    branches: [main, master, develop]
+  push:
+    branches: [main, master, develop]
 
 jobs:
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest
-    if: inputs.skip_tests != 'true'
+    if: github.event_name != 'workflow_dispatch' || inputs.skip_tests != 'true'
     services:
       postgres:
         image: pgvector/pgvector:pg16

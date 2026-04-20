@@ -92,7 +92,7 @@ func defaultSensitivePatterns() []SensitivePattern {
 		},
 		{
 			Type:        SensitiveFieldTypePassword,
-			Pattern:     regexp.MustCompile(`(?i)\b(password|passwd|pwd)\b[:\s]+["']?([^"'\s]+)["']?`),
+			Pattern:     regexp.MustCompile(`(?i)\b(password|passwd|pwd)\b[=:\s]+["']?([^"'\s]+)["']?`),
 			MaskFunc:    maskPassword,
 			Description: "Passwords",
 		},
@@ -151,8 +151,7 @@ func (s *Sanitizer) SanitizeJSON(jsonStr string) string {
 		return jsonStr
 	}
 
-	// For JSON, we need to be more careful to preserve structure
-	// Simple approach: only sanitize string values
+	// Sanitize the JSON string to remove sensitive data while preserving structure
 	result := s.Sanitize(jsonStr)
 	return result
 }

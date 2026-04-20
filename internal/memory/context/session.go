@@ -183,7 +183,10 @@ func (m *SessionMemory) GetMessages(ctx context.Context, sessionID string) ([]Me
 		return nil, ErrSessionNotFound
 	}
 
-	return session.Messages, nil
+	// Return a copy to prevent concurrent modification of internal slice
+	messages := make([]Message, len(session.Messages))
+	copy(messages, session.Messages)
+	return messages, nil
 }
 
 // Delete removes a session.

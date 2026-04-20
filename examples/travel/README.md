@@ -5,7 +5,7 @@ A multi-agent travel assistant powered by LLMs, built on the GoAgent framework.
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **LLM Provider**: OpenRouter (supports OpenAI, Ollama, OpenRouter)
 - **Configuration Format**: YAML
 - **Concurrency Control**: errgroup

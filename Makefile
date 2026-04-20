@@ -11,7 +11,7 @@ install:
 	go get ./...
 
 # CI target - runs all CI checks locally (matches .github/workflows/ci.yml)
-ci: ci-deps ci-fmt ci-vet ci-lint ci-build ci-test-race
+ci: ci-deps ci-fmt ci-vet ci-lint ci-build ci-test-race ci-security
 	@echo ""
 	@echo "✅ All CI checks PASSED"
 
@@ -60,6 +60,12 @@ ci-test-race:
 	@go test -race -short ./...
 	@echo "Tests: OK"
 
+# CI security scan
+ci-security:
+	@echo "Running gosec security scan..."
+	@go run github.com/securego/gosec/v2/cmd/gosec@latest ./internal/... ./api/...
+	@echo "Security scan: OK"
+
 # Format code
 fmt:
 	goimports -w .
@@ -105,7 +111,7 @@ test-race:
 test-core:
 	go test -cover -coverprofile=coverage.out ./internal/core/...
 	@echo "Checking core module coverage..."
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep "internal/core" | grep -v "test" | awk -F'=' '{gsub(/[[:space:]]+/,"",$$3); print $$3}' | sort -n | head -1); \
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep "internal/core" | grep -v "test" | awk '{print $$NF}' | sed 's/%//' | sort -n | head -1); \
 	if [ "$$COVERAGE" -lt 90 ]; then \
 		echo "ERROR: Core module coverage is $$COVERAGE%, expected >= 90%"; \
 		exit 1; \
@@ -116,7 +122,7 @@ test-core:
 test-tools:
 	go test -cover -coverprofile=coverage.out ./internal/llm/... ./internal/workflow/... ./internal/memory/... ./internal/shutdown/... ./internal/ratelimit/... ./internal/tools/... ./internal/storage/... ./internal/agents/...
 	@echo "Checking tools coverage..."
-	@COVERAGE=$$(go tool cover -func=coverage.out | awk -F'=' '{gsub(/[[:space:]]+/,"",$$3); print $$3}' | sort -n | head -1); \
+	@COVERAGE=$$(go tool cover -func=coverage.out | awk '{print $$NF}' | sed 's/%//' | sort -n | head -1); \
 	if [ "$$COVERAGE" -lt 80 ]; then \
 		echo "ERROR: Tools coverage is $$COVERAGE%, expected >= 80%"; \
 		exit 1; \

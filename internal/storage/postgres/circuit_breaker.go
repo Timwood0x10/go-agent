@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"goagent/internal/core/errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,9 @@ type CircuitBreaker struct {
 	openTimeout      time.Duration
 	halfOpenSuccess  int
 	halfOpenInflight atomic.Int32
+	lastCleanupTime  time.Time
+	stopCh           chan struct{}
+	cleanupStopped   atomic.Bool
 }
 
 // NewCircuitBreaker creates a new CircuitBreaker instance.
@@ -37,12 +41,19 @@ type CircuitBreaker struct {
 // openTimeout - time to wait before attempting half-open state.
 // Returns new CircuitBreaker instance.
 func NewCircuitBreaker(failureThreshold int, openTimeout time.Duration) *CircuitBreaker {
-	return &CircuitBreaker{
+	cb := &CircuitBreaker{
 		state:            CircuitBreakerStateClosed,
 		failureThreshold: failureThreshold,
 		successThreshold: 3,
 		openTimeout:      openTimeout,
+		lastCleanupTime:  time.Now(),
+		stopCh:           make(chan struct{}),
 	}
+
+	// Start cleanup goroutine to prevent halfOpenInflight leaks
+	go cb.cleanupLoop()
+
+	return cb
 }
 
 // AllowRequest checks if a request should be allowed based on circuit breaker state.
@@ -57,9 +68,10 @@ func (cb *CircuitBreaker) AllowRequest() error {
 
 	case CircuitBreakerStateOpen:
 		if time.Since(cb.lastFailureTime) > cb.openTimeout {
-			// Move to half-open state
+			// Move to half-open state and reset counter
 			cb.state = CircuitBreakerStateHalfOpen
 			cb.halfOpenSuccess = 0
+			cb.halfOpenInflight.Store(0) // Reset inflight counter
 			return nil
 		}
 		return errors.ErrCircuitBreakerOpen
@@ -95,6 +107,24 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	cb.failureCount = 0
 }
 
+// cleanupHalfOpenInflight cleans up leaked inflight counters.
+// This should be called periodically to prevent counter leaks.
+func (cb *CircuitBreaker) cleanupHalfOpenInflight() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	// If we're in half-open state and have inflight operations that haven't been
+	// properly accounted for, reset the counter to prevent leaks
+	if cb.state == CircuitBreakerStateHalfOpen {
+		current := cb.halfOpenInflight.Load()
+		if current > 0 {
+			slog.Warn("Detected halfOpenInflight leak, resetting counter",
+				"current_count", current)
+			cb.halfOpenInflight.Store(0)
+		}
+	}
+}
+
 // RecordFailure records a failed operation.
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
@@ -121,6 +151,29 @@ func (cb *CircuitBreaker) State() CircuitBreakerState {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.state
+}
+
+// cleanupLoop runs periodic cleanup to prevent halfOpenInflight leaks.
+// This should be started as a goroutine in NewCircuitBreaker.
+func (cb *CircuitBreaker) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cb.stopCh:
+			return
+		case <-ticker.C:
+			cb.cleanupHalfOpenInflight()
+		}
+	}
+}
+
+// Close stops the cleanup goroutine and closes the circuit breaker.
+func (cb *CircuitBreaker) Close() {
+	if cb.cleanupStopped.CompareAndSwap(false, true) {
+		close(cb.stopCh)
+	}
 }
 
 // Reset resets the circuit breaker to closed state.

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
@@ -76,7 +76,7 @@ func (p *Pool) Release(conn *sql.Conn) {
 		return
 	}
 
-	conn.Close()
+	_ = conn.Close()
 }
 
 // WithConnection executes a function with a connection from the pool.
@@ -240,14 +240,12 @@ func (p *Pool) QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 	// The caller should check the error from Scan to detect connection failures.
 	if connErr != nil || row == nil {
 		if connErr != nil {
-			slog.Warn("Failed to acquire database connection for QueryRow", "error", connErr)
+			slog.Error("Failed to acquire database connection for QueryRow", "error", connErr)
 		}
 		cancelCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 		// Return a row that will fail on Scan with "context canceled" error.
 		// The log above provides the actual error reason for debugging.
-		// Note: sql.Row does not allow wrapping errors, so we use this pattern
-		// to propagate the failure through the interface while logging the root cause.
 		return p.db.QueryRowContext(cancelCtx, "SELECT 1 WHERE 1=0")
 	}
 

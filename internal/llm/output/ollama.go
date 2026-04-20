@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -76,8 +75,11 @@ func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, er
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("ollama error: %s", respBody)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", gerr.Wrap(err, "read response body")
+		}
+		return "", gerr.Wrapf(err, "API request failed: ollama error: %s", respBody)
 	}
 
 	var result map[string]interface{}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -128,7 +129,11 @@ func (m *memoryManager) Start(ctx context.Context) error {
 	}
 
 	m.sessionMemory.StartCleanup()
+	m.taskMemory.Start(ctx) // Start task memory cleanup
 	m.started = true
+
+	// Start distilled tasks cleanup goroutine
+	go m.cleanupDistilledTasks(ctx)
 
 	slog.Info("Memory manager started")
 	return nil
@@ -276,7 +281,7 @@ func (m *memoryManager) UpdateTaskOutput(ctx context.Context, taskID, output str
 
 // DistillTask extracts key information from task for future reference.
 func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models.Task, error) {
-	slog.Info("🔄 [Memory Distillation] Starting task distillation", "task_id", taskID)
+	slog.Info("[Memory Distillation] Starting task distillation", "task_id", taskID)
 
 	// Use new distillation engine if enabled
 	if m.useNewDistill {
@@ -289,45 +294,35 @@ func (m *memoryManager) DistillTask(ctx context.Context, taskID string) (*models
 
 // distillTaskOld uses the old hash-based distillation method (backward compatibility).
 func (m *memoryManager) distillTaskOld(ctx context.Context, taskID string) (*models.Task, error) {
-	task, err := m.taskMemory.Distill(ctx, taskID)
-	if err != nil {
-		slog.Error("❌ [Memory Distillation] Failed to distill task",
-			"task_id", taskID, "error", err)
-		return nil, errors.Wrap(err, "distill task")
-	}
-
-	inputStr, ok := task.Payload["input"].(string)
-	if !ok {
-		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
-		inputStr = ""
-	}
-	slog.Info("📊 [Memory Distillation] Task distilled successfully (old method)",
-		"task_id", taskID,
-		"input_length", len(inputStr))
-	return task, nil
+	return m.distillTaskCommon(ctx, taskID, "old method")
 }
 
 // distillTaskNew uses the new distillation engine with experience extraction.
 func (m *memoryManager) distillTaskNew(ctx context.Context, taskID string) (*models.Task, error) {
 	if m.distiller == nil {
-		slog.Warn("⚠️  [Memory Distillation] Distiller not initialized, falling back to old method", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Distiller not initialized, falling back to old method", "task_id", taskID)
 		return m.distillTaskOld(ctx, taskID)
 	}
+	return m.distillTaskCommon(ctx, taskID, "new method")
+}
 
+// distillTaskCommon is the common implementation for task distillation.
+func (m *memoryManager) distillTaskCommon(ctx context.Context, taskID, method string) (*models.Task, error) {
 	task, err := m.taskMemory.Distill(ctx, taskID)
 	if err != nil {
-		slog.Error("❌ [Memory Distillation] Failed to distill task",
+		slog.Error("[Memory Distillation] Failed to distill task",
 			"task_id", taskID, "error", err)
 		return nil, errors.Wrap(err, "distill task")
 	}
 
 	inputStr, ok := task.Payload["input"].(string)
 	if !ok {
-		slog.Warn("⚠️  [Memory Distillation] Task input is not a string", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Task input is not a string", "task_id", taskID)
 		inputStr = ""
 	}
-	slog.Info("📊 [Memory Distillation] Task distilled successfully (new method)",
+	slog.Info("[Memory Distillation] Task distilled successfully",
 		"task_id", taskID,
+		"method", method,
 		"input_length", len(inputStr))
 	return task, nil
 }
@@ -350,30 +345,30 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	slog.Info("💾 [Memory Distillation] Storing distilled task (old method)", "task_id", taskID)
+	slog.Info("[Memory Distillation] Storing distilled task (old method)", "task_id", taskID)
 
 	// Extract input string from payload
 	inputStr, ok := distilled.Payload["input"].(string)
 	if !ok {
 		inputStr = ""
-		slog.Warn("⚠️  [Memory Distillation] No input found in payload", "task_id", taskID)
+		slog.Warn("[Memory Distillation] No input found in payload", "task_id", taskID)
 	}
 
-	slog.Info("📝 [Memory Distillation] Task details",
+	slog.Info("[Memory Distillation] Task details",
 		"task_id", taskID,
 		"input_length", len(inputStr),
 		"vector_dimension", m.vectorDim)
 
 	// Generate local vector using simple hash-based approach
 	vector := m.generateHashVector(inputStr)
-	slog.Info("🔢 [Memory Distillation] Vector generated (hash-based)",
+	slog.Info("[Memory Distillation] Vector generated (hash-based)",
 		"task_id", taskID,
 		"vector_dimension", len(vector))
 
 	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
 	contextMap, ok := distilled.Payload["context"].(map[string]interface{})
 	if !ok {
-		slog.Warn("⚠️  [Memory Distillation] Task context is not a map", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Task context is not a map", "task_id", taskID)
 		contextMap = nil
 	}
 	data := &DistilledTaskData{
@@ -390,7 +385,7 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 
 	m.distilledTasks[taskID] = data
 
-	slog.Info("✅ [Memory Distillation] Distilled task stored successfully (old method)",
+	slog.Info("[Memory Distillation] Distilled task stored successfully (old method)",
 		"task_id", taskID,
 		"total_distilled_tasks", len(m.distilledTasks))
 
@@ -400,17 +395,17 @@ func (m *memoryManager) storeDistilledTaskOld(ctx context.Context, taskID string
 // storeDistilledTaskNew uses the new distillation engine with experience storage.
 func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string, distilled *models.Task) error {
 	if m.distiller == nil || m.expRepo == nil {
-		slog.Warn("⚠️  [Memory Distillation] Distiller or repo not initialized, falling back to old method", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Distiller or repo not initialized, falling back to old method", "task_id", taskID)
 		return m.storeDistilledTaskOld(ctx, taskID, distilled)
 	}
 
-	slog.Info("💾 [Memory Distillation] Storing distilled task (new method)", "task_id", taskID)
+	slog.Info("[Memory Distillation] Storing distilled task (new method)", "task_id", taskID)
 
 	// Extract input and output from payload
 	inputStr, ok := distilled.Payload["input"].(string)
 	if !ok {
 		inputStr = ""
-		slog.Warn("⚠️  [Memory Distillation] No input found in payload", "task_id", taskID)
+		slog.Warn("[Memory Distillation] No input found in payload", "task_id", taskID)
 	}
 
 	outputStr := fmt.Sprintf("%v", distilled.Payload["output"])
@@ -424,19 +419,19 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 	// Extract metadata
 	userID, ok := distilled.Payload["user_id"].(string)
 	if !ok {
-		slog.Warn("⚠️  [Memory Distillation] Task user_id is not a string", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Task user_id is not a string", "task_id", taskID)
 		userID = ""
 	}
 	tenantID, ok := distilled.Payload["tenant_id"].(string)
 	if !ok {
-		slog.Warn("⚠️  [Memory Distillation] Task tenant_id is not a string", "task_id", taskID)
+		slog.Warn("[Memory Distillation] Task tenant_id is not a string", "task_id", taskID)
 		tenantID = "default"
 	}
 
 	// Distill conversation
 	memories, err := m.distiller.DistillConversation(ctx, taskID, messages, tenantID, userID)
 	if err != nil {
-		slog.Error("❌ [Memory Distillation] Failed to distill conversation",
+		slog.Error("[Memory Distillation] Failed to distill conversation",
 			"task_id", taskID, "error", err)
 		return errors.Wrap(err, "distill conversation")
 	}
@@ -446,22 +441,22 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 		// Convert distillation.Memory to distillation.Experience
 		problem, ok := mem.Metadata["problem"].(string)
 		if !ok {
-			slog.Warn("⚠️  [Memory Distillation] Memory problem is not a string", "task_id", taskID)
+			slog.Warn("[Memory Distillation] Memory problem is not a string", "task_id", taskID)
 			problem = ""
 		}
 		solution, ok := mem.Metadata["solution"].(string)
 		if !ok {
-			slog.Warn("⚠️  [Memory Distillation] Memory solution is not a string", "task_id", taskID)
+			slog.Warn("[Memory Distillation] Memory solution is not a string", "task_id", taskID)
 			solution = ""
 		}
 		confidence, ok := mem.Metadata["confidence"].(float64)
 		if !ok {
-			slog.Warn("⚠️  [Memory Distillation] Memory confidence is not a float64", "task_id", taskID)
+			slog.Warn("[Memory Distillation] Memory confidence is not a float64", "task_id", taskID)
 			confidence = 0.0
 		}
 		extractionMethodStr, ok := mem.Metadata["extraction_method"].(string)
 		if !ok {
-			slog.Warn("⚠️  [Memory Distillation] Memory extraction_method is not a string", "task_id", taskID)
+			slog.Warn("[Memory Distillation] Memory extraction_method is not a string", "task_id", taskID)
 			extractionMethodStr = "unknown"
 		}
 
@@ -480,19 +475,19 @@ func (m *memoryManager) storeDistilledTaskNew(ctx context.Context, taskID string
 		// Store experience in repository
 		err := m.expRepo.Create(ctx, exp)
 		if err != nil {
-			slog.Error("❌ [Memory Distillation] Failed to store experience",
+			slog.Error("[Memory Distillation] Failed to store experience",
 				"task_id", taskID, "error", err)
 			continue
 		}
 
-		slog.Debug("✅ [Memory Distillation] Memory stored successfully",
+		slog.Debug("[Memory Distillation] Memory stored successfully",
 			"task_id", taskID,
 			"memory_type", mem.Metadata["memory_type"],
 			"importance", mem.Importance)
 	}
 
 	metrics := m.distiller.GetMetrics()
-	slog.Info("✅ [Memory Distillation] Distillation completed (new method)",
+	slog.Info("[Memory Distillation] Distillation completed (new method)",
 		"task_id", taskID,
 		"memories_created", len(memories),
 		"metrics_total", metrics.SuccessTotal)
@@ -526,6 +521,45 @@ func (m *memoryManager) evictOldestDistilledTask() {
 	if oldestID != "" {
 		delete(m.distilledTasks, oldestID)
 		slog.Debug("Evicted oldest distilled task", "task_id", oldestID, "total_tasks", len(m.distilledTasks))
+	}
+}
+
+// cleanupDistilledTasks removes expired distilled tasks based on TTL.
+func (m *memoryManager) cleanupDistilledTasks(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Minute) // Check every 10 minutes
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.cleanupExpiredDistilledTasks()
+		}
+	}
+}
+
+// cleanupExpiredDistilledTasks removes distilled tasks that are older than TTL.
+func (m *memoryManager) cleanupExpiredDistilledTasks() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.config.DistilledTaskTTL <= 0 {
+		return // No TTL cleanup configured
+	}
+
+	now := time.Now()
+	expiredIDs := make([]string, 0)
+
+	for id, data := range m.distilledTasks {
+		if now.Sub(data.CreatedAt) > m.config.DistilledTaskTTL {
+			expiredIDs = append(expiredIDs, id)
+		}
+	}
+
+	for _, id := range expiredIDs {
+		delete(m.distilledTasks, id)
+		slog.Debug("Cleaned up expired distilled task", "task_id", id, "total_tasks", len(m.distilledTasks))
 	}
 }
 
@@ -575,7 +609,7 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 func (m *memoryManager) hashWithSeed(text string, seed uint64) uint64 {
 	hash := seed
 	for _, c := range text {
-		hash ^= uint64(c)
+		hash ^= uint64(c) // #nosec G115
 		hash *= 0x100000001b3
 		hash ^= hash >> 33
 		hash *= 0xff51afd7ed558ccd
@@ -600,14 +634,14 @@ func (m *memoryManager) searchSimilarTasksOld(ctx context.Context, query string,
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	slog.Info("🔍 [Memory Search] Searching for similar tasks (old method)",
+	slog.Info("[Memory Search] Searching for similar tasks (old method)",
 		"query", truncate(query, 50),
 		"limit", limit,
 		"available_tasks", len(m.distilledTasks))
 
 	// Generate vector for query
 	queryVector := m.generateHashVector(query)
-	slog.Info("🔢 [Memory Search] Query vector generated (hash-based)", "dimension", len(queryVector))
+	slog.Info("[Memory Search] Query vector generated (hash-based)", "dimension", len(queryVector))
 
 	// Calculate cosine similarity for all tasks
 	type similarityResult struct {
@@ -633,19 +667,15 @@ func (m *memoryManager) searchSimilarTasksOld(ctx context.Context, query string,
 		}
 	}
 
-	slog.Info("📊 [Memory Search] Similarity calculated (old method)",
+	slog.Info("[Memory Search] Similarity calculated (old method)",
 		"total_tasks", len(m.distilledTasks),
 		"above_threshold", len(results),
 		"threshold", 0.5)
 
 	// Sort by score (descending)
-	for i := 0; i < len(results); i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].score > results[i].score {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
 
 	// Apply limit
 	if len(results) > limit {
@@ -657,7 +687,7 @@ func (m *memoryManager) searchSimilarTasksOld(ctx context.Context, query string,
 		tasks = append(tasks, result.task)
 	}
 
-	slog.Info("✅ [Memory Search] Search completed (old method)",
+	slog.Info("[Memory Search] Search completed (old method)",
 		"results_count", len(tasks),
 		"limit", limit)
 
@@ -667,27 +697,27 @@ func (m *memoryManager) searchSimilarTasksOld(ctx context.Context, query string,
 // searchSimilarTasksNew uses the new vector-based search with experience repository.
 func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string, limit int) ([]*models.Task, error) {
 	if m.embedder == nil || m.expRepo == nil {
-		slog.Warn("⚠️  [Memory Search] Embedder or repo not initialized, falling back to old method")
+		slog.Warn("[Memory Search] Embedder or repo not initialized, falling back to old method")
 		return m.searchSimilarTasksOld(ctx, query, limit)
 	}
 
-	slog.Info("🔍 [Memory Search] Searching for similar tasks (new method)",
+	slog.Info("[Memory Search] Searching for similar tasks (new method)",
 		"query", truncate(query, 50),
 		"limit", limit)
 
 	// Generate embedding for query
 	queryVector, err := m.embedder.EmbedWithPrefix(ctx, query, "query:")
 	if err != nil {
-		slog.Error("❌ [Memory Search] Failed to generate query embedding", "error", err)
+		slog.Error("[Memory Search] Failed to generate query embedding", "error", err)
 		return nil, errors.Wrap(err, "generate query embedding")
 	}
 
-	slog.Info("🔢 [Memory Search] Query vector generated", "dimension", len(queryVector))
+	slog.Info("[Memory Search] Query vector generated", "dimension", len(queryVector))
 
 	// Search for similar experiences in experience repository
 	experiences, err := m.expRepo.SearchByVector(ctx, queryVector, "default", limit)
 	if err != nil {
-		slog.Error("❌ [Memory Search] Failed to search experiences", "error", err)
+		slog.Error("[Memory Search] Failed to search experiences", "error", err)
 		return nil, errors.Wrap(err, "search experiences")
 	}
 
@@ -710,7 +740,7 @@ func (m *memoryManager) searchSimilarTasksNew(ctx context.Context, query string,
 		tasks = append(tasks, task)
 	}
 
-	slog.Info("✅ [Memory Search] Search completed (new method)",
+	slog.Info("[Memory Search] Search completed (new method)",
 		"results_count", len(tasks),
 		"limit", limit)
 

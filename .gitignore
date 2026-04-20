@@ -11,3 +11,7 @@ bin/
 **/.env
 
 *.excalidraw
+
+*.log
+
+coverage.out

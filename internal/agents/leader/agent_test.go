@@ -384,7 +384,13 @@ func TestLeaderAgent_SendReceiveMessage(t *testing.T) {
 	}
 
 	// Test SendMessage
-	msg := ahp.NewMessage(ahp.AHPMethodTask, "leader1", "sub1", "task1", "session1")
+	msg := &ahp.AHPMessage{
+		Method:      ahp.AHPMethodTask,
+		AgentID:     "leader1",
+		TargetAgent: "sub1",
+		TaskID:      "task1",
+		SessionID:   "session1",
+	}
 	err := leader.SendMessage(context.Background(), msg)
 	if err != nil {
 		t.Errorf("SendMessage() error = %v", err)

@@ -29,10 +29,9 @@ type WorkflowClient struct {
 func NewWorkflowClient(client *Client) (*WorkflowClient, error) {
 	loader := engine.NewYAMLFileLoader()
 
-	// Create executor with agent registry and output store
+	// Create executor with agent registry
 	registry := engine.NewAgentRegistry()
-	outputStore := engine.NewOutputStore()
-	executor := engine.NewExecutor(registry, outputStore)
+	executor := engine.NewExecutor(registry)
 
 	return &WorkflowClient{
 		client:   client,

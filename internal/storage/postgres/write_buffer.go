@@ -199,8 +199,17 @@ func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Buffer is full, return error immediately
-		// This prevents goroutine leaks and provides backpressure
+		// Buffer is full, implement backpressure with retry
+		// Instead of immediately failing, we'll wait a bit and retry
+		// This prevents data loss while providing backpressure
+		select {
+		case <-time.After(100 * time.Millisecond):
+			// Brief wait before retry
+		case b.buffer <- item:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		return coreerrors.ErrBufferFull
 	}
 }

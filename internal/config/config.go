@@ -3,11 +3,21 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"goagent/internal/errors"
 
 	"gopkg.in/yaml.v3"
 )
+
+var allowedConfigDir string
+
+// SetAllowedConfigDir sets the allowed directory for config files.
+// This is a security measure to prevent path traversal attacks.
+func SetAllowedConfigDir(dir string) {
+	allowedConfigDir = dir
+}
 
 const (
 	// DefaultTaskDistillationPrompt is the default prompt for task distillation
@@ -222,7 +232,22 @@ type DistillConfig struct {
 
 // Load reads configuration from a YAML file.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	// Security: validate path is within allowed directory
+	if allowedConfigDir != "" {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		absDir, err := filepath.Abs(allowedConfigDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute directory: %w", err)
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return nil, fmt.Errorf("config path %s is outside allowed directory %s", path, allowedConfigDir)
+		}
+	}
+
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return nil, err
 	}

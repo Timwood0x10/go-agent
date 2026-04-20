@@ -8,13 +8,12 @@ GoAgent is a generic multi-agent framework implemented in Go, supporting multi-a
 
 ### Embedding Gateway Service (FastAPI)
 
-
 The Embedding Service is a standalone vector embedding service for GoAgent, supporting multiple backends:
 
 ![embedding](./images/embedding_server.png)
 
-
 **Embedding Service Features**:
+
 - **High Performance**: Supports Ollama local deployment and SentenceTransformers cloud deployment
 - **Smart Caching**: Redis cache + text normalization to avoid cache misses
 - **Batch Processing**: Supports batch vector generation for improved efficiency
@@ -22,6 +21,7 @@ The Embedding Service is a standalone vector embedding service for GoAgent, supp
 - **Health Check**: Built-in health check endpoint
 
 **Configuration File**: `services/embedding/.env`
+
 ```env
 BACKEND_TYPE=ollama              # Backend type: ollama / transformers
 OLLAMA_BASE_URL=http://localhost:11434
@@ -34,21 +34,21 @@ HOST=0.0.0.0
 PORT=8000
 ```
 
-**Code Locations**: 
+**Code Locations**:
+
 - `services/embedding/app.py` - Service main program
 - `services/embedding/config.py` - Configuration management
 - `internal/storage/postgres/embedding/client.go` - Go client
-
 
 ### Memory Distillation model
 
 ![distillation](./images/memory_distill.png)
 
-
 ## Tech Stack
 
 ### Core Technologies
-- **Language**: Go 1.21+
+
+- **Language**: Go 1.26+
 - **Database**: PostgreSQL 15+ with pgvector extension
 - **Concurrency**: errgroup, sync
 - **Protocol**: Custom AHP Protocol
@@ -56,18 +56,20 @@ PORT=8000
 - **Cache**: Redis
 
 ### Main Components
-| Component | Purpose | Code Location |
-|----------|---------|----------------|
-| **Agent System** | Leader/Sub Agent collaboration | `internal/agents/` |
-| **Protocol Layer** | Inter-agent communication and heartbeat | `internal/protocol/ahp/` |
-| **Memory System** | Session, task, and distilled memory | `internal/memory/` |
-| **Storage Layer** | PostgreSQL + pgvector | `internal/storage/postgres/` |
-| **Tool System** | Tool registry and invocation | `internal/tools/` |
-| **Workflow Engine** | DAG workflow orchestration | `internal/workflow/engine/` |
-| **Embedding Service** | Vector embedding generation | `services/embedding/` |
+
+| Component             | Purpose                                 | Code Location                |
+| --------------------- | --------------------------------------- | ---------------------------- |
+| **Agent System**      | Leader/Sub Agent collaboration          | `internal/agents/`           |
+| **Protocol Layer**    | Inter-agent communication and heartbeat | `internal/protocol/ahp/`     |
+| **Memory System**     | Session, task, and distilled memory     | `internal/memory/`           |
+| **Storage Layer**     | PostgreSQL + pgvector                   | `internal/storage/postgres/` |
+| **Tool System**       | Tool registry and invocation            | `internal/tools/`            |
+| **Workflow Engine**   | DAG workflow orchestration              | `internal/workflow/engine/`  |
+| **Embedding Service** | Vector embedding generation             | `services/embedding/`        |
 
 ### Dependencies
-- `github.com/lib/pq` - PostgreSQL driver
+
+- `github.com/jackc/pgx/v5` - PostgreSQL driver
 - `github.com/google/uuid` - UUID generation
 - `github.com/stretchr/testify` - Testing framework
 - `golang.org/x/sync` - Concurrent extensions
@@ -261,7 +263,7 @@ goagent/
 ## Examples
 
 - [Travel Planning](examples/travel/) - Multi-agent collaboration
-- [Knowledge Base Q&A](examples/knowledge-base/) - Vector search
+- [Knowledge Base Q\&A](examples/knowledge-base/) - Vector search
 - [Simple Example](examples/simple/) - Basic usage
 - [Capability Demo](examples/capability-demo/) - Full feature showcase
 
@@ -300,8 +302,5 @@ go fmt ./...
 golangci-lint run
 ```
 
----
+***
 
-**Last Updated**: 2026-03-23  
-**Version**: v1.0.0  
-**Code Base**: Based on actual go-agent code analysis

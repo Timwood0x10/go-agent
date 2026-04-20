@@ -77,6 +77,54 @@ func TestSessionMemory(t *testing.T) {
 	})
 }
 
+func TestTaskMemoryTTL(t *testing.T) {
+	t.Run("TTL cleanup removes expired tasks", func(t *testing.T) {
+		memory := NewTaskMemory(100, 100*time.Millisecond)
+		ctx := context.Background()
+
+		err := memory.Set(ctx, "task1", "sess1", "user1", "input1")
+		if err != nil {
+			t.Fatalf("set error: %v", err)
+		}
+
+		_, exists := memory.Get(ctx, "task1")
+		if !exists {
+			t.Errorf("task1 should exist immediately after set")
+		}
+
+		memory.Start(ctx)
+		defer memory.Stop()
+
+		time.Sleep(200 * time.Millisecond)
+
+		_, exists = memory.Get(ctx, "task1")
+		if exists {
+			t.Errorf("task1 should have been cleaned up after TTL expired")
+		}
+	})
+
+	t.Run("Start is idempotent", func(t *testing.T) {
+		memory := NewTaskMemory(100, time.Minute)
+		ctx := context.Background()
+
+		memory.Start(ctx)
+		memory.Start(ctx)
+		memory.Start(ctx)
+
+		memory.Stop()
+	})
+
+	t.Run("Stop is idempotent", func(t *testing.T) {
+		memory := NewTaskMemory(100, time.Minute)
+		ctx := context.Background()
+
+		memory.Start(ctx)
+		memory.Stop()
+		memory.Stop()
+		memory.Stop()
+	})
+}
+
 func TestUserMemory(t *testing.T) {
 	t.Run("create user memory", func(t *testing.T) {
 		memory := NewUserMemory(100)

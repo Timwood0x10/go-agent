@@ -187,10 +187,14 @@ func (e *ExperienceExtractor) extractCrossTurnExperience(user, a1, m2, a2 Messag
 		return nil
 	}
 
-	// Combine problem context
+	// Combine problem context with proper sentence boundary
 	problem := user.Content
 	if m2.Role == "user" && !e.noiseFilter.IsNoise(m2.Content) {
-		problem += " " + m2.Content
+		// Add sentence separator to prevent words joining at boundary
+		if !strings.HasSuffix(problem, ". ") && !strings.HasSuffix(problem, "? ") && !strings.HasSuffix(problem, "! ") {
+			problem += ". "
+		}
+		problem += m2.Content
 	}
 
 	// Extract solution
@@ -470,7 +474,6 @@ func (e *ExperienceExtractor) parseUserProfile(text string) string {
 	professionPatterns := []string{
 		"developer", "engineer", "programmer", "architect", "designer",
 		"manager", "analyst", "consultant", "specialist", "expert",
-		"developer", "engineer", "programmer", "architect", "designer",
 	}
 
 	lower = strings.ToLower(profile)
@@ -483,7 +486,6 @@ func (e *ExperienceExtractor) parseUserProfile(text string) string {
 
 	// Extract skills/tech stack
 	skillsPatterns := []string{
-		"like ", "love ", "prefer ", "use ", "work with ",
 		"like ", "love ", "prefer ", "use ", "work with ",
 	}
 

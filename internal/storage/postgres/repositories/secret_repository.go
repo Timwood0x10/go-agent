@@ -436,8 +436,12 @@ func (r *SecretRepository) RotateKey(ctx context.Context, tenantID string, newKe
 			return 0, errors.Wrapf(err, "update secret %s", secret.Key)
 		}
 
-		rowsAffected, _ := result.RowsAffected()
-		updatedCount += rowsAffected
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			slog.Warn("Failed to get rows affected", "error", err)
+		} else {
+			updatedCount += rowsAffected
+		}
 	}
 
 	// Commit transaction (per design standard)

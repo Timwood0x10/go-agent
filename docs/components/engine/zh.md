@@ -175,7 +175,7 @@ type Executor struct {
     stepTimeout time.Duration
 }
 
-func NewExecutor(registry *AgentRegistry, outputStore *OutputStore) *Executor
+func NewExecutor(registry *AgentRegistry) *Executor
 
 // Execute 执行工作流
 func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput string) (*WorkflowResult, error)
@@ -299,7 +299,7 @@ registry.Register("sub", func(ctx context.Context, cfg interface{}) (base.Agent,
 })
 
 // 创建 Executor
-executor := engine.NewExecutor(registry, engine.NewOutputStore())
+executor := engine.NewExecutor(registry)
 
 // 加载工作流
 loader := engine.NewYAMLFileLoader()

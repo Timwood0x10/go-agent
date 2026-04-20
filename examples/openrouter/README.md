@@ -5,7 +5,7 @@ A multi-agent example using OpenRouter API as the LLM provider, demonstrating ho
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **LLM Provider**: OpenRouter API (unified access to multiple models)
 - **Configuration Format**: YAML
 - **Concurrency Control**: errgroup

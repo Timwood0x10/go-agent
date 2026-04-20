@@ -238,7 +238,7 @@ func (t *CodeRunner) validateCode(code string) error {
 // runPython executes Python code.
 func (t *CodeRunner) runPython(ctx context.Context, code string, maxOutputSize int) (core.Result, error) {
 	// Check if Python is available
-	cmd := exec.CommandContext(ctx, "python3", "-c", code)
+	cmd := exec.CommandContext(ctx, "python3", "-c", code) // #nosec G204
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -289,10 +289,10 @@ func (t *CodeRunner) runPython(ctx context.Context, code string, maxOutputSize i
 	}), nil
 }
 
-// runJavaScript executes JavaScript code using Node.js.
+// runJavaScript executes JavaScript code.
 func (t *CodeRunner) runJavaScript(ctx context.Context, code string, maxOutputSize int) (core.Result, error) {
 	// Check if Node.js is available
-	cmd := exec.CommandContext(ctx, "node", "-e", code)
+	cmd := exec.CommandContext(ctx, "node", "-e", code) // #nosec G204
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

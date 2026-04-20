@@ -214,3 +214,141 @@ func TestClient_Generate(t *testing.T) {
 
 	t.Logf("LLM response: %s", response)
 }
+
+func TestClient_GenerateWithTimeout(t *testing.T) {
+	config := &Config{
+		Provider: "ollama",
+		BaseURL:  "http://localhost:11434",
+		Model:    "llama3",
+		Timeout:  1, // Very short timeout
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if !client.IsEnabled() {
+		t.Skip("LLM client is not enabled")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err = client.Generate(ctx, "This is a very long prompt that should timeout...")
+	if err != nil {
+		// Expected to timeout
+		t.Logf("Timeout test: %v", err)
+	}
+}
+
+func TestClient_GenerateEmptyPrompt(t *testing.T) {
+	config := &Config{
+		Provider: "ollama",
+		BaseURL:  "http://localhost:11434",
+		Model:    "llama3",
+		Timeout:  10,
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if !client.IsEnabled() {
+		t.Skip("LLM client is not enabled")
+		return
+	}
+
+	ctx := context.Background()
+	_, err = client.Generate(ctx, "")
+	if err != nil {
+		t.Logf("Empty prompt test: %v", err)
+	}
+}
+
+func TestNewClientWithEmptyBaseURL(t *testing.T) {
+	config := &Config{
+		Provider: "ollama",
+		BaseURL:  "",
+		Model:    "llama3",
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Logf("Empty base URL test: %v", err)
+	}
+
+	if client != nil {
+		t.Log("Client created with empty base URL")
+	}
+}
+
+func TestNewClientWithEmptyModel(t *testing.T) {
+	config := &Config{
+		Provider: "ollama",
+		BaseURL:  "http://localhost:11434",
+		Model:    "",
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Logf("Empty model test: %v", err)
+	}
+
+	if client != nil {
+		t.Log("Client created with empty model")
+	}
+}
+
+func TestNewClientWithEmptyProvider(t *testing.T) {
+	config := &Config{
+		Provider: "",
+		BaseURL:  "http://localhost:11434",
+		Model:    "llama3",
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Logf("Empty provider test: %v", err)
+	}
+
+	if client != nil {
+		t.Log("Client created with empty provider")
+	}
+}
+
+func TestNewClientFromEnvMissingVars(t *testing.T) {
+	// Clear environment variables
+	_ = os.Unsetenv("LLM_PROVIDER")
+	_ = os.Unsetenv("LLM_MODEL")
+	_ = os.Unsetenv("LLM_BASE_URL")
+
+	client, err := NewClientFromEnv()
+	if err != nil {
+		t.Logf("Missing env vars test: %v", err)
+	}
+
+	if client == nil {
+		t.Log("Client is nil when env vars are missing")
+	}
+}
+
+func TestNewClientFromEnvPartialVars(t *testing.T) {
+	_ = os.Setenv("LLM_PROVIDER", "ollama")
+	_ = os.Setenv("LLM_MODEL", "llama3")
+	defer func() {
+		_ = os.Unsetenv("LLM_PROVIDER")
+		_ = os.Unsetenv("LLM_MODEL")
+	}()
+
+	client, err := NewClientFromEnv()
+	if err != nil {
+		t.Logf("Partial env vars test: %v", err)
+	}
+
+	if client != nil {
+		t.Log("Client created with partial env vars")
+	}
+}

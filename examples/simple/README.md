@@ -5,7 +5,7 @@ A basic example demonstrating the GoAgent framework's core functionality with Le
 ## Tech Stack and Components
 
 ### Technologies Used
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **LLM Provider**: Configurable (supports OpenAI, Ollama, OpenRouter)
 - **Configuration Format**: YAML
 - **Concurrency Control**: errgroup

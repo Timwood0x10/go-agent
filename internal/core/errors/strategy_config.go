@@ -2,7 +2,10 @@ package errors
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,6 +58,7 @@ var DefaultStrategy = ErrorStrategy{
 type strategyRegistry struct {
 	mu         sync.RWMutex
 	strategies map[string]ErrorStrategy
+	allowedDir string
 }
 
 var globalRegistry = &strategyRegistry{
@@ -69,10 +73,31 @@ func init() {
 	}
 }
 
+// SetAllowedDir sets the allowed directory for config file loading.
+// This is a security measure to prevent path traversal attacks.
+func SetAllowedDir(dir string) {
+	globalRegistry.allowedDir = dir
+}
+
 // LoadStrategiesFromConfig loads error strategies from a configuration file.
 // Supported formats: JSON
 func LoadStrategiesFromConfig(configPath string) error {
-	data, err := os.ReadFile(configPath)
+	// Security: validate path is within allowed directory
+	if globalRegistry.allowedDir != "" {
+		absPath, err := filepath.Abs(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		absDir, err := filepath.Abs(globalRegistry.allowedDir)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute directory: %w", err)
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return fmt.Errorf("config path %s is outside allowed directory %s", configPath, globalRegistry.allowedDir)
+		}
+	}
+
+	data, err := os.ReadFile(configPath) // #nosec G304
 	if err != nil {
 		return err
 	}
@@ -185,5 +210,5 @@ func ExportStrategiesToConfig(configPath string) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	return os.WriteFile(configPath, data, 0600)
 }

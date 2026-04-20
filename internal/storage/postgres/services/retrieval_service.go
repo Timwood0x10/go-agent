@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -18,14 +19,21 @@ import (
 
 	coreerrors "goagent/internal/core/errors"
 	"goagent/internal/errors"
+	"goagent/internal/experience"
 	"goagent/internal/llm"
 	"goagent/internal/storage/postgres"
 	"goagent/internal/storage/postgres/embedding"
 	storage_models "goagent/internal/storage/postgres/models"
 	"goagent/internal/storage/postgres/repositories"
-
-	"goagent/api/experience"
 )
+
+var allowedSynonymDir string
+
+// SetAllowedSynonymDir sets the allowed directory for synonym config files.
+// This is a security measure to prevent path traversal attacks.
+func SetAllowedSynonymDir(dir string) {
+	allowedSynonymDir = dir
+}
 
 // SearchRequest represents a search request with configuration.
 type SearchRequest struct {
@@ -250,7 +258,7 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 	// Check if precision mode should be used
 	if s.isPrecisionMode(req.Query) {
 		s.logger.Info("Using precision mode", "query", req.Query)
-		return s.searchPrecision(ctx, req), nil
+		return s.searchPrecision(ctx, req)
 	}
 
 	// Set default plan if not provided
@@ -341,7 +349,8 @@ func (s *RetrievalService) validateRequest(req *SearchRequest) error {
 // This uses deterministic matching to cover semantic retrieval for precise queries.
 func (s *RetrievalService) isPrecisionMode(query string) bool {
 	// Short queries use exact/keyword matching for precision
-	if len(query) <= 10 {
+	// Use rune count instead of byte length for proper Unicode support
+	if utf8.RuneCountInString(query) <= 10 {
 		return true
 	}
 
@@ -355,40 +364,39 @@ func (s *RetrievalService) isPrecisionMode(query string) bool {
 
 // searchPrecision executes the precision retrieval pipeline.
 // It follows strict order: Exact Match -> Keyword -> Vector (fallback)
-func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchRequest) []*SearchResult {
+func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchRequest) ([]*SearchResult, error) {
 	s.logger.Debug("Executing precision search pipeline", "query", req.Query)
 
 	// 1. Exact Match (highest priority)
 	exact, err := s.searchExact(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute exact match search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "exact match search")
 	}
 	if len(exact) > 0 {
 		s.logger.Debug("Precision search: exact match found", "count", len(exact))
-		return exact
+		return exact, nil
 	}
 
 	// 2. Keyword Search (second priority)
 	keyword, err := s.searchKeyword(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute keyword search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "keyword search")
 	}
 	if len(keyword) > 0 {
 		s.logger.Debug("Precision search: keyword match found", "count", len(keyword))
-		return keyword
+		return keyword, nil
 	}
 
 	// 3. Vector Search (fallback)
 	vector, err := s.searchVector(ctx, req)
 	if err != nil {
 		s.logger.Error("Failed to execute vector search", "error", err)
-		return []*SearchResult{}
+		return nil, errors.Wrap(err, "vector search")
 	}
 	s.logger.Debug("Precision search: using vector fallback", "count", len(vector))
-
-	return vector
+	return vector, nil
 }
 
 // searchExact performs exact substring matching.
@@ -690,6 +698,7 @@ func (s *RetrievalService) buildQueries(ctx context.Context, original string, pl
 // loadSynonymRules loads synonym rules from configuration file.
 // This provides better maintainability and allows runtime configuration.
 // Returns map of original terms to their synonyms.
+// Uses CONFIG_PATH environment variable if set, otherwise uses relative path.
 func loadSynonymRules() map[string][]string {
 	// Default rules if config file not found
 	defaultRules := map[string][]string{
@@ -701,13 +710,38 @@ func loadSynonymRules() map[string][]string {
 		"api":      {"interface", "web service"},
 	}
 
-	// Try to load from config file
-	configPath := "configs/synonyms.yaml"
-	if _, err := os.Stat(configPath); err != nil {
+	// Use environment variable if set, otherwise fall back to relative path
+	configPath := os.Getenv("SYNONYM_CONFIG_PATH")
+	if configPath == "" {
+		// Try to get the absolute path based on executable location
+		execPath, err := os.Executable()
+		if err == nil {
+			configPath = filepath.Join(filepath.Dir(execPath), "..", "..", "configs", "synonyms.yaml")
+		} else {
+			configPath = "configs/synonyms.yaml"
+		}
+	}
+
+	// Security: validate path is within allowed directory
+	if allowedSynonymDir != "" {
+		absPath, err := filepath.Abs(configPath)
+		if err != nil {
+			return defaultRules
+		}
+		absDir, err := filepath.Abs(allowedSynonymDir)
+		if err != nil {
+			return defaultRules
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return defaultRules
+		}
+	}
+
+	if _, err := os.Stat(configPath); err != nil { // #nosec G703
 		return defaultRules
 	}
 
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) // #nosec G304, G703
 	if err != nil {
 		return defaultRules
 	}
@@ -1846,16 +1880,7 @@ func truncateForLog(s string, maxLen int) string {
 }
 
 func toLower(s string) string {
-	// Simple lowercase conversion
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c = c + ('a' - 'A')
-		}
-		result[i] = c
-	}
-	return string(result)
+	return strings.ToLower(s)
 }
 
 func contains(s, substr string) bool {

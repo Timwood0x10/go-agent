@@ -3,7 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"goagent/internal/errors"
@@ -18,7 +21,8 @@ type WorkflowLoader interface {
 
 // FileLoader loads workflows from files.
 type FileLoader struct {
-	decoder Decoder
+	decoder    Decoder
+	allowedDir string
 }
 
 // Decoder decodes workflow files.
@@ -43,25 +47,53 @@ func (d *YAMLDecoder) Decode(data []byte, v interface{}) error {
 }
 
 // NewFileLoader creates a new FileLoader.
-func NewFileLoader(decoder Decoder) *FileLoader {
-	return &FileLoader{
-		decoder: decoder,
+type FileLoaderOption func(*FileLoader)
+
+// WithAllowedDir sets the allowed directory for security checks.
+func WithAllowedDir(dir string) FileLoaderOption {
+	return func(fl *FileLoader) {
+		fl.allowedDir = dir
 	}
 }
 
+func NewFileLoader(decoder Decoder, opts ...FileLoaderOption) *FileLoader {
+	fl := &FileLoader{
+		decoder: decoder,
+	}
+	for _, opt := range opts {
+		opt(fl)
+	}
+	return fl
+}
+
 // NewJSONFileLoader creates a FileLoader for JSON files.
-func NewJSONFileLoader() *FileLoader {
-	return NewFileLoader(&JSONDecoder{})
+func NewJSONFileLoader(opts ...FileLoaderOption) *FileLoader {
+	return NewFileLoader(&JSONDecoder{}, opts...)
 }
 
 // NewYAMLFileLoader creates a FileLoader for YAML files.
-func NewYAMLFileLoader() *FileLoader {
-	return NewFileLoader(&YAMLDecoder{})
+func NewYAMLFileLoader(opts ...FileLoaderOption) *FileLoader {
+	return NewFileLoader(&YAMLDecoder{}, opts...)
 }
 
 // Load loads a workflow from a file.
 func (l *FileLoader) Load(ctx context.Context, source string) (*Workflow, error) {
-	data, err := os.ReadFile(source)
+	// Security: validate path is within allowed directory
+	if l.allowedDir != "" {
+		absPath, err := filepath.Abs(source)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get absolute path: %s", source)
+		}
+		absDir, err := filepath.Abs(l.allowedDir)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get absolute directory: %s", l.allowedDir)
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return nil, fmt.Errorf("path %s is outside allowed directory %s", source, l.allowedDir)
+		}
+	}
+
+	data, err := os.ReadFile(source) // #nosec G304
 	if err != nil {
 		return nil, errors.Wrapf(err, "read workflow file %s", source)
 	}

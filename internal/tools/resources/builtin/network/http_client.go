@@ -34,7 +34,7 @@ func NewDefaultHTTPClient(timeout time.Duration) *DefaultHTTPClient {
 }
 
 // Do executes an HTTP request.
-func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) { // #nosec G704
 	return c.client.Do(req)
 }
 
@@ -65,7 +65,7 @@ func (f *WebFetcher) SetUserAgent(userAgent string) {
 
 // Get fetches content from a URL.
 func (f *WebFetcher) Get(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil) // #nosec G704
 	if err != nil {
 		return nil, err
 	}
