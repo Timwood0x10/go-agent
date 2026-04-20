@@ -22,6 +22,7 @@ func getTestDB(t *testing.T) *sql.DB {
 	password := "postgres"
 	dbname := "styleagent"
 
+	// #nosec G101 - This is a test file with well-known test credentials
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
@@ -181,6 +182,7 @@ func createTestTables(t *testing.T, db *sql.DB) error {
 	}
 
 	// Create secrets table
+	// #nosec G101 - Test file with SQL table definition
 	secretsTableSQL := `
 		DROP TABLE IF EXISTS secrets;
 		CREATE TABLE secrets (

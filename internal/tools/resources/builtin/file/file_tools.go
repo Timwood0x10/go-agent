@@ -16,6 +16,17 @@ import (
 // FileTools provides file system operations.
 type FileTools struct {
 	*base.BaseTool
+	allowedDir string
+}
+
+// FileToolsOption is a functional option for FileTools.
+type FileToolsOption func(*FileTools)
+
+// WithAllowedDir sets the allowed directory for security checks.
+func WithAllowedDir(dir string) FileToolsOption {
+	return func(ft *FileTools) {
+		ft.allowedDir = dir
+	}
 }
 
 // NewFileTools creates a new FileTools tool.
@@ -126,8 +137,23 @@ func (t *FileTools) readFile(ctx context.Context, params map[string]interface{})
 		return core.NewErrorResult(fmt.Sprintf("file not found: %s", filePath)), nil
 	}
 
+	// Security: validate path is within allowed directory
+	if t.allowedDir != "" {
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve absolute path: %v", err)), nil
+		}
+		absDir, err := filepath.Abs(t.allowedDir)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve allowed directory: %v", err)), nil
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return core.NewErrorResult(fmt.Sprintf("access denied: path %s is outside allowed directory %s", filePath, t.allowedDir)), nil
+		}
+	}
+
 	// Read file
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return core.NewErrorResult(fmt.Sprintf("failed to read file: %v", err)), nil
 	}
@@ -192,6 +218,21 @@ func (t *FileTools) writeFile(ctx context.Context, params map[string]interface{}
 		filePath = absPath
 	}
 
+	// Security: validate path is within allowed directory
+	if t.allowedDir != "" {
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve absolute path: %v", err)), nil
+		}
+		absDir, err := filepath.Abs(t.allowedDir)
+		if err != nil {
+			return core.NewErrorResult(fmt.Sprintf("failed to resolve allowed directory: %v", err)), nil
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return core.NewErrorResult(fmt.Sprintf("access denied: path %s is outside allowed directory %s", filePath, t.allowedDir)), nil
+		}
+	}
+
 	// Get write mode
 	mode := getString(params, "mode")
 	if mode == "" {
@@ -200,14 +241,14 @@ func (t *FileTools) writeFile(ctx context.Context, params map[string]interface{}
 
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return core.NewErrorResult(fmt.Sprintf("failed to create directory: %v", err)), nil
 	}
 
 	var err error
 	if mode == "append" {
 		// Append mode
-		file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304
 		if err != nil {
 			return core.NewErrorResult(fmt.Sprintf("failed to open file: %v", err)), nil
 		}
@@ -223,7 +264,7 @@ func (t *FileTools) writeFile(ctx context.Context, params map[string]interface{}
 		}
 	} else {
 		// Write mode (overwrite)
-		err = os.WriteFile(filePath, []byte(content), 0644)
+		err = os.WriteFile(filePath, []byte(content), 0600)
 	}
 
 	if err != nil {

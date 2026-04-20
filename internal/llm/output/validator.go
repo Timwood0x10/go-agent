@@ -467,7 +467,10 @@ func toInt64(v interface{}) (int64, bool) {
 		// Value exceeds int64 range, reject it
 		return 0, false
 	case uint:
-		return int64(val), true
+		if uint64(val) <= uint64(int64(^uint64(0)>>1)) {
+			return int64(val), true
+		}
+		return 0, false
 	case uint64:
 		if val <= uint64(int64(^uint64(0)>>1)) {
 			return int64(val), true

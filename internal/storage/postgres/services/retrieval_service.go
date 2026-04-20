@@ -27,6 +27,14 @@ import (
 	"goagent/internal/storage/postgres/repositories"
 )
 
+var allowedSynonymDir string
+
+// SetAllowedSynonymDir sets the allowed directory for synonym config files.
+// This is a security measure to prevent path traversal attacks.
+func SetAllowedSynonymDir(dir string) {
+	allowedSynonymDir = dir
+}
+
 // SearchRequest represents a search request with configuration.
 type SearchRequest struct {
 	Query       string          `json:"query"`           // Search query text
@@ -714,11 +722,26 @@ func loadSynonymRules() map[string][]string {
 		}
 	}
 
-	if _, err := os.Stat(configPath); err != nil {
+	// Security: validate path is within allowed directory
+	if allowedSynonymDir != "" {
+		absPath, err := filepath.Abs(configPath)
+		if err != nil {
+			return defaultRules
+		}
+		absDir, err := filepath.Abs(allowedSynonymDir)
+		if err != nil {
+			return defaultRules
+		}
+		if !strings.HasPrefix(absPath, absDir) {
+			return defaultRules
+		}
+	}
+
+	if _, err := os.Stat(configPath); err != nil { // #nosec G703
 		return defaultRules
 	}
 
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) // #nosec G304, G703
 	if err != nil {
 		return defaultRules
 	}

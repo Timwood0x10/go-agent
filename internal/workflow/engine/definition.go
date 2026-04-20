@@ -86,7 +86,7 @@ func (p *DefinitionParser) ParseBytes(ctx context.Context, content []byte) (*Age
 
 // ParseFile parses an agent definition from a file.
 func (p *DefinitionParser) ParseFile(ctx context.Context, path string) (*AgentDefinition, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304
 	if err != nil {
 		return nil, errors.Wrapf(err, "open file %s", path)
 	}

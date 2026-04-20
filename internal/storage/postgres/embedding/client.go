@@ -141,7 +141,7 @@ func (c *EmbeddingClient) EmbedWithPrefix(ctx context.Context, text, prefix stri
 	// Cache the result
 	if c.redis != nil {
 		if data, err := json.Marshal(embedding); err == nil {
-			c.redis.Set(ctx, cacheKey, data, c.cacheTTL)
+			_ = c.redis.Set(ctx, cacheKey, data, c.cacheTTL)
 		}
 	}
 
@@ -194,7 +194,7 @@ func (c *EmbeddingClient) EmbedBatch(ctx context.Context, texts []string) ([][]f
 			if c.redis != nil {
 				cacheKey := c.getCacheKey(uncachedTexts[i], "query")
 				if data, err := json.Marshal(batchEmbeddings[i]); err == nil {
-					c.redis.Set(ctx, cacheKey, data, c.cacheTTL)
+					_ = c.redis.Set(ctx, cacheKey, data, c.cacheTTL)
 				}
 			}
 		}

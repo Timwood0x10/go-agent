@@ -76,7 +76,7 @@ func (p *Pool) Release(conn *sql.Conn) {
 		return
 	}
 
-	conn.Close()
+	_ = conn.Close()
 }
 
 // WithConnection executes a function with a connection from the pool.

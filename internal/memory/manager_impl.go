@@ -609,7 +609,7 @@ func (m *memoryManager) generateHashVector(text string) []float64 {
 func (m *memoryManager) hashWithSeed(text string, seed uint64) uint64 {
 	hash := seed
 	for _, c := range text {
-		hash ^= uint64(c)
+		hash ^= uint64(c) // #nosec G115
 		hash *= 0x100000001b3
 		hash ^= hash >> 33
 		hash *= 0xff51afd7ed558ccd

@@ -11,7 +11,7 @@ install:
 	go get ./...
 
 # CI target - runs all CI checks locally (matches .github/workflows/ci.yml)
-ci: ci-deps ci-fmt ci-vet ci-lint ci-build ci-test-race
+ci: ci-deps ci-fmt ci-vet ci-lint ci-build ci-test-race ci-security
 	@echo ""
 	@echo "✅ All CI checks PASSED"
 
@@ -59,6 +59,12 @@ ci-test-race:
 	@echo "Running tests with race detection..."
 	@go test -race -short ./...
 	@echo "Tests: OK"
+
+# CI security scan
+ci-security:
+	@echo "Running gosec security scan..."
+	@go run github.com/securego/gosec/v2/cmd/gosec@latest ./internal/... ./api/...
+	@echo "Security scan: OK"
 
 # Format code
 fmt:
