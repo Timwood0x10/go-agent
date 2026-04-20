@@ -22,6 +22,7 @@ import (
 )
 
 // getTestDB returns a test database connection for integration tests.
+// Returns nil if database is not available (tests will be skipped).
 func getTestDB(t *testing.T) *sql.DB {
 	host := "localhost"
 	port := "5433"
@@ -32,14 +33,17 @@ func getTestDB(t *testing.T) *sql.DB {
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("pgx", connStr)
 	if err != nil {
-		t.Fatalf("Failed to open test database: %v", err)
+		t.Skipf("Skipping integration test - failed to open test database: %v", err)
+		return nil
 	}
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		t.Fatalf("Failed to connect to test database: %v", err)
+		db.Close()
+		t.Skipf("Skipping integration test - failed to connect to test database: %v", err)
+		return nil
 	}
 
 	log.Printf("Connected to test database: %s", dbname)
