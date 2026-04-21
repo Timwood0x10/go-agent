@@ -78,6 +78,9 @@ func (e *Executor) Execute(ctx context.Context, workflow *Workflow, initialInput
 	for i := 0; i < len(workflow.Steps); i++ {
 		select {
 		case result := <-resultChan:
+			if result == nil {
+				continue
+			}
 			stepResults = append(stepResults, result)
 			execution.StepStates[result.StepID] = &StepState{
 				StepID:     result.StepID,
