@@ -4,84 +4,109 @@
 
 ## System Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           User Input                                    │
-│                    "Help me plan a trip..."                            │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          Leader Agent                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │
-│  │ Parse Input  │  │  Task Plan   │  │  Aggregate   │                │
-│  │   (LLM)      │  │  (LLM)       │  │   Results    │                │
-│  └──────────────┘  └──────────────┘  └──────────────┘                │
-│         │                 │                 │                           │
-│         └─────────────────┼─────────────────┘                           │
-│                           │                                              │
-│                    dispatch tasks (parallel)                            │
-└───────────────────────────┬─────────────────────────────────────────────┘
-                            │
-         ┌──────────────────┼──────────────────┐
-         │                  │                  │
-         ▼                  ▼                  ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  Agent-destination │ │ Agent-food    │ │  Agent-hotel    │
-│  (Sub Agent)     │ │  (Sub Agent)   │ │  (Sub Agent)    │
-└────────┬────────┘ └────────┬────────┘ └────────┬────────┘
-         │                  │                  │
-         └──────────────────┼──────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Protocol Layer                                     │
-│  ┌────────────────────────────────────────────────────────────────┐    │
-│  │  AHP Protocol (Agent Handshake Protocol)                       │    │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐                          │    │
-│  │  │  TASK   │ │ RESULT  │ │ PROGRESS│                          │    │
-│  │  └─────────┘ └─────────┘ └─────────┘                          │    │
-│  └────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  Message Types: TASK | RESULT | PROGRESS | ACK                          │
-└─────────────────────────────────────────────────────────────────────────┘
-│
-│         ┌──────────────────┼──────────────────┐
-│         │                  │                  │
-│         ▼                  ▼                  ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│     Tools       │ │     LLM         │ │    Storage      │
-│                 │ │                  │ │                 │
-│ • calculator    │ │ • Ollama        │ │  • PostgreSQL   │
-│ • datetime      │ │ • OpenRouter    │ │  • pgvector     │
-│ • http_request  │ │                  │ │                 │
-└─────────────────┘ └─────────────────┘ └────────┬────────┘
-         │                                    │
-         │                                    ▼
-         │                        ┌─────────────────────────┐
-         │                        │  PostgreSQL + pgvector   │
-         │                        │  ┌───────────────────┐  │
-         │                        │  │ • Connections    │  │
-         │                        │  │   Pool (25/10)   │  │
-         │                        │  │ • Transactions  │  │
-         │                        │  └───────────────────┘  │
-         │                        │  ┌───────────────────┐  │
-         │                        │  │ • Vector Index   │  │
-         │                        │  │   (ivfflat)      │  │
-         │                        │  │ • Cosine Search  │  │
-         │                        │  └───────────────────┘  │
-         │                        └─────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Memory System                                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                    │
-│  │ Session     │  │ User Memory  │  │ Task Memory  │                    │
-│  │  (Short-term)│  │  (Long-term) │  │  (Distilled) │                    │
-│  └─────────────┘  └─────────────┘  └─────────────┘                    │
-│                    │                                                 │
-│  ProductionMemoryManager (PG + pgvector persistence)                    │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    %% User Input
+    UserInput[User Input<br/>Help me plan a trip...] --> LeaderAgent
+
+    %% Leader Agent
+    subgraph LeaderAgent["Leader Agent"]
+        ParseInput[Parse Input<br/>LLM]
+        TaskPlan[Task Plan<br/>LLM]
+        Aggregate[Aggregate<br/>Results]
+        ParseInput --> TaskPlan
+        TaskPlan --> Aggregate
+    end
+
+    LeaderAgent -->|dispatch tasks parallel| SubAgents
+
+    %% Sub Agents
+    subgraph SubAgents["Sub Agents"]
+        AgentDest[Agent-destination<br/>Sub Agent]
+        AgentFood[Agent-food<br/>Sub Agent]
+        AgentHotel[Agent-hotel<br/>Sub Agent]
+    end
+
+    SubAgents --> ProtocolLayer
+
+    %% Protocol Layer
+    subgraph ProtocolLayer["Protocol Layer"]
+        AHPProtocol[AHP Protocol<br/>Agent Handshake Protocol]
+        TASK[TASK]
+        RESULT[RESULT]
+        PROGRESS[PROGRESS]
+        AHPProtocol --> TASK
+        AHPProtocol --> RESULT
+        AHPProtocol --> PROGRESS
+    end
+
+    ProtocolLayer --> CoreServices
+
+    %% Core Services
+    subgraph CoreServices["Core Services"]
+        %% Tools
+        subgraph Tools["Tools System"]
+            Calculator[calculator]
+            DateTime[datetime]
+            HTTPRequest[http_request]
+        end
+
+        %% LLM
+        subgraph LLM["LLM System"]
+            Ollama[Ollama]
+            OpenRouter[OpenRouter]
+        end
+
+        %% Storage
+        subgraph Storage["Storage"]
+            PostgreSQL[PostgreSQL + pgvector]
+            ConnPool[Connections Pool 25/10]
+            VectorIndex[Vector Index ivfflat]
+            CosineSearch[Cosine Search]
+            PostgreSQL --> ConnPool
+            PostgreSQL --> VectorIndex
+            PostgreSQL --> CosineSearch
+        end
+    end
+
+    CoreServices --> MemorySystem
+
+    %% Memory System
+    subgraph MemorySystem["Memory System"]
+        Session[Session<br/>Short-term]
+        UserMemory[User Memory<br/>Long-term]
+        TaskMemory[Task Memory<br/>Distilled]
+        ExperienceSystem[Experience System]
+        ProdMgr[ProductionMemoryManager<br/>PG + pgvector persistence]
+
+        subgraph ExpFlow["Experience Distillation Flow"]
+            TaskExec[Task Execution]
+            TaskResult[TaskResult]
+            Distillation[Distillation]
+            Experience[Experience]
+            DB[DB]
+            Query[Query]
+            Retrieval[Retrieval<br/>Vector Search]
+            Ranked[Ranked]
+            Conflict[Conflict Resolution]
+
+            TaskExec --> TaskResult
+            TaskResult --> Distillation
+            Distillation --> Experience
+            Experience --> DB
+            Query --> Retrieval
+            Retrieval --> Ranked
+            Ranked --> Conflict
+        end
+    end
+
+    %% Styling
+    style LeaderAgent fill:#e1f5ff
+    style SubAgents fill:#fff4e1
+    style ProtocolLayer fill:#f3e5ff
+    style MemorySystem fill:#e8f5e9
+    style ExperienceSystem fill:#ffebee
+    style ExpFlow fill:#fce4ec
 ```
 
 **Code Locations**:
@@ -91,6 +116,8 @@
 - LLM Client: `internal/llm/client.go`
 - Storage Pool: `internal/storage/postgres/pool.go`
 - Memory Manager: `internal/memory/production_manager.go`
+- Experience Distillation: `api/experience/`
+- Experience Repository: `internal/storage/postgres/repositories/`
 
 ---
 
@@ -347,42 +374,24 @@ goagent/
 
 Agents are defined using Markdown files, allowing non-developers to adjust Agent behavior by editing configuration files.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Agent Definition (Markdown)                         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph AgentDef["Agent Definition (Markdown)"]
+        Metadata["## Metadata<br/>name: agent_top<br/>version: 1.0.0"]
+        Role["## Role<br/>You are a professional fashion consultant"]
+        Profile["## Profile<br/>expertise: top wear<br/>category: tops<br/>style_tags: [casual, formal, street]"]
+        Tools["## Tools<br/>- fashion_search<br/>- weather_check<br/>- style_recomm"]
+        Instructions["## Instructions<br/>1. Recommend suitable styles based on user preferences<br/>2. Consider local weather conditions<br/>3. Match user budget range"]
+        Output["## Output Format<br/>```json<br/>{ 'items': [...], 'reason': '...' }<br/>```"]
+    end
 
-┌─────────────────────────────────────────────────────────────┐
-│ # agent_top.md                                               │
-├─────────────────────────────────────────────────────────────┤
-│ ## Metadata                                                 │
-│ name: agent_top                                             │
-│ version: 1.0.0                                             │
-│                                                             │
-│ ## Role                                                     │
-│ You are a professional fashion consultant, specializing    │
-│ in top wear recommendations.                                │
-│                                                             │
-│ ## Profile                                                  │
-│ expertise: top wear                                         │
-│ category: tops                                              │
-│ style_tags: [casual, formal, street]                        │
-│                                                             │
-│ ## Tools                                                    │
-│ - fashion_search                                            │
-│ - weather_check                                             │
-│ - style_recomm                                              │
-│                                                             │
-│ ## Instructions                                             │
-│ 1. Recommend suitable styles based on user preferences      │
-│ 2. Consider local weather conditions                       │
-│ 3. Match user budget range                                 │
-│                                                             │
-│ ## Output Format                                            │
-│ ```json                                                     │
-│ { "items": [...], "reason": "..." }                        │
-│ ```                                                         │
-└─────────────────────────────────────────────────────────────┘
+    Metadata --> Role
+    Role --> Profile
+    Profile --> Tools
+    Tools --> Instructions
+    Instructions --> Output
+
+    style AgentDef fill:#e1f5ff
 ```
 
 ### Built-in Variables
@@ -401,53 +410,87 @@ Agents are defined using Markdown files, allowing non-developers to adjust Agent
 
 Users can customize workflows through YAML/JSON files to achieve flexible Agent orchestration.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Workflow Engine                                     │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Workflow["Workflow Engine"]
+        WorkflowName["name: Outfit Recommendation Flow"]
 
-┌─────────────────────────────────────────────────────────────────────┐
-│  workflow.yaml                                                       │
-├─────────────────────────────────────────────────────────────────────┤
-│  name: "Travel Planning Workflow"                                  │
-│                                                                     │
-│  agents:                                                            │
-│    - id: leader                                                     │
-│      type: leader                                                  │
-│      prompt_file: ./agents/agent_leader.md                         │
-│                                                                     │
-│    - id: agent_destination                                         │
-│      type: sub                                                     │
-│      prompt_file: ./agents/agent_destination.md                    │
-│      depends_on: [leader]                                          │
-│                                                                     │
-│    - id: agent_hotel                                               │
-│      type: sub                                                     │
-│      prompt_file: ./agents/agent_hotel.md                          │
-│      depends_on: [leader, agent_destination]                       │
-│                                                                     │
-│  execution:                                                         │
-│    phase1: [agent_destination, agent_food]                        │
-│    phase2: [agent_hotel]                                          │
-└─────────────────────────────────────────────────────────────────────┘
+        subgraph Agents["Agents"]
+            AgentLeader["id: leader<br/>type: leader<br/>prompt_file: ./agents/agent_leader.md"]
+            AgentTop["id: agent_top<br/>type: sub<br/>prompt_file: ./agents/agent_top.md<br/>depends_on: [leader]"]
+            AgentShoes["id: agent_shoes<br/>type: sub<br/>prompt_file: ./agents/agent_shoes.md<br/>depends_on: [leader, agent_top]"]
+        end
+
+        subgraph Execution["Execution"]
+            Phase1["phase1: [agent_top, agent_bottom]"]
+            Phase2["phase2: [agent_shoes]"]
+        end
+    end
+
+    WorkflowName --> Agents
+    AgentLeader --> AgentTop
+    AgentTop --> AgentShoes
+    Agents --> Execution
+    Phase1 --> Phase2
+
+    style Workflow fill:#fff4e1
+    style Agents fill:#e8f5e9
+    style Execution fill:#f3e5ff
+```
+
+```mermaid
+graph TB
+    subgraph Workflow["Workflow Engine"]
+        WorkflowName["name: Travel Planning Workflow"]
+
+        subgraph Agents["Agents"]
+            AgentLeader["id: leader<br/>type: leader<br/>prompt_file: ./agents/agent_leader.md"]
+            AgentDest["id: agent_destination<br/>type: sub<br/>prompt_file: ./agents/agent_destination.md<br/>depends_on: [leader]"]
+            AgentHotel["id: agent_hotel<br/>type: sub<br/>prompt_file: ./agents/agent_hotel.md<br/>depends_on: [leader, agent_destination]"]
+        end
+
+        subgraph Execution["Execution"]
+            Phase1["phase1: [agent_destination, agent_food]"]
+            Phase2["phase2: [agent_hotel]"]
+        end
+    end
+
+    WorkflowName --> Agents
+    AgentLeader --> AgentDest
+    AgentDest --> AgentHotel
+    Agents --> Execution
+    Phase1 --> Phase2
+
+    style Workflow fill:#fff4e1
+    style Agents fill:#e8f5e9
+    style Execution fill:#f3e5ff
 ```
 
 ### Directory Structure
 
-```
-workflows/
-├── default.yaml          # Default workflow
-├── summer.yaml           # Summer recommendation
-├── winter.yaml           # Winter recommendation
-│
-├── agents/               # Agent Markdown definitions
-│   ├── agent_leader.md
-│   ├── agent_destination.md
-│   ├── agent_food.md
-│   ├── agent_hotel.md
-│   └── agent_accessory.md
-│
-└── templates/           # Templates
+```mermaid
+graph TB
+    subgraph Workflows["workflows/"]
+        Default[default.yaml<br/>Default workflow]
+        Summer[summer.yaml<br/>Summer recommendation]
+        Winter[winter.yaml<br/>Winter recommendation]
+
+        subgraph AgentsDir["agents/"]
+            AgentLeader[agent_leader.md]
+            AgentDest[agent_destination.md]
+            AgentFood[agent_food.md]
+            AgentHotel[agent_hotel.md]
+            AgentAccessory[agent_accessory.md]
+        end
+
+        subgraph Templates["templates/"]
+            TemplatesDir[Templates]
+        end
+    end
+
+    style Workflows fill:#e1f5ff
+    style AgentsDir fill:#fff4e1
+    style Templates fill:#e8f5e9
 ```
 
 ---
@@ -456,75 +499,421 @@ workflows/
 
 Multi-LLM output is ensured through a four-layer guarantee mechanism.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    LLM Output Standardization                            │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Layer1["Layer 1: Prompt Template"]
+        PromptTemplate["{{.Instructions}}<br/>Output Format:<br/>```json<br/>{ 'items': [...], 'reason': '...' }<br/>```"]
+    end
 
-Layer 1: Prompt Template
-┌────────────────────────────────────────────────────────────────┐
-│ {{.Instructions}}                                                │
-│ Output Format:                                                   │
-│ ```json                                                          │
-│ { "items": [...], "reason": "..." }                            │
-│ ```                                                              │
-└────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-Layer 2: JSON Schema / Tool Calling
-┌────────────────────────────────────────────────────────────────┐
-│ {                                                                │
-│   "type": "object",                                             │
-│   "properties": {                                                │
-│     "items": { "type": "array" },                              │
-│     "reason": { "type": "string" }                             │
-│   }                                                              │
-│ }                                                                │
-└────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-Layer 3: Output Parser & Validator
-┌────────────────────┐    ┌────────────────────┐
-│  Parser (Parse)   │───▶│  Validator (Validate)  │
-│  - Extract JSON   │    │  - Schema validation   │
-│  - Fix broken JSON│    │  - Auto retry       │
-└────────────────────┘    └────────────────────┘
-                              │
-                              ▼
-Layer 4: LLM Adapter Layer
-┌────────────────────────────────────────────────────────────────┐
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                        │
-│  │ Ollama  │  │ OpenAI  │  │ Anthropic│                        │
-│  │ Adapter │  │ Adapter │  │ Adapter  │                        │
-│  └─────────┘  └─────────┘  └─────────┘                        │
-│                         (Unified abstraction, upper layer doesn't  │
-│                          depend on specific model)                │
-└────────────────────────────────────────────────────────────────┘
+    subgraph Layer2["Layer 2: JSON Schema / Tool Calling"]
+        JSONSchema["{<br/>'type': 'object',<br/>'properties': {<br/>  'items': { 'type': 'array' },<br/>  'reason': { 'type': 'string' }<br/>}<br/>}"]
+    end
+
+    subgraph Layer3["Layer 3: Output Parser & Validator"]
+        Parser["Parser (Parse)<br/>- Extract JSON<br/>- Fix broken JSON"]
+        Validator["Validator (Validate)<br/>- Schema validation<br/>- Auto retry"]
+    end
+
+    subgraph Layer4["Layer 4: LLM Adapter Layer"]
+        AdapterOllama["Ollama<br/>Adapter"]
+        AdapterOpenAI["OpenAI<br/>Adapter"]
+        AdapterAnthropic["Anthropic<br/>Adapter"]
+        Note["(Unified abstraction, upper layer doesn't depend on specific model)"]
+    end
+
+    PromptTemplate --> JSONSchema
+    JSONSchema --> Parser
+    Parser --> Validator
+    Validator --> AdapterOllama
+    Validator --> AdapterOpenAI
+    Validator --> AdapterAnthropic
+    AdapterOllama --> Note
+    AdapterOpenAI --> Note
+    AdapterAnthropic --> Note
+
+    style Layer1 fill:#e1f5ff
+    style Layer2 fill:#fff4e1
+    style Layer3 fill:#e8f5e9
+    style Layer4 fill:#f3e5ff
 ```
 
 ### Complete Call Flow
 
-```
-LLM Output
-    │
-    ▼
-Parser Parse ── Extract JSON
-    │ Failed
-    ▼
-Fix JSON ── Fix broken JSON
-    │ Failed
-    ▼
-Validator Validate ── Schema validation
-    │ Failed
-    ▼
-Retry (3 times) ── Auto retry
-    │
-    ▼
-Return structured result
+```mermaid
+graph TD
+    Start["LLM Output"]
+    Parser["Parser Parse<br/>Extract JSON"]
+    Fail1["Failed"]
+    FixJSON["Fix JSON<br/>Fix broken JSON"]
+    Fail2["Failed"]
+    Validator["Validator Validate<br/>Schema validation"]
+    Fail3["Failed"]
+    Retry["Retry (3 times)<br/>Auto retry"]
+    Result["Return structured result"]
+
+    Start --> Parser
+    Parser -->|Failed| Fail1
+    Fail1 --> FixJSON
+    Parser -->|Success| Validator
+    FixJSON -->|Failed| Fail2
+    FixJSON -->|Success| Validator
+    Validator -->|Failed| Fail3
+    Fail3 --> Retry
+    Retry --> Validator
+    Validator -->|Success| Result
+
+    style Start fill:#e1f5ff
+    style Parser fill:#fff4e1
+    style FixJSON fill:#fce4ec
+    style Validator fill:#e8f5e9
+    style Retry fill:#ffebee
+    style Result fill:#c8e6c9
 ```
 
 ---
 
+## Message Flow Mechanism
+
+```mermaid
+sequenceDiagram
+    participant Leader as Leader Agent
+    participant MQ as Message Queue
+    participant Sub as Sub Agent
+
+    Note over Leader,Sub: Send
+    Leader->>MQ: TASK
+    MQ->>Sub: TASK
+
+    Note over Sub,Leader: Receive/Process
+    Sub->>Leader: RESULT
+    Leader->>Sub: ACK
+```
+
+```mermaid
+graph LR
+    subgraph MessageTypes["Message Types"]
+        TASK[TASK<br/>Dispatch Task<br/>Leader → Sub Agent]
+        RESULT[RESULT<br/>Return Result<br/>Sub Agent → Leader]
+        PROGRESS[PROGRESS<br/>Progress Report<br/>Sub Agent → Leader]
+        ACK[ACK<br/>Acknowledge<br/>Sub Agent → Leader]
+        HEARTBEAT[HEARTBEAT<br/>Heartbeat<br/>All Agents]
+    end
+
+    style TASK fill:#e1f5ff
+    style RESULT fill:#fff4e1
+    style PROGRESS fill:#e8f5e9
+    style ACK fill:#f3e5ff
+    style HEARTBEAT fill:#ffebee
+```
+
+---
+
+## Task Production-Consumption Flow
+
+```mermaid
+graph TB
+    subgraph Producer["Leader Agent (Producer)"]
+        Step1["1. Parse User Input"]
+        ParseProfile[Parse Profile<br/>UserProfile]
+        Step2["2. LLM Decides Which Agents Needed"]
+        DetermineTasks[Determine Tasks<br/>destination, hotel]
+    end
+
+    subgraph TaskQueues["Task Queues"]
+        QueueDest[Task Queue<br/>agent_destination]
+        QueueFood[Task Queue<br/>agent_food]
+        QueueOther[Task Queue<br/>...]
+    end
+
+    subgraph Phase1["Phase 1: Parallel Dispatch<br/>ThreadPoolExecutor"]
+        SubAgent1[Sub Agent<br/>Consumer]
+        SubAgent2[Sub Agent<br/>Consumer]
+    end
+
+    subgraph TaskExecution["3. Execute Task"]
+        ExecuteTask[Execute Task]
+        Tools[Tools<br/>RAG]
+        LLM[LLM]
+    end
+
+    subgraph Result["4. Return Result"]
+        SendResult[Send RESULT<br/>to Leader]
+    end
+
+    subgraph Phase2["Phase 2: Dependency-Aware Tasks<br/>destination result to hotel"]
+        Coordination[Coordination<br/>Context]
+    end
+
+    subgraph Aggregator["Leader (Aggregator)"]
+        Step5["5. Aggregate All Results"]
+        Aggregate[Aggregate<br/>destination+food+hotel]
+        FinalOutput[Final Output<br/>Save to DB]
+    end
+
+    Step1 --> ParseProfile
+    ParseProfile --> Step2
+    Step2 --> DetermineTasks
+    DetermineTasks --> QueueDest
+    DetermineTasks --> QueueFood
+    DetermineTasks --> QueueOther
+
+    QueueDest --> Phase1
+    QueueFood --> Phase1
+    QueueOther --> Phase1
+
+    Phase1 --> SubAgent1
+    Phase1 --> SubAgent2
+
+    SubAgent1 --> TaskExecution
+    SubAgent2 --> TaskExecution
+
+    TaskExecution --> ExecuteTask
+    ExecuteTask --> Tools
+    ExecuteTask --> LLM
+
+    TaskExecution --> SendResult
+    SendResult --> Phase2
+    Phase2 --> Coordination
+    Coordination --> Step5
+    Step5 --> Aggregate
+    Aggregate --> FinalOutput
+
+    style Producer fill:#e1f5ff
+    style Phase1 fill:#fff4e1
+    style TaskExecution fill:#e8f5e9
+    style Result fill:#f3e5ff
+    style Phase2 fill:#fce4ec
+    style Aggregator fill:#ffebee
+```
+
+---
+
+## Actor Model Mapping
+
+| Actor Model Concept |  Implementation |
+|---------------------|----------------------|
+| Actor | `LeaderAgent`, `OutfitSubAgent` |
+| Mailbox | `MessageQueue` (In-Memory) |
+| Message | `AHPMessage` (TASK/RESULT/PROGRESS/ACK) |
+| Behavior | Agent internal `_handle_task()`, `_recommend()` |
+| Supervisor | `LeaderAgent` coordinates multiple Sub Agents |
+| Failure Handling | DLQ (Dead Letter Queue) |
+
+---
+
+## Error Code System
+
+### Error Code Specification
+
+```
+Format: XX-YYY-ZZZ
+  - XX:   Module code (01-Agent, 02-Protocol, 03-Storage, 04-LLM, 05-Tools)
+  - YYY:  Error type (001-099 system level, 100-199 business level)
+  - ZZZ:  Specific error sequence number
+```
+
+### Error Code Table
+
+| Error Code | Name | Description | Retriable | Max Retries |
+|------------|------|-------------|-----------|-------------|
+| **01-Agent** |
+| 01-001 | AgentNotFound | Agent not registered | No | 0 |
+| 01-002 | AgentTimeout | Agent execution timeout | Yes | 3 |
+| 01-003 | AgentPanic | Agent internal panic | Yes | 2 |
+| 01-004 | TaskQueueFull | Task queue full | Yes | 5 |
+| 01-005 | DependencyCycle | Task dependency cycle | No | 0 |
+| **02-Protocol** |
+| 02-001 | InvalidMessage | Invalid message format | No | 0 |
+| 02-002 | MessageTimeout | Message send timeout | Yes | 3 |
+| 02-003 | HeartbeatMissed | Heartbeat missed | Yes | 5 |
+| **03-Storage** |
+| 03-001 | DBConnectionFailed | Database connection failed | Yes | 3 |
+| 03-002 | QueryFailed | Query failed | Yes | 2 |
+| 03-003 | VectorSearchFailed | Vector search failed | Yes | 2 |
+| **04-LLM** |
+| 04-001 | LLMRequestFailed | LLM request failed | Yes | 3 |
+| 04-002 | LLMTimeout | LLM response timeout | Yes | 2 |
+| 04-003 | LLMQuotaExceeded | Quota exceeded | No | 0 |
+
+### Unified Error Handling
+
+```go
+type ErrorCode struct {
+    Code       string                 `json:"code"`
+    Message    string                 `json:"message"`
+    Module     string                 `json:"module"`
+    Retry      bool                   `json:"retry"`
+    RetryMax   int                    `json:"retry_max"`
+    Backoff    time.Duration          `json:"backoff"`
+}
+
+type AppError struct {
+    Code    ErrorCode
+    Err     error
+    Stack   string
+    Context map[string]interface{}
+}
+```
+
+---
+
+## Graceful Shutdown Flow
+
+```mermaid
+graph TB
+    Signal["SIGTERM / SIGINT"]
+    Phase1["Phase 1: Stop Accept<br/>Stop accepting new requests/tasks"]
+    Wait1["Wait 30s<br/>grace period"]
+    Phase2["Phase 2: Cancel<br/>Cancel all Agent contexts"]
+    Wait2["Wait 60s<br/>shutdown period"]
+    Phase3["Phase 3: Drain Queues<br/>Process pending messages"]
+    Phase4["Phase 4: Save State<br/>Persist in-memory state"]
+    Phase5["Phase 5: Close<br/>Close DB/connection pools"]
+    Exit["EXIT 0"]
+
+    Signal --> Phase1
+    Phase1 --> Wait1
+    Wait1 --> Phase2
+    Phase2 --> Wait2
+    Wait2 --> Phase3
+    Phase3 --> Phase4
+    Phase4 --> Phase5
+    Phase5 --> Exit
+
+    style Signal fill:#e1f5ff
+    style Phase1 fill:#fff4e1
+    style Phase2 fill:#fce4ec
+    style Phase3 fill:#e8f5e9
+    style Phase4 fill:#f3e5ff
+    style Phase5 fill:#ffebee
+    style Exit fill:#c8e6c9
+```
+
+---
+
+## Rate Limiting & Backpressure Mechanism
+
+### Rate Limiting Strategy
+
+| Scenario | Rate Limiting Method | Threshold |
+|----------|---------------------|-----------|
+| Agent Concurrency | Semaphore | Max 10 concurrent per Agent |
+| Task Queue | Queue length limit | Max 1000 items per queue |
+| LLM Requests | Token Bucket | 10 requests per second |
+| Global QPS | Sliding Window | System max 100 QPS |
+
+---
+
+## Database Connection Pool Design
+
+Adopting "get-use-release" principle to avoid long-term occupation of database connection resources.
+
+### Traditional Mode vs Connection Pool Mode
+
+```mermaid
+graph TB
+    subgraph Traditional["Traditional Mode (Long Connection)"]
+        Agent1["Agent 1<br/>Occupied"]
+        DB1["DB<br/>Long Connection"]
+        Agent2["Agent 2<br/>Occupied"]
+        Agent3["Agent 3<br/>Waiting..."]
+        Waste["Connection always maintained<br/>Resource waste"]
+    end
+
+    subgraph PoolMode["Connection Pool Mode (Use & Release)"]
+        Agent1P["Agent 1<br/>Get connection<br/>Use & return"]
+        Pool["Connection<br/>Pool"]
+        Agent2P["Agent 2<br/>Get connection<br/>Use & return"]
+        Agent3P["Agent 3<br/>Immediate acquire"]
+        Efficient["Get on demand<br/>Efficient resource utilization"]
+    end
+
+    Agent1 --> DB1
+    Agent2 --> DB1
+    DB1 --> Waste
+    Agent3 -.waiting.-> DB1
+
+    Agent1P --> Pool
+    Pool --> Agent2P
+    Pool --> Agent3P
+    Pool --> Efficient
+
+    style Traditional fill:#ffebee
+    style PoolMode fill:#e8f5e9
+```
+
+### Connection Pool Configuration
+
+| Parameter | Default Value | Description |
+|-----------|---------------|-------------|
+| max_open | 25 | Maximum open connections |
+| max_idle | 10 | Maximum idle connections |
+| conn_max_lifetime | 5m | Connection maximum lifetime |
+| conn_max_idle_time | 1m | Idle connection maximum survival time |
+| max_wait_time | 30s | Maximum wait time to get connection |
+
+### Monitoring Metrics
+
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| db_open_connections | Current open connections | > 20 |
+| db_idle_connections | Current idle connections | < 2 |
+| db_wait_count | Wait connection count | > 100 |
+| db_wait_duration | Total wait duration | > 1s |
+
+### Backpressure Mechanism
+
+```mermaid
+graph LR
+    subgraph Entry["Request Entry"]
+        Request["Request"]
+    end
+
+    subgraph Queue["Queue Layer"]
+        QueueSize["Queue<br/>500/1000"]
+        Backpressure["Trigger backpressure<br/>Reject/Queue<br/>429 Too Many<br/>Retry-After"]
+    end
+
+    subgraph Agent["Agent Layer"]
+        AgentPool["Agent Pool<br/>Processing"]
+    end
+
+    Request -->|Exceed threshold| QueueSize
+    QueueSize --> Backpressure
+    Backpressure --> Request
+    QueueSize --> AgentPool
+
+    style Entry fill:#e1f5ff
+    style Queue fill:#fff4e1
+    style Agent fill:#e8f5e9
+    style Backpressure fill:#ffebee
+```
+
+**Backpressure Strategy:**
+1. Queue 80% → Alert notification
+2. Queue 90% → Reject new tasks (429)
+3. Queue 100% → Trigger DLQ
+
+---
+
+## Production Environment Recommendations
+
+### Observability
+
+- **Logging**: Structured JSON logging, hierarchical output (DEBUG/INFO/WARN/ERROR)
+- **Metrics**: Prometheus + Grafana dashboards
+- **Tracing**: Distributed tracing for request flow
+- **Alerting**: Multi-level alerting strategy
+
+### Scalability Reservations
+
+- Horizontal scaling support for Agent instances
+- Database read-write separation
+- Cache layer (Redis) for hot data
+- CDN acceleration for static resources
+
+---
+
 **Version**: 1.0  
-**Last Updated**: 2026-03-24  
+**Last Updated**: 2026-03-25  
 **Maintainer**: GoAgent Team
