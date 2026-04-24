@@ -49,7 +49,7 @@ jobs:
         run: go test -race -short -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         if: success()
         with:
           files: ./coverage.out
