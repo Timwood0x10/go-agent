@@ -15,9 +15,6 @@ const (
 type StyleTag string
 
 const (
-	StyleCasual     StyleTag = "casual"
-	StyleFormal     StyleTag = "formal"
-	StyleStreet     StyleTag = "street"
 	Sporty          StyleTag = "sporty"
 	StyleMinimalist StyleTag = "minimalist"
 	StyleVintage    StyleTag = "vintage"
@@ -28,10 +25,7 @@ const (
 type Occasion string
 
 const (
-	OccasionDaily    Occasion = "daily"
 	OccasionWork     Occasion = "work"
-	OccasionParty    Occasion = "party"
-	OccasionDate     Occasion = "date"
 	OccasionSports   Occasion = "sports"
 	OccasionFormal   Occasion = "formal"
 	OccasionVacation Occasion = "vacation"
@@ -52,12 +46,9 @@ const (
 type AgentType string
 
 const (
-	AgentTypeLeader    AgentType = "leader"
-	AgentTypeTop       AgentType = "agent_top"
-	AgentTypeBottom    AgentType = "agent_bottom"
-	AgentTypeShoes     AgentType = "agent_shoes"
-	AgentTypeHead      AgentType = "agent_head"
-	AgentTypeAccessory AgentType = "agent_accessory"
+	AgentTypeLeader AgentType = "leader"
+	AgentTypeTop    AgentType = "agent_top"
+	AgentTypeBottom AgentType = "agent_bottom"
 
 	// Travel agent types
 	AgentTypeDestination AgentType = "destination"

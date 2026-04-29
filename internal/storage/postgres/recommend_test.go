@@ -55,7 +55,7 @@ func TestRecommendRepository_Create(t *testing.T) {
 					Category:         "clothing",
 					Brand:            "Nike",
 					ImageURL:         "https://example.com/image.jpg",
-					AgentPreferences: []models.StyleTag{models.StyleCasual},
+					AgentPreferences: []models.StyleTag{models.StyleTag("casual")},
 					Colors:           []string{"white"},
 					MatchReason:      "Matches your casual style",
 				}, {
@@ -66,7 +66,7 @@ func TestRecommendRepository_Create(t *testing.T) {
 					Category:         "clothing",
 					Brand:            "Levi's",
 					ImageURL:         "https://example.com/jeans.jpg",
-					AgentPreferences: []models.StyleTag{models.StyleCasual},
+					AgentPreferences: []models.StyleTag{models.StyleTag("casual")},
 					Colors:           []string{"blue"},
 					MatchReason:      "Great for casual wear",
 				},
@@ -74,7 +74,7 @@ func TestRecommendRepository_Create(t *testing.T) {
 			Reason:     "Matches your casual style",
 			TotalPrice: 130.0,
 			MatchScore: 0.88,
-			Occasion:   models.OccasionDaily,
+			Occasion:   models.Occasion("daily"),
 			Season:     "summer",
 			Feedback: &models.UserFeedback{
 				Rating:  5,

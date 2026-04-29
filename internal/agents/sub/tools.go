@@ -5,12 +5,14 @@ import (
 	"sync"
 
 	"goagent/internal/core/errors"
+	"goagent/internal/tools/resources/core"
 )
 
 // toolBinder binds and calls tools.
 type toolBinder struct {
-	mu    sync.RWMutex
-	tools map[string]func(ctx context.Context, args map[string]any) (any, error)
+	mu       sync.RWMutex
+	tools    map[string]func(ctx context.Context, args map[string]any) (any, error)
+	registry *core.Registry
 }
 
 // NewToolBinder creates a new ToolBinder.
@@ -53,4 +55,48 @@ func (b *toolBinder) ListTools() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// BridgeFromRegistry imports all tools from the given Registry into this ToolBinder.
+// Tools already registered in the ToolBinder (by name) are not overwritten.
+func (b *toolBinder) BridgeFromRegistry(registry *core.Registry) {
+	if registry == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.registry = registry
+	for _, name := range registry.List() {
+		if _, exists := b.tools[name]; exists {
+			continue
+		}
+		tool, ok := registry.Get(name)
+		if !ok {
+			continue
+		}
+		// capture tool for closure
+		t := tool
+		b.tools[name] = func(ctx context.Context, args map[string]any) (any, error) {
+			return t.Execute(ctx, args)
+		}
+	}
+}
+
+// GetTool retrieves a tool function by name.
+// If not found locally, it falls back to the bridged registry (if any).
+func (b *toolBinder) GetTool(name string) (func(ctx context.Context, args map[string]any) (any, error), bool) {
+	b.mu.RLock()
+	tool, ok := b.tools[name]
+	b.mu.RUnlock()
+	if ok {
+		return tool, true
+	}
+	if b.registry != nil {
+		if t, found := b.registry.Get(name); found && t != nil {
+			return func(ctx context.Context, args map[string]any) (any, error) {
+				return t.Execute(ctx, args)
+			}, true
+		}
+	}
+	return nil, false
 }

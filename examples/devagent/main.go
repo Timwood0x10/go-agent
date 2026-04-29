@@ -232,7 +232,7 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 		taskDispatcher.RegisterExecutor(agentType, executor.Execute)
 	}
 
-	resultAggregator := leader.NewResultAggregator(true, 10)
+	resultAggregator := leader.NewResultAggregator(true, 10, leader.SortByNone)
 	hbMon := ahp.NewHeartbeatMonitor(ahp.DefaultHeartbeatConfig())
 
 	leaderCfg := &leader.LeaderAgentConfig{

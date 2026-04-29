@@ -235,7 +235,7 @@ func createLeaderAgent(cfg *config.Config, comps *components) leader.Agent {
 	}
 
 	// Create ResultAggregator
-	resultAggregator := leader.NewResultAggregator(true, 10)
+	resultAggregator := leader.NewResultAggregator(true, 10, leader.SortByNone)
 
 	// Create LeaderAgent config
 	leaderCfg := &leader.LeaderAgentConfig{

@@ -72,9 +72,7 @@ func (p *profileParser) Parse(ctx context.Context, input string) (*models.UserPr
 
 func (p *profileParser) getDefaultProfile() *models.UserProfile {
 	return &models.UserProfile{
-		Style:     []models.StyleTag{models.StyleCasual},
-		Occasions: []models.Occasion{models.OccasionDaily},
-		Budget:    models.NewPriceRange(0, 1000),
+		Preferences: make(map[string]any),
 	}
 }
 
@@ -169,17 +167,6 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 		}
 	}
 
-	// Set defaults if empty
-	if len(profile.Style) == 0 {
-		profile.Style = []models.StyleTag{models.StyleCasual}
-	}
-	if len(profile.Occasions) == 0 {
-		profile.Occasions = []models.Occasion{models.OccasionDaily}
-	}
-	if profile.Budget == nil {
-		profile.Budget = models.NewPriceRange(0, 10000)
-	}
-
 	// Initialize Preferences map if nil
 	if profile.Preferences == nil {
 		profile.Preferences = make(map[string]any)
@@ -206,7 +193,7 @@ func (p *profileParser) validateProfile(profile *models.UserProfile) error {
 	if profile == nil {
 		return apperrors.ErrNilPointer
 	}
-	if len(profile.Style) == 0 {
+	if len(profile.Preferences) == 0 && len(profile.Style) == 0 {
 		return apperrors.ErrProfileValidationFailed
 	}
 	return nil
