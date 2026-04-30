@@ -75,10 +75,14 @@ func (a *resultAggregator) Aggregate(ctx context.Context, results []*models.Task
 			successCount++
 			for _, item := range result.Items {
 				if item != nil {
+					priority, ok := priorityMap[result.TaskID]
+					if !ok && a.sortBy == SortByPriority {
+						slog.Warn("Task priority not found in priority map, using default 0", "task_id", result.TaskID)
+					}
 					allItems = append(allItems, indexedItem{
 						item:     item,
 						result:   result,
-						priority: priorityMap[result.TaskID],
+						priority: priority,
 					})
 				}
 			}

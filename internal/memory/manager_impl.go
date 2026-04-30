@@ -35,6 +35,7 @@ type memoryManager struct {
 	embedder      embedding.EmbeddingService
 	expRepo       distillation.ExperienceRepository
 	useNewDistill bool // Flag to use new distillation engine
+	cleanupCancel context.CancelFunc
 }
 
 // DistilledTaskData holds distilled task information with local vector.
@@ -132,8 +133,10 @@ func (m *memoryManager) Start(ctx context.Context) error {
 	m.taskMemory.Start(ctx) // Start task memory cleanup
 	m.started = true
 
-	// Start distilled tasks cleanup goroutine
-	go m.cleanupDistilledTasks(ctx)
+	// Start distilled tasks cleanup goroutine with independent cancel.
+	cleanupCtx, cleanupCancel := context.WithCancel(ctx)
+	m.cleanupCancel = cleanupCancel
+	go m.cleanupDistilledTasks(cleanupCtx)
 
 	slog.Info("Memory manager started")
 	return nil
@@ -146,6 +149,12 @@ func (m *memoryManager) Stop(ctx context.Context) error {
 
 	if m.stopped {
 		return nil
+	}
+
+	// Stop background cleanup goroutine.
+	if m.cleanupCancel != nil {
+		m.cleanupCancel()
+		m.cleanupCancel = nil
 	}
 
 	if err := m.sessionMemory.Close(ctx); err != nil {

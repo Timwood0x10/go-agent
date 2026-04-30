@@ -4,6 +4,7 @@ package context
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -361,5 +362,91 @@ func TestVectorIndex(t *testing.T) {
 	})
 }
 
-// nolint: errcheck // Test code may ignore return values
-// nolint: errcheck // Test code may ignore return values
+// TestSessionMemory_ConcurrentGet tests that concurrent Get calls don't cause data races.
+func TestSessionMemory_ConcurrentGet(t *testing.T) {
+	sm := NewSessionMemory(100, 10*time.Second)
+	sm.StartCleanup()
+	defer sm.Close(context.Background())
+
+	// Pre-populate a session.
+	err := sm.Set(context.Background(), "session-1", "user-1", []Message{
+		{Role: "user", Content: "hello", Time: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("failed to set session: %v", err)
+	}
+
+	// Concurrent reads should not race.
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				data, ok := sm.Get(context.Background(), "session-1")
+				if !ok {
+					t.Error("expected session to exist")
+					return
+				}
+				if data.SessionID != "session-1" {
+					t.Errorf("expected session ID session-1, got %s", data.SessionID)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestSessionMemory_GetUpdatesAccessedAt tests that Get updates the access time.
+func TestSessionMemory_GetUpdatesAccessedAt(t *testing.T) {
+	sm := NewSessionMemory(100, 10*time.Second)
+	defer sm.Close(context.Background())
+
+	err := sm.Set(context.Background(), "session-1", "user-1", []Message{
+		{Role: "user", Content: "hello", Time: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("failed to set session: %v", err)
+	}
+
+	// Get the session.
+	data, ok := sm.Get(context.Background(), "session-1")
+	if !ok {
+		t.Fatal("expected session to exist")
+	}
+
+	originalAccessedAt := data.AccessedAt
+
+	// Wait a bit and get again.
+	time.Sleep(10 * time.Millisecond)
+
+	data, ok = sm.Get(context.Background(), "session-1")
+	if !ok {
+		t.Fatal("expected session to exist after second get")
+	}
+
+	if !data.AccessedAt.After(originalAccessedAt) {
+		t.Error("AccessedAt should be updated on each Get call")
+	}
+}
+
+// TestSessionMemory_GetExpiredSession tests that expired sessions are cleaned up on Get.
+func TestSessionMemory_GetExpiredSession(t *testing.T) {
+	sm := NewSessionMemory(100, 50*time.Millisecond)
+	defer sm.Close(context.Background())
+
+	err := sm.Set(context.Background(), "session-1", "user-1", []Message{
+		{Role: "user", Content: "hello", Time: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("failed to set session: %v", err)
+	}
+
+	// Wait for TTL to expire.
+	time.Sleep(60 * time.Millisecond)
+
+	_, ok := sm.Get(context.Background(), "session-1")
+	if ok {
+		t.Error("expired session should not be found")
+	}
+}

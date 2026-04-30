@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -138,7 +139,7 @@ func (a *OpenAIAdapter) GenerateStructured(ctx context.Context, prompt string, s
 		if err != nil {
 			return nil, errors.Wrap(err, "read response body")
 		}
-		return nil, errors.Wrapf(err, "API request failed: openai error: %s", respBody)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result OpenAIChatResponse

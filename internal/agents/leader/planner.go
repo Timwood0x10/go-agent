@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 	"sync/atomic"
@@ -18,7 +19,11 @@ var taskIDCounter uint64
 
 // getRandomSuffix returns a random suffix for extra uniqueness.
 func getRandomSuffix() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(100000000))
+	n, err := rand.Int(rand.Reader, big.NewInt(100000000))
+	if err != nil {
+		slog.Warn("Failed to generate random suffix, using timestamp fallback", "error", err)
+		return fmt.Sprintf("%08d", time.Now().UnixNano()%100000000)
+	}
 	return fmt.Sprintf("%08d", n.Int64())
 }
 
