@@ -258,3 +258,44 @@ func (e *WorkflowAgentExecutor) Process(ctx context.Context, input any) (any, er
 	}, nil
 
 }
+
+// ProcessStream executes a workflow step and returns a stream of events.
+func (e *WorkflowAgentExecutor) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	ch := make(chan base.AgentEvent, 64)
+
+	go func() {
+		defer close(ch)
+
+		// Send task start event
+		select {
+		case ch <- base.AgentEvent{Type: base.EventTaskStart, Source: e.agentID, Data: input}:
+		case <-ctx.Done():
+			return
+		}
+
+		// Execute the task
+		result, err := e.Process(ctx, input)
+		if err != nil {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventComplete, Source: e.agentID, Err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		// Send task complete event
+		select {
+		case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: e.agentID, Data: result}:
+		case <-ctx.Done():
+			return
+		}
+
+		// Send final result
+		select {
+		case ch <- base.AgentEvent{Type: base.EventComplete, Source: e.agentID, Data: result}:
+		case <-ctx.Done():
+		}
+	}()
+
+	return ch, nil
+}

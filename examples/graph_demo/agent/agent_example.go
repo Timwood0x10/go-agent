@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"goagent/api/service/graph"
+	"goagent/internal/agents/base"
 	"goagent/internal/core/models"
 	"goagent/internal/observability"
 	wfgraph "goagent/internal/workflow/graph"
@@ -29,6 +30,15 @@ func (m *mockAgent) Process(ctx context.Context, input any) (any, error) {
 
 	result := fmt.Sprintf("[Agent %s] Processed: %s", m.name, inputStr)
 	return result, nil
+}
+
+// ProcessStream handles input and returns a stream of events.
+func (m *mockAgent) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	result, err := m.Process(ctx, input)
+	ch := make(chan base.AgentEvent, 1)
+	ch <- base.AgentEvent{Type: base.EventComplete, Data: result, Err: err}
+	close(ch)
+	return ch, nil
 }
 
 func (m *mockAgent) ID() string {

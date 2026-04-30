@@ -66,6 +66,15 @@ func (m *MockAgent) Process(ctx context.Context, input any) (any, error) {
 	}, nil
 }
 
+// ProcessStream handles input and returns a stream of events.
+func (m *MockAgent) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	result, err := m.Process(ctx, input)
+	ch := make(chan base.AgentEvent, 1)
+	ch <- base.AgentEvent{Type: base.EventComplete, Data: result, Err: err}
+	close(ch)
+	return ch, nil
+}
+
 // =====================================================
 // DAG Comprehensive Tests
 // =====================================================

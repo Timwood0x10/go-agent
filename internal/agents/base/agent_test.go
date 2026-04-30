@@ -68,6 +68,15 @@ func (m *mockAgent) Process(ctx context.Context, input any) (any, error) {
 	return "processed: " + input.(string), nil
 }
 
+// ProcessStream handles input and returns a stream of events.
+func (m *mockAgent) ProcessStream(ctx context.Context, input any) (<-chan AgentEvent, error) {
+	result, err := m.Process(ctx, input)
+	ch := make(chan AgentEvent, 1)
+	ch <- AgentEvent{Type: EventComplete, Data: result, Err: err}
+	close(ch)
+	return ch, nil
+}
+
 // mockMessenger implements the Messenger interface for testing.
 type mockMessenger struct {
 	sentMessages []*ahp.AHPMessage

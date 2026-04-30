@@ -8,6 +8,36 @@ import (
 	"goagent/internal/protocol/ahp"
 )
 
+// EventType represents the type of agent event.
+type EventType int
+
+const (
+	// EventPlanning indicates the agent is planning.
+	EventPlanning EventType = iota
+	// EventTaskStart indicates a task has started.
+	EventTaskStart
+	// EventTaskProgress indicates progress on a task.
+	EventTaskProgress
+	// EventTaskComplete indicates a task has completed.
+	EventTaskComplete
+	// EventAggregating indicates the agent is aggregating results.
+	EventAggregating
+	// EventComplete indicates the agent has completed processing.
+	EventComplete
+)
+
+// AgentEvent represents an event emitted during agent processing.
+type AgentEvent struct {
+	// Type is the type of event.
+	Type EventType
+	// Source is the agent ID that emitted this event.
+	Source string
+	// Data is the event payload. Type depends on the event type.
+	Data any
+	// Err contains any error that occurred. Non-nil only for error events.
+	Err error
+}
+
 // Agent represents the base interface for all agents.
 type Agent interface {
 	// ID returns the unique identifier of the agent.
@@ -22,6 +52,9 @@ type Agent interface {
 	Stop(ctx context.Context) error
 	// Process handles input and returns result.
 	Process(ctx context.Context, input any) (any, error)
+	// ProcessStream handles input and returns a stream of events.
+	// The returned channel is closed when processing completes.
+	ProcessStream(ctx context.Context, input any) (<-chan AgentEvent, error)
 }
 
 // Messenger defines message passing capabilities.

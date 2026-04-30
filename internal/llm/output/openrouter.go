@@ -207,6 +207,7 @@ func (a *OpenRouterAdapter) GenerateStream(ctx context.Context, prompt string) (
 		}()
 
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line for large SSE chunks
 		for scanner.Scan() {
 			line := scanner.Text()
 

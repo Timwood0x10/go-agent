@@ -79,7 +79,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, er
 		if err != nil {
 			return "", gerr.Wrap(err, "read response body")
 		}
-		return "", gerr.Wrapf(err, "API request failed: ollama error: %s", respBody)
+		return "", gerr.Newf("API request failed: ollama error: %s", respBody)
 	}
 
 	var result map[string]interface{}

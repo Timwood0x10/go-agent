@@ -325,6 +325,11 @@ func (c *Client) GenerateStream(ctx context.Context, prompt string) (<-chan Stre
 		return nil, coreerrors.ErrInvalidArgument
 	}
 
+	const maxPromptLength = 8192
+	if len(prompt) > maxPromptLength {
+		return nil, fmt.Errorf("prompt exceeds maximum length of %d characters", maxPromptLength)
+	}
+
 	switch ProviderType(c.config.Provider) {
 	case ProviderOpenRouter:
 		return c.streamOpenRouter(ctx, prompt)
@@ -468,6 +473,7 @@ func (c *Client) streamOpenRouter(ctx context.Context, prompt string) (<-chan St
 		}()
 
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line for large SSE chunks
 		for scanner.Scan() {
 			line := scanner.Text()
 			if line == "" {

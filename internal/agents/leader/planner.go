@@ -211,3 +211,20 @@ func matchWordBoundary(text, keyword string) bool {
 func isAlphaNum(c rune) bool {
 	return unicode.IsLetter(c) || unicode.IsDigit(c)
 }
+
+// Replan creates new tasks based on previous result and feedback.
+// It appends the feedback to the input text for re-planning.
+func (p *taskPlanner) Replan(ctx context.Context, profile *models.UserProfile, inputText string, previousResult *models.RecommendResult, feedback string) ([]*models.Task, error) {
+	if profile == nil {
+		return nil, fmt.Errorf("profile cannot be nil")
+	}
+
+	// Append feedback to input for re-planning
+	enhancedInput := inputText
+	if feedback != "" {
+		enhancedInput = fmt.Sprintf("%s\n\nFeedback for improvement: %s", inputText, feedback)
+	}
+
+	// Use the same planning logic
+	return p.Plan(ctx, profile, enhancedInput)
+}

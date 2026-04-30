@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"goagent/internal/agents/base"
 	"goagent/internal/core/models"
 	"goagent/internal/tools/resources/core"
 )
@@ -74,6 +75,15 @@ func (m *mockAgent) Stop(ctx context.Context) error {
 
 func (m *mockAgent) Process(ctx context.Context, input any) (any, error) {
 	return m.processFn(ctx, input)
+}
+
+// ProcessStream handles input and returns a stream of events.
+func (m *mockAgent) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	result, err := m.Process(ctx, input)
+	ch := make(chan base.AgentEvent, 1)
+	ch <- base.AgentEvent{Type: base.EventComplete, Data: result, Err: err}
+	close(ch)
+	return ch, nil
 }
 
 func TestFuncNode(t *testing.T) {

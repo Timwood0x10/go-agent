@@ -30,6 +30,9 @@ type ProfileParser interface {
 // TaskPlanner plans tasks based on user profile and input text.
 type TaskPlanner interface {
 	Plan(ctx context.Context, profile *models.UserProfile, inputText string) ([]*models.Task, error)
+	// Replan creates new tasks based on previous result and feedback.
+	// This is used for iterative refinement when the initial result is insufficient.
+	Replan(ctx context.Context, profile *models.UserProfile, inputText string, previousResult *models.RecommendResult, feedback string) ([]*models.Task, error)
 }
 
 // TaskDispatcher dispatches tasks to sub-agents.
@@ -71,6 +74,21 @@ type LeaderAgentConfig struct {
 	MaxParallelTasks int
 	MaxSteps         int
 	EnableCache      bool
+	Loop             LoopConfig
+}
+
+// LoopConfig holds configuration for agent loop behavior.
+type LoopConfig struct {
+	// MaxIterations is the maximum number of loop iterations (default: 3).
+	MaxIterations int
+	// QualityThreshold is the minimum quality score to accept result (default: 0.7).
+	QualityThreshold float64
+	// EnableReflection enables reflection and re-planning (default: false).
+	EnableReflection bool
+	// MaxTotalLLMCalls is the maximum total LLM calls across all iterations (default: 50).
+	MaxTotalLLMCalls int
+	// MaxLoopDuration is the maximum duration for the entire loop (default: 10 minutes).
+	MaxLoopDuration time.Duration
 }
 
 // New creates a new LeaderAgent instance.
@@ -113,6 +131,13 @@ func DefaultLeaderAgentConfig() *LeaderAgentConfig {
 		MaxParallelTasks: DefaultMaxParallelTasks,
 		MaxSteps:         DefaultMaxSteps,
 		EnableCache:      true,
+		Loop: LoopConfig{
+			MaxIterations:    3,
+			QualityThreshold: 0.7,
+			EnableReflection: false,
+			MaxTotalLLMCalls: 50,
+			MaxLoopDuration:  10 * time.Minute,
+		},
 	}
 }
 
@@ -222,6 +247,127 @@ func (a *leaderAgent) Stop(ctx context.Context) error {
 	return nil
 }
 
+// initMemoryContext initializes session, records user message, builds context with
+// similar tasks, and creates a task record. Returns the enriched input, sessionID, and taskID.
+func (a *leaderAgent) initMemoryContext(ctx context.Context, strInput string) (enrichedInput string, sessionID string, taskID string) {
+	if a.memoryManager == nil {
+		return strInput, "", ""
+	}
+
+	// Ensure session exists.
+	a.mu.Lock()
+	sessionID = a.sessionID
+	if sessionID == "" {
+		newSessionID, err := a.memoryManager.CreateSession(ctx, "default_user")
+		if err != nil {
+			slog.Warn("Failed to create session", "error", err)
+		} else {
+			sessionID = newSessionID
+			a.sessionID = sessionID
+		}
+	}
+	a.mu.Unlock()
+
+	// Record user message.
+	if err := a.memoryManager.AddMessage(ctx, sessionID, "user", strInput); err != nil {
+		slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
+	}
+
+	// Build input with conversation context.
+	enrichedInput = strInput
+	if inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, sessionID); err != nil {
+		slog.Warn("memory operation failed, proceeding without", "operation", "BuildContext", "error", err)
+	} else {
+		enrichedInput = inputWithContext
+	}
+
+	// Search similar tasks for additional context.
+	similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, enrichedInput, 3)
+	if err != nil {
+		slog.Warn("memory operation failed, proceeding without", "operation", "SearchSimilarTasks", "error", err)
+	} else if len(similarTasks) > 0 {
+		slog.Debug("Found similar tasks", "count", len(similarTasks))
+		contextStr := "\n\nSimilar previous tasks:\n"
+		for _, task := range similarTasks {
+			if taskInput, ok := task.Payload["input"].(string); ok {
+				contextStr += fmt.Sprintf("- %s\n", taskInput)
+			}
+		}
+		enrichedInput += contextStr
+	}
+
+	// Create task record for tracking and distillation.
+	if tID, err := a.memoryManager.CreateTask(ctx, sessionID, "default_user", enrichedInput); err != nil {
+		slog.Warn("Failed to create task - proceeding without task tracking",
+			"error", err, "session_id", sessionID,
+			"impact", "task will not be tracked for distillation")
+	} else {
+		taskID = tID
+	}
+
+	return enrichedInput, sessionID, taskID
+}
+
+// finalizeMemory updates task output, records assistant message, and triggers
+// background distillation. Must be called after aggregation succeeds.
+func (a *leaderAgent) finalizeMemory(ctx context.Context, sessionID, taskID string, result *models.RecommendResult) {
+	if a.memoryManager == nil {
+		return
+	}
+
+	resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
+
+	// Update task output.
+	if taskID != "" {
+		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
+			slog.Warn("memory operation failed, proceeding without", "operation", "UpdateTaskOutput", "error", err)
+		}
+	}
+
+	// Record assistant response.
+	if err := a.memoryManager.AddMessage(ctx, sessionID, "assistant", resultStr); err != nil {
+		slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
+	}
+
+	// Run distillation in background goroutine with proper lifecycle management.
+	// Context is created inside the goroutine to avoid race: defer cancel() in the
+	// parent function would cancel the context before the goroutine starts.
+	if taskID == "" {
+		return
+	}
+	a.distillWg.Add(1)
+	go func() {
+		defer a.distillWg.Done()
+
+		// Check if agent is stopped before starting.
+		select {
+		case <-a.stopCh:
+			slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
+			return
+		default:
+		}
+
+		// Create a detached context with its own timeout so distillation
+		// continues even if the parent request is cancelled.
+		distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+
+		g, gCtx := errgroup.WithContext(distillCtx)
+		g.Go(func() error {
+			distilled, err := a.memoryManager.DistillTask(gCtx, taskID)
+			if err != nil {
+				slog.Warn("Failed to distill task", "error", err, "task_id", taskID)
+				return err
+			}
+			return a.memoryManager.StoreDistilledTask(gCtx, taskID, distilled)
+		})
+
+		if err := g.Wait(); err != nil {
+			slog.Error("Error in async distillation", "error", err, "task_id", taskID)
+		}
+	}()
+}
+
 // Process handles user input and orchestrates the recommendation workflow with automatic memory management.
 func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
@@ -255,62 +401,8 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, errors.Wrapf(coreerrors.ErrInvalidInput, "expected string, []byte, or fmt.Stringer, got %T", input)
 	}
 
-	var sessionID string
-	if a.memoryManager != nil {
-		a.mu.Lock()
-		sessionID = a.sessionID
-		if sessionID == "" {
-			newSessionID, err := a.memoryManager.CreateSession(ctx, "default_user")
-			if err != nil {
-				slog.Warn("Failed to create session", "error", err)
-			} else {
-				sessionID = newSessionID
-				a.sessionID = sessionID
-			}
-		}
-		a.mu.Unlock()
-
-		// Add user input to memory
-		if err := a.memoryManager.AddMessage(ctx, sessionID, "user", strInput); err != nil {
-			slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
-		}
-
-		// Build input with context
-		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, sessionID)
-		if err != nil {
-			slog.Warn("memory operation failed, proceeding without", "operation", "BuildContext", "error", err)
-		} else {
-			strInput = inputWithContext
-		}
-
-		// Search similar tasks for context
-		similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, strInput, 3)
-		if err != nil {
-			slog.Warn("memory operation failed, proceeding without", "operation", "SearchSimilarTasks", "error", err)
-		} else if len(similarTasks) > 0 {
-			slog.Debug("Found similar tasks", "count", len(similarTasks))
-			contextStr := "\n\nSimilar previous tasks:\n"
-			for _, task := range similarTasks {
-				if taskInput, ok := task.Payload["input"].(string); ok {
-					contextStr += fmt.Sprintf("- %s\n", taskInput)
-				}
-			}
-			strInput += contextStr
-		}
-	}
-
-	// Memory: Create task
-	var taskID string
-	if a.memoryManager != nil {
-		var err error
-		taskID, err = a.memoryManager.CreateTask(ctx, sessionID, "default_user", strInput)
-		if err != nil {
-			slog.Warn("Failed to create task - proceeding without task tracking",
-				"error", err,
-				"session_id", sessionID,
-				"impact", "task will not be tracked for distillation")
-		}
-	}
+	// Initialize memory context (session, messages, similar tasks, task record).
+	strInput, sessionID, taskID := a.initMemoryContext(ctx, strInput)
 
 	// Step 1: Parse profile
 	stepCount++
@@ -362,55 +454,8 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, err
 	}
 
-	// Memory: Update task output and add result to memory
-	resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
-	if a.memoryManager != nil && taskID != "" {
-		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
-			slog.Warn("memory operation failed, proceeding without", "operation", "UpdateTaskOutput", "error", err)
-		}
-	}
-	// Add assistant response to memory
-	if a.memoryManager != nil {
-		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "assistant", resultStr); err != nil {
-			slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
-		}
-
-		// Run distillation in background goroutine with proper lifecycle management.
-		// Context is created inside the goroutine to avoid race: defer cancel() in the
-		// parent function would cancel the context before the goroutine starts.
-		a.distillWg.Add(1)
-		go func() {
-			defer a.distillWg.Done()
-
-			// Check if agent is stopped before starting.
-			select {
-			case <-a.stopCh:
-				slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
-				return
-			default:
-			}
-
-			// Create a detached context with its own timeout so distillation
-			// continues even if the parent request is cancelled.
-			// We use the request context as the base but give it its own timeout.
-			distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			defer cancel()
-
-			g, gCtx := errgroup.WithContext(distillCtx)
-			g.Go(func() error {
-				distilled, err := a.memoryManager.DistillTask(gCtx, taskID)
-				if err != nil {
-					slog.Warn("Failed to distill task", "error", err, "task_id", taskID)
-					return err
-				}
-				return a.memoryManager.StoreDistilledTask(gCtx, taskID, distilled)
-			})
-
-			if err := g.Wait(); err != nil {
-				slog.Error("Error in async distillation", "error", err, "task_id", taskID)
-			}
-		}()
-	}
+	// Finalize memory (update task, record assistant message, distill).
+	a.finalizeMemory(ctx, sessionID, taskID, result)
 
 	return result, nil
 }
@@ -443,4 +488,128 @@ func (a *leaderAgent) Heartbeat(ctx context.Context) error {
 // IsAlive checks if the agent is alive.
 func (a *leaderAgent) IsAlive() bool {
 	return a.Status() == models.AgentStatusReady || a.Status() == models.AgentStatusBusy
+}
+
+// ProcessStream handles user input and returns a stream of events.
+// It follows the same workflow as Process but emits events at each phase.
+func (a *leaderAgent) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
+		return nil, coreerrors.ErrAgentNotReady
+	}
+
+	if a.Status() == models.AgentStatusOffline {
+		if err := a.Start(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	var strInput string
+	switch v := input.(type) {
+	case string:
+		strInput = v
+	case []byte:
+		strInput = string(v)
+	case fmt.Stringer:
+		strInput = v.String()
+	default:
+		return nil, errors.Wrapf(coreerrors.ErrInvalidInput, "expected string, []byte, or fmt.Stringer, got %T", input)
+	}
+
+	// Initialize memory context (session, messages, similar tasks, task record).
+	strInput, sessionID, taskID := a.initMemoryContext(ctx, strInput)
+
+	ch := make(chan base.AgentEvent, 64)
+
+	go func() {
+		defer close(ch)
+
+		a.setStatus(models.AgentStatusBusy)
+		defer a.setStatus(models.AgentStatusReady)
+
+		// Send planning event
+		select {
+		case ch <- base.AgentEvent{Type: base.EventPlanning, Source: a.id, Data: strInput}:
+		case <-ctx.Done():
+			return
+		}
+
+		// Parse profile
+		profile, err := a.parser.Parse(ctx, strInput)
+		if err != nil {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		// Plan tasks
+		tasks, err := a.planner.Plan(ctx, profile, strInput)
+		if err != nil {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		slog.Info("Leader tasks created", "module", "leader", "count", len(tasks))
+
+		// Dispatch tasks and emit events
+		var allResults []*models.TaskResult
+		for i, task := range tasks {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventTaskStart, Source: a.id, Data: task}:
+			case <-ctx.Done():
+				return
+			}
+
+			// Execute task
+			result, err := a.dispatcher.Dispatch(ctx, []*models.Task{task})
+			if err != nil {
+				select {
+				case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: &models.TaskResult{TaskID: task.TaskID, Success: false, Error: err.Error()}}:
+				case <-ctx.Done():
+					return
+				}
+				continue
+			}
+
+			if len(result) > 0 {
+				select {
+				case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: result[0]}:
+				case <-ctx.Done():
+					return
+				}
+				allResults = append(allResults, result...)
+			}
+			slog.Debug("Task completed", "index", i, "task_id", task.TaskID)
+		}
+
+		// Aggregate results
+		select {
+		case ch <- base.AgentEvent{Type: base.EventAggregating, Source: a.id}:
+		case <-ctx.Done():
+			return
+		}
+
+		result, err := a.aggregator.Aggregate(ctx, allResults, tasks)
+		if err != nil {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		// Finalize memory (update task, record assistant message, distill).
+		a.finalizeMemory(ctx, sessionID, taskID, result)
+
+		// Send final result
+		select {
+		case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Data: result}:
+		case <-ctx.Done():
+		}
+	}()
+
+	return ch, nil
 }

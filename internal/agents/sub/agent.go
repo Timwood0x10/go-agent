@@ -199,3 +199,66 @@ func (a *subAgent) Execute(ctx context.Context, task *models.Task) (*models.Task
 	}
 	return a.executor.Execute(ctx, task)
 }
+
+// ProcessStream handles input and returns a stream of events.
+func (a *subAgent) ProcessStream(ctx context.Context, input any) (<-chan base.AgentEvent, error) {
+	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
+		return nil, errors.ErrAgentNotReady
+	}
+
+	if a.Status() == models.AgentStatusOffline {
+		if err := a.Start(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	task, ok := input.(*models.Task)
+	if !ok {
+		return nil, errors.ErrInvalidInput
+	}
+
+	if a.executor == nil {
+		return nil, errors.ErrInvalidState
+	}
+
+	ch := make(chan base.AgentEvent, 64)
+
+	go func() {
+		defer close(ch)
+
+		a.setStatus(models.AgentStatusBusy)
+		defer a.setStatus(models.AgentStatusReady)
+
+		// Send task start event
+		select {
+		case ch <- base.AgentEvent{Type: base.EventTaskStart, Source: a.id, Data: task}:
+		case <-ctx.Done():
+			return
+		}
+
+		// Execute task
+		result, err := a.executor.Execute(ctx, task)
+		if err != nil {
+			select {
+			case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		// Send task complete event
+		select {
+		case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: result}:
+		case <-ctx.Done():
+			return
+		}
+
+		// Send final result
+		select {
+		case ch <- base.AgentEvent{Type: base.EventComplete, Source: a.id, Data: result}:
+		case <-ctx.Done():
+		}
+	}()
+
+	return ch, nil
+}
