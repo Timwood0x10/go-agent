@@ -391,8 +391,9 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 			}
 
 			// Create a detached context with its own timeout so distillation
-			// is not cancelled when the parent request returns.
-			distillCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			// continues even if the parent request is cancelled.
+			// We use the request context as the base but give it its own timeout.
+			distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
 			g, gCtx := errgroup.WithContext(distillCtx)
