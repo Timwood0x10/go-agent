@@ -113,6 +113,81 @@ func (a *OllamaAdapter) GetModel() string {
 	return a.config.Model
 }
 
+// GenerateStream generates text as a stream of chunks using Ollama API.
+func (a *OllamaAdapter) GenerateStream(ctx context.Context, prompt string) (<-chan StreamChunk, error) {
+	if prompt == "" {
+		return nil, gerr.New("empty prompt")
+	}
+
+	reqBody := map[string]interface{}{
+		"model":       a.config.Model,
+		"prompt":      prompt,
+		"stream":      true,
+		"temperature": a.config.Temperature,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, gerr.Wrap(err, "marshal stream request")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		a.config.BaseURL+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return nil, gerr.Wrap(err, "create stream request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, gerr.Wrap(err, "send stream request")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return nil, gerr.Newf("ollama stream error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	ch := make(chan StreamChunk, 64)
+
+	go func() {
+		defer close(ch)
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				slog.Error("Failed to close stream response body", "error", err)
+			}
+		}()
+
+		decoder := json.NewDecoder(resp.Body)
+		for {
+			var chunk OllamaResponse
+			if err := decoder.Decode(&chunk); err != nil {
+				if err != io.EOF {
+					select {
+					case ch <- StreamChunk{Done: true, Err: gerr.Wrap(err, "decode stream chunk")}:
+					case <-ctx.Done():
+					}
+				}
+				return
+			}
+
+			if chunk.Done {
+				return
+			}
+
+			select {
+			case ch <- StreamChunk{Content: chunk.Response}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 // OllamaResponse represents Ollama API response.
 type OllamaResponse struct {
 	Model     string `json:"model"`
