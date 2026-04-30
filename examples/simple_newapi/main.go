@@ -3,18 +3,16 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
 	"strings"
 
 	"goagent/api/client"
-	"goagent/internal/workflow/engine"
 )
 
 func main() {
-	log.Println("=== GoAgent Fashion Recommendation System with Workflow ===")
+	log.Println("=== GoAgent Multi-Agent Workflow Example ===")
 
 	// Step 1: Load config and create client
 	goagentClient, err := client.NewClientFromDefaultPath()
@@ -24,7 +22,7 @@ func main() {
 	}
 	defer func() {
 		if err := goagentClient.Close(context.Background()); err != nil {
-			slog.Error("Failed to close GOAGENT CLient", "error", err)
+			slog.Error("Failed to close GoAgent client", "error", err)
 		}
 	}()
 
@@ -37,7 +35,7 @@ func main() {
 	}
 
 	// User query
-	userQuery := "I want casual clothes for daily commute, budget 500-1000 yuan, prefer black and white"
+	userQuery := "Analyze the latest tech trends in AI and cloud computing, summarize key findings with priorities"
 	log.Printf("\n=== User Query ===\n%s\n", userQuery)
 
 	// Step 2: Create workflow client
@@ -65,76 +63,74 @@ func main() {
 	log.Printf("Total Steps: %d", len(result.Steps))
 
 	// Show each step result
-	log.Println("\n=== Recommendation Results ===")
+	log.Println("\n=== Task Results ===")
 
-	// Parse and display recommendations by category
+	// Parse and display task results by category
 	for _, step := range result.Steps {
 		if step.Status != "completed" {
 			continue
 		}
 
-		items := parseRecommendations(step.Output)
+		items := parseTaskResults(step.Output)
 		if len(items) == 0 {
 			continue
 		}
 
-		// Get emoji based on step name
-		emoji := getStepEmoji(step.Name)
-
-		log.Printf("\n%s %s:", emoji, step.Name)
+		log.Printf("\n%s:", step.Name)
 
 		for i, item := range items {
 			if i >= 3 { // Only show top 3
 				break
 			}
 
-			priceStr := ""
-			if item.Price > 0 {
-				priceStr = fmt.Sprintf(" - ¥%.0f", item.Price)
-			}
-
-			log.Printf("  %d. %s%s", i+1, item.Name, priceStr)
+			log.Printf("  %d. %s", i+1, item.Name)
 			if item.Reason != "" {
 				log.Printf("     Reason: %s", item.Reason)
 			}
 		}
 	}
 
+	// Count completed steps
+	completedCount := 0
+	for _, step := range result.Steps {
+		if step.Status == "completed" {
+			completedCount++
+		}
+	}
+
 	// Show summary
-	log.Printf("\n✓ Generated %d categories of recommendations in %.1f seconds", countCompletedSteps(result.Steps), result.Duration.Seconds())
+	log.Printf("\nCompleted %d task steps in %.1f seconds", completedCount, result.Duration.Seconds())
 
 	log.Println("\n=== Done! ===")
 }
 
-// parseRecommendations parses JSON output and extracts recommendation items.
-func parseRecommendations(output string) []RecommendationItem {
+// parseTaskResults parses JSON output and extracts task result items.
+func parseTaskResults(output string) []TaskResultItem {
 	// Try to extract JSON from output
 	jsonStart := strings.Index(output, "{")
 	jsonEnd := strings.LastIndex(output, "}")
 
 	if jsonStart == -1 || jsonEnd == -1 {
-		return []RecommendationItem{}
+		return []TaskResultItem{}
 	}
 
 	jsonStr := output[jsonStart : jsonEnd+1]
 
 	var result struct {
 		Items []struct {
-			Name   string  `json:"name"`
-			Price  float64 `json:"price"`
-			Reason string  `json:"reason"`
+			Name   string `json:"name"`
+			Reason string `json:"reason"`
 		} `json:"items"`
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		return []RecommendationItem{}
+		return []TaskResultItem{}
 	}
 
-	items := make([]RecommendationItem, 0, len(result.Items))
+	items := make([]TaskResultItem, 0, len(result.Items))
 	for _, item := range result.Items {
-		items = append(items, RecommendationItem{
+		items = append(items, TaskResultItem{
 			Name:   item.Name,
-			Price:  item.Price,
 			Reason: item.Reason,
 		})
 	}
@@ -142,42 +138,8 @@ func parseRecommendations(output string) []RecommendationItem {
 	return items
 }
 
-// RecommendationItem represents a parsed recommendation item.
-type RecommendationItem struct {
+// TaskResultItem represents a parsed task result item.
+type TaskResultItem struct {
 	Name   string
-	Price  float64
 	Reason string
-}
-
-// getStepEmoji returns an emoji based on step name.
-func getStepEmoji(stepName string) string {
-	stepName = strings.ToLower(stepName)
-
-	switch {
-	case strings.Contains(stepName, "top") || strings.Contains(stepName, "上衣"):
-		return "👕"
-	case strings.Contains(stepName, "bottom") || strings.Contains(stepName, "下装"):
-		return "👖"
-	case strings.Contains(stepName, "shoe") || strings.Contains(stepName, "鞋"):
-		return "👞"
-	case strings.Contains(stepName, "accessory") || strings.Contains(stepName, "配饰"):
-		return "🎒"
-	case strings.Contains(stepName, "extract") || strings.Contains(stepName, "提取"):
-		return "📋"
-	case strings.Contains(stepName, "aggregate") || strings.Contains(stepName, "聚合"):
-		return "✨"
-	default:
-		return "📦"
-	}
-}
-
-// countCompletedSteps counts how many steps completed successfully.
-func countCompletedSteps(steps []*engine.StepResult) int {
-	count := 0
-	for _, step := range steps {
-		if step.Status == "completed" {
-			count++
-		}
-	}
-	return count
 }

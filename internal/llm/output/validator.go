@@ -13,7 +13,7 @@ import (
 // Validator validates data against schemas.
 type Validator struct {
 	customValidators map[string]ValidatorFunc
-	schemaType       string   // "fashion", "travel"
+	schemaType       string   // Schema type for validation (e.g., "default", "travel", "custom")
 	regexCache       sync.Map // Cache compiled regex patterns
 }
 
@@ -34,7 +34,7 @@ func WithSchemaType(schemaType string) ValidatorOption {
 func NewValidator(opts ...ValidatorOption) *Validator {
 	v := &Validator{
 		customValidators: make(map[string]ValidatorFunc),
-		schemaType:       "fashion", // default
+		schemaType:       "default", // default schema type
 	}
 
 	// Apply options
@@ -320,7 +320,7 @@ func (v *Validator) getSchema() *Schema {
 	switch v.schemaType {
 	case "travel":
 		return GetTravelResultSchema()
-	case "fashion":
+	case "default":
 		return GetRecommendResultSchema()
 	default:
 		return GetRecommendResultSchema()

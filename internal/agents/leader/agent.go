@@ -27,9 +27,9 @@ type ProfileParser interface {
 	Parse(ctx context.Context, input string) (*models.UserProfile, error)
 }
 
-// TaskPlanner plans tasks based on user profile.
+// TaskPlanner plans tasks based on user profile and input text.
 type TaskPlanner interface {
-	Plan(ctx context.Context, profile *models.UserProfile) ([]*models.Task, error)
+	Plan(ctx context.Context, profile *models.UserProfile, inputText string) ([]*models.Task, error)
 }
 
 // TaskDispatcher dispatches tasks to sub-agents.
@@ -40,7 +40,7 @@ type TaskDispatcher interface {
 
 // ResultAggregator aggregates results from sub-agents.
 type ResultAggregator interface {
-	Aggregate(ctx context.Context, results []*models.TaskResult) (*models.RecommendResult, error)
+	Aggregate(ctx context.Context, results []*models.TaskResult, tasks []*models.Task) (*models.RecommendResult, error)
 }
 
 // leaderAgent implements the Leader Agent.
@@ -272,31 +272,21 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 
 		// Add user input to memory
 		if err := a.memoryManager.AddMessage(ctx, sessionID, "user", strInput); err != nil {
-			slog.Warn("Failed to add user message to memory - proceeding without history logging",
-				"error", err,
-				"session_id", sessionID,
-				"impact", "message will not be available in conversation history")
-			return nil, errors.Wrap(err, "failed to add user message to memory")
+			slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
 		}
 
 		// Build input with context
 		inputWithContext, err := a.memoryManager.BuildContext(ctx, strInput, sessionID)
 		if err != nil {
-			slog.Warn("Failed to build context - proceeding without conversation history",
-				"error", err,
-				"session_id", sessionID,
-				"impact", "agent will not have previous context")
-			return nil, errors.Wrap(err, "failed to build context")
+			slog.Warn("memory operation failed, proceeding without", "operation", "BuildContext", "error", err)
+		} else {
+			strInput = inputWithContext
 		}
-		strInput = inputWithContext
 
 		// Search similar tasks for context
 		similarTasks, err := a.memoryManager.SearchSimilarTasks(ctx, strInput, 3)
 		if err != nil {
-			slog.Warn("Failed to search similar tasks - proceeding without task context",
-				"error", err,
-				"impact", "agent will not have similar task examples")
-			return nil, errors.Wrap(err, "failed to search similar tasks")
+			slog.Warn("memory operation failed, proceeding without", "operation", "SearchSimilarTasks", "error", err)
 		} else if len(similarTasks) > 0 {
 			slog.Debug("Found similar tasks", "count", len(similarTasks))
 			contextStr := "\n\nSimilar previous tasks:\n"
@@ -339,7 +329,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
-	tasks, err := a.planner.Plan(ctx, profile)
+	tasks, err := a.planner.Plan(ctx, profile, strInput)
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +357,7 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 		return nil, coreerrors.ErrMaxStepsExceeded
 	}
 
-	result, err := a.aggregator.Aggregate(ctx, results)
+	result, err := a.aggregator.Aggregate(ctx, results, tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -376,54 +366,45 @@ func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
 	resultStr := fmt.Sprintf("Generated %d items", len(result.Items))
 	if a.memoryManager != nil && taskID != "" {
 		if err := a.memoryManager.UpdateTaskOutput(ctx, taskID, resultStr); err != nil {
-			slog.Warn("Failed to update task output - proceeding without output tracking",
-				"error", err,
-				"task_id", taskID,
-				"impact", "task output will not be available for analysis")
-			return nil, errors.Wrap(err, "failed to update task output")
+			slog.Warn("memory operation failed, proceeding without", "operation", "UpdateTaskOutput", "error", err)
 		}
 	}
 	// Add assistant response to memory
 	if a.memoryManager != nil {
 		if err := a.memoryManager.AddMessage(ctx, a.sessionID, "assistant", resultStr); err != nil {
-			slog.Warn("Failed to add assistant message to memory - proceeding without history logging",
-				"error", err,
-				"session_id", a.sessionID,
-				"impact", "response will not be available in conversation history")
-			return nil, errors.Wrap(err, "failed to add assistant message to memory")
+			slog.Warn("memory operation failed, proceeding without", "operation", "AddMessage", "error", err)
 		}
 
-		// Async distillation with timeout context derived from request context.
-		// This ensures the async task is cancelled when the parent request is cancelled,
-		// while still having its own timeout boundary.
-		distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		defer cancel() // Ensure context is cancelled when function returns
-		g, distillCtx := errgroup.WithContext(distillCtx)
-		g.Go(func() error {
-			distilled, err := a.memoryManager.DistillTask(distillCtx, taskID)
-			if err != nil {
-				slog.Warn("Failed to distill task", "error", err)
-				return err
-			}
-
-			return a.memoryManager.StoreDistilledTask(distillCtx, taskID, distilled)
-		})
-
-		// Run distillation in background goroutine with proper lifecycle management
+		// Run distillation in background goroutine with proper lifecycle management.
+		// Context is created inside the goroutine to avoid race: defer cancel() in the
+		// parent function would cancel the context before the goroutine starts.
 		a.distillWg.Add(1)
 		go func() {
 			defer a.distillWg.Done()
 
-			// Check if agent is stopped before starting
+			// Check if agent is stopped before starting.
 			select {
 			case <-a.stopCh:
 				slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
 				return
-			case <-distillCtx.Done():
-				slog.Debug("Distillation skipped: context cancelled", "task_id", taskID)
-				return
 			default:
 			}
+
+			// Create a detached context with its own timeout so distillation
+			// continues even if the parent request is cancelled.
+			// We use the request context as the base but give it its own timeout.
+			distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+
+			g, gCtx := errgroup.WithContext(distillCtx)
+			g.Go(func() error {
+				distilled, err := a.memoryManager.DistillTask(gCtx, taskID)
+				if err != nil {
+					slog.Warn("Failed to distill task", "error", err, "task_id", taskID)
+					return err
+				}
+				return a.memoryManager.StoreDistilledTask(gCtx, taskID, distilled)
+			})
 
 			if err := g.Wait(); err != nil {
 				slog.Error("Error in async distillation", "error", err, "task_id", taskID)

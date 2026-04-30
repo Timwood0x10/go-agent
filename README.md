@@ -260,6 +260,37 @@ goagent/
 - [Embedding Service Documentation](services/embedding/README.md) - Embedding service details
 - [Integration Guide](docs/integration_guide.md) - How to integrate into existing projects
 
+## Migration Guide (v0.2)
+
+### Breaking Changes
+
+1. **`TaskPlanner.Plan()` signature changed**
+   - Before: `Plan(ctx, profile)` (2 args)
+   - After: `Plan(ctx, profile, inputText)` (3 args)
+   - Fix: Add `inputText` parameter to all `Plan()` calls.
+
+2. **`NewResultAggregator()` requires `sortBy` parameter**
+   - Before: `NewResultAggregator(enableDedupe, maxItems)`
+   - After: `NewResultAggregator(enableDedupe, maxItems, sortBy)`
+   - Fix: Add `leader.SortByNone` (or `SortByPriority` / `SortByCreatedAt`) as third argument.
+
+3. **Fashion-specific constants removed**
+   - Removed: `AgentTypeShoes`, `AgentTypeHead`, `AgentTypeAccessory`, `StyleCasual`, `StyleFormal`, `StyleStreet`, `OccasionDaily`, `OccasionParty`, `OccasionDate`
+   - Fix: Replace with `models.StyleTag("...")` and `models.Occasion("...")` string types.
+
+4. **Domain types renamed** (`internal/tools/resources/types/`)
+   - `FashionFilters` → `ResourceFilters`
+   - `FashionItem` → `ResourceItem`
+   - `AgentProfile` → `AgentUserProfile`
+   - `AgentRecommendation` → `TaskRecommendation`
+   - `OutfitSuggestion` → `Suggestion`
+   - `AgentTrend` → `Trend`
+
+5. **Validation default schema type changed**
+   - Before: `"fashion"`
+   - After: `"default"`
+   - Fix: Update config if explicitly setting `validation.schema_type`.
+
 ## Examples
 
 - [Travel Planning](examples/travel/) - Multi-agent collaboration
@@ -285,11 +316,12 @@ go test -cover ./...
 ### Building Project
 
 ```bash
-# Build main program
-go build -o bin/goagent ./cmd/server
-
 # Build examples
+go build -o bin/simple ./examples/simple
 go build -o bin/travel ./examples/travel
+
+# Build CLI tools
+go build -o bin/migrate ./cmd/migrate_goagent
 ```
 
 ### Code Standards

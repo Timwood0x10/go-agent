@@ -50,14 +50,14 @@ func TestProfileRepository_Create(t *testing.T) {
 			Age:        28,
 			Occupation: "Software Engineer",
 			Style: []models.StyleTag{
-				models.StyleCasual,
+				models.StyleTag("casual"),
 				models.StyleMinimalist,
 			},
 			Budget: models.NewPriceRange(50.0, 200.0),
 			Colors: []string{"black", "white", "blue", "gray"},
 			Occasions: []models.Occasion{
 				models.OccasionWork,
-				models.OccasionDaily,
+				models.Occasion("daily"),
 			},
 			BodyType: "slim",
 			Preferences: map[string]any{
@@ -183,7 +183,7 @@ func TestProfileRepository_Update(t *testing.T) {
 			Age:        29,
 			Occupation: "Senior Software Engineer",
 			Style: []models.StyleTag{
-				models.StyleCasual,
+				models.StyleTag("casual"),
 				models.StyleMinimalist,
 			},
 			Budget: models.NewPriceRange(75.0, 250.0),
@@ -191,7 +191,7 @@ func TestProfileRepository_Update(t *testing.T) {
 			Occasions: []models.Occasion{
 				models.OccasionWork,
 				models.OccasionFormal,
-				models.OccasionDaily,
+				models.Occasion("daily"),
 			},
 			BodyType: "athletic",
 			Preferences: map[string]any{

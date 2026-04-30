@@ -8,9 +8,12 @@ import (
 	"goagent/internal/core/models"
 	"goagent/internal/llm/output"
 	"goagent/internal/protocol/ahp"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestTaskExecutor_Execute(t *testing.T) {
+func TestTaskExecutor_Execute_NilTask_ReturnsError(t *testing.T) {
 	executor := NewTaskExecutor(
 		nil,                        // toolBinder
 		nil,                        // llmAdapter
@@ -20,23 +23,33 @@ func TestTaskExecutor_Execute(t *testing.T) {
 		3,                          // maxRetries
 	)
 
+	result, err := executor.Execute(context.Background(), nil)
+	require.NoError(t, err)
+	assert.False(t, result.Success, "Execute() should fail for nil task")
+}
+
+func TestTaskExecutor_Execute_NilLLMAdapter_ReturnsFallbackError(t *testing.T) {
+	// When llmAdapter is nil, executeByType is called as fallback.
+	// executeByType always returns an error since there are no type-specific handlers.
+	executor := NewTaskExecutor(
+		nil,
+		nil,
+		output.NewTemplateEngine(),
+		"{{.category}}",
+		output.NewValidator(),
+		3,
+	)
+
 	task := models.NewTask("task_1", models.AgentTypeTop, &models.UserProfile{})
 
 	result, err := executor.Execute(context.Background(), task)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if !result.Success {
-		t.Error("Execute() should succeed for valid task")
-	}
-
-	if len(result.Items) == 0 {
-		t.Error("Execute() should return items")
-	}
+	require.NoError(t, err)
+	assert.False(t, result.Success, "Execute() should fail when no fallback handler exists")
+	assert.Contains(t, result.Error, "no fallback handler")
 }
 
-func TestTaskExecutor_ExecuteNilTask(t *testing.T) {
+func TestTaskExecutor_Execute_NilProfile_ReturnsFallbackError(t *testing.T) {
+	// When task has no UserProfile and no LLM adapter, fallback is used.
 	executor := NewTaskExecutor(
 		nil,
 		nil,
@@ -46,17 +59,15 @@ func TestTaskExecutor_ExecuteNilTask(t *testing.T) {
 		3,
 	)
 
-	result, err := executor.Execute(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	task := models.NewTask("task_1", models.AgentTypeTop, nil)
 
-	if result.Success {
-		t.Error("Execute() should fail for nil task")
-	}
+	result, err := executor.Execute(context.Background(), task)
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "no fallback handler")
 }
 
-func TestTaskExecutor_ExecuteByType(t *testing.T) {
+func TestExecuteByType_UnknownType_ReturnsError(t *testing.T) {
 	executor := NewTaskExecutor(
 		nil,
 		nil,
@@ -66,29 +77,14 @@ func TestTaskExecutor_ExecuteByType(t *testing.T) {
 		3,
 	)
 
-	tests := []struct {
-		agentType models.AgentType
-		wantItems int
-	}{
-		{models.AgentTypeTop, 1},
-		{models.AgentTypeBottom, 1},
-		{models.AgentTypeShoes, 1},
-		{models.AgentTypeHead, 1},
-		{models.AgentTypeAccessory, 1},
-	}
+	// Use an AgentType that has no handler
+	task := models.NewTask("task_test", models.AgentType("unknown_agent_type"), nil)
 
-	for _, tt := range tests {
-		t.Run(string(tt.agentType), func(t *testing.T) {
-			task := models.NewTask("task_test", tt.agentType, &models.UserProfile{})
-			result, err := executor.Execute(context.Background(), task)
-			if err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if len(result.Items) != tt.wantItems {
-				t.Errorf("Execute() got %d items, want %d", len(result.Items), tt.wantItems)
-			}
-		})
-	}
+	result, err := executor.Execute(context.Background(), task)
+	require.NoError(t, err)
+	assert.False(t, result.Success, "Execute() should fail for unknown agent type")
+	assert.Contains(t, result.Error, "no fallback handler",
+		"error message should contain 'no fallback handler'")
 }
 
 func TestMessageHandler_Handle(t *testing.T) {

@@ -176,6 +176,12 @@ func (e *Executor) runSteps(
 
 		stepID := executionOrder[stepIndex]
 		step := e.findStep(workflow.Steps, stepID)
+		if step == nil {
+			errChan <- fmt.Errorf("step %q not found in workflow definition", stepID)
+			wg.Wait()
+			close(resultChan)
+			return
+		}
 
 		if !e.canExecute(step, completed, &mu) {
 			mu.Lock()
@@ -299,7 +305,7 @@ func (e *Executor) runSteps(
 
 		if !isProcessed {
 			step := e.findStep(workflow.Steps, sid)
-			if !e.canExecute(step, completed, &mu) {
+			if step == nil || !e.canExecute(step, completed, &mu) {
 				pending = true
 				break
 			}

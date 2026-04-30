@@ -40,7 +40,11 @@ func (t *Task) IsExpired() bool {
 	return !t.Deadline.IsZero() && time.Now().After(t.Deadline)
 }
 
-// TaskResult represents the result of a task execution.
+// TaskResult represents the result of a task execution. The Items field
+// retains []*RecommendItem for backward compatibility, but in general-purpose
+// scenarios prefer using the Metadata field (or a dedicated Content field if
+// added) as the primary data carrier. Items is only relevant when the task
+// produces domain-specific structured results.
 type TaskResult struct {
 	TaskID    string           `json:"task_id"`
 	AgentType AgentType        `json:"agent_type"`

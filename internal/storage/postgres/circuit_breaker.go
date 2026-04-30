@@ -68,18 +68,16 @@ func (cb *CircuitBreaker) AllowRequest() error {
 
 	case CircuitBreakerStateOpen:
 		if time.Since(cb.lastFailureTime) > cb.openTimeout {
-			// Move to half-open state and reset counter
+			// Move to half-open state and allow one probe request.
 			cb.state = CircuitBreakerStateHalfOpen
 			cb.halfOpenSuccess = 0
-			cb.halfOpenInflight.Store(0) // Reset inflight counter
+			cb.halfOpenInflight.Store(1) // Reserve the single half-open slot.
 			return nil
 		}
 		return errors.ErrCircuitBreakerOpen
 
 	case CircuitBreakerStateHalfOpen:
-		inflight := cb.halfOpenInflight.Add(1)
-		if inflight > 1 {
-			cb.halfOpenInflight.Add(-1)
+		if !cb.halfOpenInflight.CompareAndSwap(0, 1) {
 			return errors.ErrCircuitBreakerOpen
 		}
 		return nil

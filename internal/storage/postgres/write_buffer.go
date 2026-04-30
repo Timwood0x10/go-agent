@@ -129,6 +129,11 @@ func (b *WriteBuffer) processLoop(ctx context.Context) error {
 			if item == nil {
 				return nil
 			}
+			// Skip new items while retrying to prevent unbounded batch growth.
+			if retryCount > 0 {
+				slog.Warn("Dropping write item during flush retry", "table", item.Table)
+				continue
+			}
 			batch = append(batch, item)
 			if len(batch) >= b.batchSize {
 				if err := b.flushBatch(ctx, batch); err != nil {
@@ -138,8 +143,8 @@ func (b *WriteBuffer) processLoop(ctx context.Context) error {
 						slog.Warn("Retrying batch flush", "retry_count", retryCount)
 						continue
 					}
-					slog.Error("Max retries reached, keeping batch in buffer", "batch_size", len(batch))
-					// Keep batch in buffer and reset retry count for next attempt
+					slog.Error("Max retries reached, discarding batch to prevent memory growth", "batch_size", len(batch))
+					batch = batch[:0]
 					retryCount = 0
 					continue
 				}
@@ -156,8 +161,8 @@ func (b *WriteBuffer) processLoop(ctx context.Context) error {
 						slog.Warn("Retrying batch flush on timer", "retry_count", retryCount)
 						continue
 					}
-					slog.Error("Max retries reached, keeping batch in buffer", "batch_size", len(batch))
-					// Keep batch in buffer and reset retry count for next attempt
+					slog.Error("Max retries reached, discarding batch to prevent memory growth", "batch_size", len(batch))
+					batch = batch[:0]
 					retryCount = 0
 					continue
 				}
@@ -172,9 +177,9 @@ func (b *WriteBuffer) processLoop(ctx context.Context) error {
 // This is non-blocking and returns immediately if the buffer has capacity.
 // If the buffer is full, it returns an error instead of spawning a goroutine.
 //
-// Thread-safety: Uses mutex to protect channel send operation, preventing
-// TOCTOU (Time-Of-Check-Time-Of-Use) race condition where the channel
-// could be closed between the stopped check and the send operation.
+// Thread-safety: The stopped flag is checked and set atomically under mutex.
+// Channel send is performed outside the lock to prevent deadlock when the
+// buffer is full and Stop() is called concurrently.
 //
 // Args:
 // ctx - context for cancellation.
@@ -185,32 +190,50 @@ func (b *WriteBuffer) Write(ctx context.Context, item *WriteItem) error {
 		return coreerrors.ErrInvalidArgument
 	}
 
+	// Check stopped flag under lock to prevent race with Stop().
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	stopped := b.stopped.Load()
+	b.mu.Unlock()
 
-	// Check stopped flag under lock to prevent race condition
-	if b.stopped.Load() {
+	if stopped {
 		return coreerrors.ErrServiceUnavailable
 	}
 
+	// Channel send outside lock to prevent deadlock:
+	// If buffer is full and Stop() is called, Stop() can acquire b.mu
+	// to set stopped=true and close the channel, unblocking this send.
+	// Recover from send-on-closed-channel panic (race between check and send).
+	if b.safeSend(item, ctx) {
+		return nil
+	}
+	return coreerrors.ErrServiceUnavailable
+}
+
+// safeSend attempts to send an item to the buffer channel, recovering from
+// panic caused by send on a closed channel (race between stopped check and Stop).
+func (b *WriteBuffer) safeSend(item *WriteItem, ctx context.Context) (sent bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Channel was closed between stopped check and send.
+			sent = false
+		}
+	}()
+
 	select {
 	case b.buffer <- item:
-		return nil
+		return true
 	case <-ctx.Done():
-		return ctx.Err()
+		return false
 	default:
-		// Buffer is full, implement backpressure with retry
-		// Instead of immediately failing, we'll wait a bit and retry
-		// This prevents data loss while providing backpressure
+		// Buffer is full, retry once with brief wait.
 		select {
 		case <-time.After(100 * time.Millisecond):
-			// Brief wait before retry
 		case b.buffer <- item:
-			return nil
+			return true
 		case <-ctx.Done():
-			return ctx.Err()
+			return false
 		}
-		return coreerrors.ErrBufferFull
+		return false
 	}
 }
 

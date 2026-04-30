@@ -32,9 +32,9 @@ func TestStyleTag(t *testing.T) {
 		tag      StyleTag
 		expected string
 	}{
-		{"casual", StyleCasual, "casual"},
-		{"formal", StyleFormal, "formal"},
-		{"street", StyleStreet, "street"},
+		{"casual", StyleTag("casual"), "casual"},
+		{"formal", StyleTag("formal"), "formal"},
+		{"street", StyleTag("street"), "street"},
 		{"sporty", Sporty, "sporty"},
 		{"minimalist", StyleMinimalist, "minimalist"},
 		{"vintage", StyleVintage, "vintage"},
@@ -56,10 +56,10 @@ func TestOccasion(t *testing.T) {
 		occasion Occasion
 		expected string
 	}{
-		{"daily", OccasionDaily, "daily"},
+		{"daily", Occasion("daily"), "daily"},
 		{"work", OccasionWork, "work"},
-		{"party", OccasionParty, "party"},
-		{"date", OccasionDate, "date"},
+		{"party", Occasion("party"), "party"},
+		{"date", Occasion("date"), "date"},
 		{"sports", OccasionSports, "sports"},
 		{"formal", OccasionFormal, "formal"},
 		{"vacation", OccasionVacation, "vacation"},
@@ -83,9 +83,9 @@ func TestAgentType(t *testing.T) {
 		{"leader", AgentTypeLeader, "leader"},
 		{"top", AgentTypeTop, "agent_top"},
 		{"bottom", AgentTypeBottom, "agent_bottom"},
-		{"shoes", AgentTypeShoes, "agent_shoes"},
-		{"head", AgentTypeHead, "agent_head"},
-		{"accessory", AgentTypeAccessory, "agent_accessory"},
+		{"shoes", AgentType("agent_shoes"), "agent_shoes"},
+		{"head", AgentType("agent_head"), "agent_head"},
+		{"accessory", AgentType("agent_accessory"), "agent_accessory"},
 		// Travel agent types
 		{"destination", AgentTypeDestination, "destination"},
 		{"food", AgentTypeFood, "food"},
@@ -202,13 +202,13 @@ func TestUserProfile(t *testing.T) {
 
 	t.Run("has style", func(t *testing.T) {
 		profile := &UserProfile{
-			Style: []StyleTag{StyleCasual, StyleMinimalist},
+			Style: []StyleTag{StyleTag("casual"), StyleMinimalist},
 		}
 
-		if !profile.HasStyle(StyleCasual) {
+		if !profile.HasStyle(StyleTag("casual")) {
 			t.Errorf("expected to have casual style")
 		}
-		if profile.HasStyle(StyleFormal) {
+		if profile.HasStyle(StyleTag("formal")) {
 			t.Errorf("expected not to have formal style")
 		}
 	})
@@ -218,20 +218,20 @@ func TestUserProfile(t *testing.T) {
 			Style: []StyleTag{},
 		}
 
-		if profile.HasStyle(StyleCasual) {
+		if profile.HasStyle(StyleTag("casual")) {
 			t.Errorf("expected not to have casual style")
 		}
 	})
 
 	t.Run("has occasion", func(t *testing.T) {
 		profile := &UserProfile{
-			Occasions: []Occasion{OccasionWork, OccasionParty},
+			Occasions: []Occasion{OccasionWork, Occasion("party")},
 		}
 
 		if !profile.HasOccasion(OccasionWork) {
 			t.Errorf("expected to have work occasion")
 		}
-		if profile.HasOccasion(OccasionDate) {
+		if profile.HasOccasion(Occasion("date")) {
 			t.Errorf("expected not to have date occasion")
 		}
 	})

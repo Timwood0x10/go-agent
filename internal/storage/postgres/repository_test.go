@@ -415,8 +415,7 @@ func TestRepository_SaveProfile(t *testing.T) {
 			Occupation: "engineer",
 
 			Style: []models.StyleTag{
-
-				models.StyleCasual,
+				models.StyleTag("casual"),
 			},
 
 			Budget: models.NewPriceRange(50.0, 200.0),
@@ -424,9 +423,7 @@ func TestRepository_SaveProfile(t *testing.T) {
 			Colors: []string{"red", "blue"},
 
 			Occasions: []models.Occasion{
-
-				models.OccasionDaily,
-
+				models.Occasion("daily"),
 				models.OccasionWork,
 			},
 
@@ -474,7 +471,7 @@ func TestRepository_SaveProfile(t *testing.T) {
 
 			Style: []models.StyleTag{
 
-				models.StyleFormal,
+				models.StyleTag("formal"),
 			},
 
 			Budget: models.NewPriceRange(100.0, 300.0),

@@ -441,16 +441,6 @@ func TestValidateRequest(t *testing.T) {
 	}
 }
 
-// TestIsQueryInCache tests query cache checking.
-func TestIsQueryInCache(t *testing.T) {
-	service := &RetrievalService{}
-
-	// Current implementation always returns false (TODO)
-	assert.False(t, service.isQueryInCache("any query"))
-	assert.False(t, service.isQueryInCache(""))
-	assert.False(t, service.isQueryInCache("how to use go"))
-}
-
 // TestShouldRewriteQuery_Additional tests query rewrite decision logic with additional cases.
 func TestShouldRewriteQuery_Additional(t *testing.T) {
 	service := &RetrievalService{}

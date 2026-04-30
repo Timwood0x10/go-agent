@@ -116,10 +116,10 @@ func (m *SessionMemory) Cleanup(ctx context.Context) int {
 	return removed
 }
 
-// Get retrieves session data.
+// Get retrieves session data and updates access time.
 func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	session, exists := m.sessions[sessionID]
 	if !exists {
@@ -131,6 +131,7 @@ func (m *SessionMemory) Get(ctx context.Context, sessionID string) (*SessionData
 		return nil, false
 	}
 
+	// Update access time (requires write lock).
 	session.AccessedAt = time.Now()
 	return session, true
 }

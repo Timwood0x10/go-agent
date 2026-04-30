@@ -1,6 +1,6 @@
-# 带工作流的 GoAgent 时尚推荐系统
+# GoAgent 多 Agent 工作流示例
 
-一个使用基于 DAG 的工作流进行多 Agent 编排的时尚推荐系统。
+一个使用基于 DAG 的工作流进行多 Agent 编排的通用任务处理系统。
 
 ## 快速开始
 
@@ -22,10 +22,9 @@ llm:
 ```yaml
 agents:
   sub:
-    - id: "agent-top"
+    - id: "agent-researcher-a"
       type: "top"
-      category: "tops"
-      name: "上装推荐器"
+      name: "Researcher A"
 ```
 
 ### 3. 定义你的工作流
@@ -33,18 +32,18 @@ agents:
 编辑 `config/workflow.yaml`：
 
 ```yaml
-id: "fashion-recommendation"
+id: "multi-agent-workflow"
 steps:
-  - id: "extract-profile"
-    name: "提取用户偏好"
+  - id: "analyze-input"
+    name: "分析输入"
     agent_type: "top"
-    input: "提取偏好: {{.input}}"
-    
-  - id: "recommend-tops"
-    name: "推荐上装"
+    input: "分析用户需求: {{.input}}"
+
+  - id: "research-topic-a"
+    name: "研究主题 A"
     agent_type: "top"
-    depends_on: ["extract-profile"]
-    input: "基于 {{.extract-profile}} 推荐上装"
+    depends_on: ["analyze-input"]
+    input: "基于 {{.analyze-input}} 的分析，研究和整理发现"
 ```
 
 ### 4. 运行
@@ -65,11 +64,11 @@ steps:
   - id: "step1"
     name: "第一步"
     agent_type: "top"
-    
+
   - id: "step2"
     name: "并行步骤 1"
     depends_on: ["step1"]
-    
+
   - id: "step3"
     name: "并行步骤 2"
     depends_on: ["step1"]  # 与 step2 并行运行
@@ -82,11 +81,11 @@ steps:
   - id: "step1"
     name: "第一步"
     agent_type: "top"
-    
+
   - id: "step2"
     name: "第二步"
     depends_on: ["step1"]
-    
+
   - id: "step3"
     name: "第三步"
     depends_on: ["step2"]  # 在 step2 之后运行
@@ -99,22 +98,22 @@ steps:
   - id: "analyze"
     name: "分析"
     agent_type: "leader"
-    
+
   - id: "code"
     name: "生成代码"
     depends_on: ["analyze"]
     agent_type: "code"
-    
+
   - id: "test"
     name: "生成测试"
     depends_on: ["code"]
     agent_type: "test"
-    
+
   - id: "docs"
     name: "生成文档"
     depends_on: ["analyze"]
     agent_type: "docs"
-    
+
   - id: "review"
     name: "审查"
     depends_on: ["code", "docs"]  # 等待两者
@@ -142,15 +141,15 @@ steps:
 
 ```yaml
 steps:
-  - id: "extract-profile"
-    name: "提取配置文件"
+  - id: "analyze-input"
+    name: "分析输入"
     agent_type: "top"
-    input: "从以下内容提取: {{.input}}"
-    
-  - id: "recommend"
-    name: "推荐"
-    depends_on: ["extract-profile"]
-    input: "基于以下内容推荐: {{.extract-profile}}"
+    input: "从以下内容分析: {{.input}}"
+
+  - id: "process"
+    name: "处理"
+    depends_on: ["analyze-input"]
+    input: "基于以下内容处理: {{.analyze-input}}"
 ```
 
 ### 重试策略
@@ -176,15 +175,15 @@ retry_policy:
 ## 示例输出
 
 ```
-=== 带工作流的 GoAgent 时尚推荐系统 ===
+=== GoAgent Multi-Agent Workflow Example ===
 
 === 配置的 Agents ===
-  - agent-top (top): 上装推荐器
-  - agent-bottom (bottom): 下装推荐器
-  - agent-shoes (shoes): 鞋子推荐器
+  - agent-researcher-a (top): Researcher A
+  - agent-researcher-b (bottom): Researcher B
+  - agent-analyzer (top): Data Analyzer
 
 === 用户查询 ===
-我想要日常通勤的休闲服装...
+分析 AI 和云计算的最新技术趋势...
 
 === 执行工作流 ===
 
@@ -194,37 +193,37 @@ retry_policy:
 持续时间: 45秒
 总步骤数: 5
 
-=== 步骤结果 ===
+=== 任务结果 ===
 
-✓ 步骤: 提取用户偏好
+分析输入:
   状态: 已完成
   持续时间: 5秒
-  输出: {"style": ["休闲"], "budget": {"min": 500, "max": 1000}}
+  输出: {"domains": ["AI", "云计算"], "priority": "high"}
 
-✓ 步骤: 推荐上装
+研究主题 A:
   状态: 已完成
   持续时间: 12秒
-  输出: {"items": [{"name": "纯棉 T 恤", "price": 599}]}
+  输出: {"items": [{"name": "LLM 进展", "reason": "AI 领域关键趋势"}]}
 
-✓ 步骤: 推荐下装
+研究主题 B:
   状态: 已完成
-  持续时间: 11秒  # 与上装并行运行
+  持续时间: 11秒  # 与研究主题 A 并行运行
 
-✓ 步骤: 推荐鞋子
+研究主题 C:
   状态: 已完成
-  持续时间: 10秒  # 与上装并行运行
+  持续时间: 10秒  # 与研究主题 A 并行运行
 
-✓ 步骤: 聚合推荐
+聚合结果:
   状态: 已完成
   持续时间: 7秒
-  输出: 完整的服装推荐...
+  输出: 综合分析报告...
 
 === 最终输出 ===
 {
-  "outfit": {
-    "top": "...",
-    "bottom": "...",
-    "shoes": "..."
+  "report": {
+    "summary": "...",
+    "key_findings": ["..."],
+    "priorities": ["..."]
   }
 }
 ```
@@ -252,7 +251,7 @@ retry_policy:
 |------|------|----------|
 | **Workflow Engine** | DAG 工作流编排 | `internal/workflow/engine/executor.go` |
 | **Leader Agent** | 工作流启动和协调 | `internal/agents/leader/` |
-| **Sub Agents** | 任务执行（服装推荐） | `internal/agents/sub/` |
+| **Sub Agents** | 任务执行（领域特定处理） | `internal/agents/sub/` |
 | **AHP 协议** | Agent 间通信 | `internal/protocol/ahp/` |
 | **LLM Client** | LLM 交互 | `internal/llm/client.go` |
 | **Template Renderer** | 模板变量替换 | `internal/workflow/engine/template.go` |
@@ -261,11 +260,11 @@ retry_policy:
 
 | 步骤 | Agent 类型 | 依赖关系 | 代码位置 |
 |------|-----------|---------|----------|
-| **extract-profile** | top | 无 | `examples/simple_newapi/config/workflow.yaml:15-25` |
-| **recommend-tops** | top | extract-profile | `examples/simple_newapi/config/workflow.yaml:30-40` |
-| **recommend-bottoms** | bottom | extract-profile | `examples/simple_newapi/config/workflow.yaml:45-55` |
-| **recommend-shoes** | shoes | extract-profile | `examples/simple_newapi/config/workflow.yaml:60-70` |
-| **aggregate** | leader | 所有推荐步骤 | `examples/simple_newapi/config/workflow.yaml:75-85` |
+| **analyze-input** | top | 无 | `examples/simple_newapi/config/workflow.yaml:15-25` |
+| **research-topic-a** | top | analyze-input | `examples/simple_newapi/config/workflow.yaml:30-40` |
+| **research-topic-b** | bottom | analyze-input | `examples/simple_newapi/config/workflow.yaml:45-55` |
+| **research-topic-c** | top | analyze-input | `examples/simple_newapi/config/workflow.yaml:60-70` |
+| **aggregate-results** | bottom | 所有研究步骤 | `examples/simple_newapi/config/workflow.yaml:75-85` |
 
 ### 关键特性实现
 
@@ -275,10 +274,10 @@ retry_policy:
 - 并行执行: `internal/workflow/engine/executor.go:250-300`
 - 模板变量解析: `internal/workflow/engine/template.go:50-100`
 - 步骤依赖管理: `internal/workflow/engine/types.go:30-80`
-- 结果聚合: `examples/simple_newapi/main.go:150-200`
+- 结果聚合: `examples/simple_newapi/main.go:100-140`
 
 ---
 
-**创建日期**: 2026-03-23  
-**示例类型**: 工作流编排演示  
+**创建日期**: 2026-03-23
+**示例类型**: 工作流编排演示
 **代码位置**: `examples/simple_newapi/main.go:1-400`

@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `.golangci.yml` configuration file for linting rules
 - CHANGELOG.md for tracking project changes
+- **Triggers mechanism**: SubAgents can define trigger keywords; TaskPlanner filters tasks by matching user input against triggers (word-boundary aware, Unicode-safe)
+- **SubAgentConfig.Priority**: Optional priority field for SubAgent configuration, used by SortByPriority aggregation
+- **ToolBinder.BridgeFromRegistry**: Sub Agent ToolBinder can now bridge tools from the global Registry
+- **ToolBinder.GetTool**: Fallback lookup to bridged Registry when tool not found locally
+- **Aggregator sort strategies**: `SortByNone`, `SortByPriority`, `SortByCreatedAt` configurable sorting
+- **Planner tests**: 10 test cases covering multi-task dispatch, trigger matching, fallback, maxTasks, and edge cases
+- **Aggregator tests**: 9 test cases covering all sort modes, deduplication, maxItems, nil/empty results, and match score
+- **Profile tests**: 5 test cases covering default profile, validation with Preferences/Style, empty/nil profiles
 
 ### Fixed
 - **Critical & High Priority Bugs** (All fixed)
@@ -23,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - M16: Pool.QueryRow error path fixed to return correct connection errors
   - M17: HTTPError type added to support errors.Is()
   - M22: SessionMemory.GetMessages now returns a copy to prevent concurrent modification
+
+- **Refactoring: Decouple from fashion/recommendation scenario**
+  - TaskPlanner now creates one task per configured SubAgent instead of a single default task
+  - Aggregator no longer hardcodes price-based sorting; defaults to SortByNone (preserve original order)
+  - Aggregator deduplication no longer uses Price as part of the dedup key
+  - ProfileParser default profile no longer injects hardcoded "casual style" values
+  - ProfileParser validation checks both Preferences and Style fields (backward compatible)
+  - ProfileParser parseResponse no longer injects hardcoded defaults for empty fields
+  - Memory operation failures in Leader.Process no longer block the main request flow (warn + continue)
+  - Removed 5 hardcoded clothing fallback methods from Sub Agent executor
+  - Removed 9 unused fashion-specific constants (AgentTypeShoes/Head/Accessory, StyleCasual/Formal/Street, OccasionDaily/Party/Date)
+  - RecommendResult.CalculateScore returns normalised score in [0, 1] instead of raw item count
+  - Aggregator now calculates TotalPrice from aggregated items
+  - Aggregator logs a warning when items are dropped during deduplication (both ItemID and Name empty)
+  - CreatedAt zero-value items sort after non-zero items when using SortByCreatedAt
 
 - **Security & Configuration**
   - Hardcoded database passwords in cmd/ moved to environment variables
@@ -38,6 +61,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated bug fix progress: 40/56 bugs fixed (71.4%)
 - Comprehensive score improved from 6.9/10 to 7.2/10
 - Bug & Reliability score improved from 5.5/10 to 7.0/10
+- **Breaking**: `NewResultAggregator` signature changed: added `sortBy string` parameter
+- **Breaking**: `TaskPlanner.Plan` signature changed: added `inputText string` parameter
+- **Breaking**: `ResultAggregator.Aggregate` signature changed: added `tasks []*models.Task` parameter
+- Data model (RecommendResult/RecommendItem) documented as generic Agent output structure; Price/Brand/ImageURL are now optional domain-specific fields
+- **Breaking**: Domain types renamed: `FashionFilters` → `ResourceFilters`, `FashionItem` → `ResourceItem`, `AgentProfile` → `AgentUserProfile`, `AgentRecommendation` → `TaskRecommendation`, `OutfitSuggestion` → `Suggestion`, `AgentTrend` → `Trend`
+- **Breaking**: Validation default schema type changed from `"fashion"` to `"default"`
+- Default LLM model changed from `llama3` to `llama3.2` across code and config defaults
+- Default OpenRouter model changed from vendor-specific `minimax/minimax-m2-her` to generic `openai/gpt-3.5-turbo`
+
+### Fixed
+- README build command referenced non-existent `cmd/server`; updated to use example entry points
+- `simple_newapi` example fully generalised from fashion recommendation to generic multi-agent workflow
+- `isQueryInCache` was a stub always returning `false`; now implements TTL-based query cache with lazy eviction
+- Two skipped tests in `secret_repository_test.go` (List, UpdateMetadata) restored with improved assertions and isolated tenant IDs
+- Fashion residual references cleaned from validator.go, config.go, executor.go, template.go, types.go
+- Hardcoded URLs and model names in client.go extracted to named constants (`DefaultOllamaBaseURL`, `DefaultOpenRouterBaseURL`, `DefaultOllamaModel`, `DefaultOpenRouterModel`)
+- Hardcoded `HTTP-Referer: example.com` header removed from OpenRouter requests
+- NoopTracer doc comments corrected to accurately describe its context-based trace ID behaviour
+- Migration Guide (v0.2) added to both README.md and README_zh.md with all breaking changes documented
 
 ## [0.1.0] - 2026-04-19
 

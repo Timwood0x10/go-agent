@@ -81,27 +81,27 @@ func (e *TemplateEngine) RegisterFunc(name string, fn interface{}) {
 
 // Common templates.
 var (
-	// RecommendationPrompt is the prompt for style recommendations.
-	RecommendationPrompt = `You are a fashion consultant. Analyze the user's preferences and provide personalized style recommendations.
+	// RecommendationPrompt is the prompt for generating recommendations.
+	RecommendationPrompt = `You are a knowledgeable assistant. Analyze the user's preferences and provide personalized recommendations.
 
 User Profile:
 - Gender: {{.Gender}}
 - Age: {{.Age}}
-- Style Preferences: {{.StylePreferences}}
+- Preferences: {{.StylePreferences}}
 - Budget Range: ${{.BudgetMin}} - ${{.BudgetMax}}
-- Favorite Colors: {{.FavoriteColors}}
-- Favorite Brands: {{.FavoriteBrands}}
-- Occasion: {{.Occasion}}
+- Favorite Categories: {{.FavoriteColors}}
+- Favorite Options: {{.FavoriteBrands}}
+- Context: {{.Occasion}}
 - Season: {{.Season}}
 
 Provide a JSON response with the following schema:
 {{.Schema}}
 
 Focus on:
-1. Coordinating colors and styles
-2. Matching the occasion
+1. Matching user preferences
+2. Considering the context
 3. Staying within budget
-4. Expressing personal style`
+4. Providing diverse options`
 
 	// ProfileExtractionPrompt extracts user profile from natural language.
 	ProfileExtractionPrompt = `Extract user profile information from the following text:

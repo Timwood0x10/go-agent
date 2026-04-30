@@ -66,8 +66,11 @@ func parseDistilledVectorString(vecStr string) ([]float64, error) {
 	result := make([]float64, len(parts))
 	for i, part := range parts {
 		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
-		if err != nil || val != 1 {
+		if err != nil {
 			return nil, errors.Wrap(err, "failed to parse vector component")
+		}
+		if val != 1 {
+			return nil, fmt.Errorf("failed to parse vector component: expected 1 match, got %d", val)
 		}
 	}
 

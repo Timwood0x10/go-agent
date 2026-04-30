@@ -1,6 +1,6 @@
-# GoAgent Fashion Recommendation System with Workflow
+# GoAgent Multi-Agent Workflow Example
 
-A fashion recommendation system with multi-agent orchestration using DAG-based workflow.
+A generic multi-agent task processing system with DAG-based workflow orchestration.
 
 ## Tech Stack and Components
 
@@ -18,7 +18,7 @@ A fashion recommendation system with multi-agent orchestration using DAG-based w
 |-----------|---------|---------------|
 | **Workflow Engine** | DAG workflow orchestration | `internal/workflow/engine/executor.go` |
 | **Leader Agent** | Workflow startup and coordination | `internal/agents/leader/` |
-| **Sub Agents** | Task execution (fashion recommendations) | `internal/agents/sub/` |
+| **Sub Agents** | Task execution (domain-specific processing) | `internal/agents/sub/` |
 | **AHP Protocol** | Inter-agent communication | `internal/protocol/ahp/` |
 | **LLM Client** | LLM interaction | `internal/llm/client.go` |
 | **Template Renderer** | Template variable substitution | `internal/workflow/engine/template.go` |
@@ -27,11 +27,11 @@ A fashion recommendation system with multi-agent orchestration using DAG-based w
 
 | Step | Agent Type | Dependencies | Code Location |
 |------|-----------|---------------|---------------|
-| **extract-profile** | top | None | `examples/simple_newapi/config/workflow.yaml:15-25` |
-| **recommend-tops** | top | extract-profile | `examples/simple_newapi/config/workflow.yaml:30-40` |
-| **recommend-bottoms** | bottom | extract-profile | `examples/simple_newapi/config/workflow.yaml:45-55` |
-| **recommend-shoes** | shoes | extract-profile | `examples/simple_newapi/config/workflow.yaml:60-70` |
-| **aggregate** | leader | All recommendation steps | `examples/simple_newapi/config/workflow.yaml:75-85` |
+| **analyze-input** | top | None | `examples/simple_newapi/config/workflow.yaml:15-25` |
+| **research-topic-a** | top | analyze-input | `examples/simple_newapi/config/workflow.yaml:30-40` |
+| **research-topic-b** | bottom | analyze-input | `examples/simple_newapi/config/workflow.yaml:45-55` |
+| **research-topic-c** | top | analyze-input | `examples/simple_newapi/config/workflow.yaml:60-70` |
+| **aggregate-results** | bottom | All research steps | `examples/simple_newapi/config/workflow.yaml:75-85` |
 
 ### Key Feature Implementations
 
@@ -41,7 +41,7 @@ A fashion recommendation system with multi-agent orchestration using DAG-based w
 - Parallel execution: `internal/workflow/engine/executor.go:250-300`
 - Template variable parsing: `internal/workflow/engine/template.go:50-100`
 - Step dependency management: `internal/workflow/engine/types.go:30-80`
-- Result aggregation: `examples/simple_newapi/main.go:150-200`
+- Result aggregation: `examples/simple_newapi/main.go:100-140`
 
 ## Quick Start
 
@@ -63,10 +63,9 @@ Edit `config/server.yaml`:
 ```yaml
 agents:
   sub:
-    - id: "agent-top"
+    - id: "agent-researcher-a"
       type: "top"
-      category: "tops"
-      name: "Top Wear Recommender"
+      name: "Researcher A"
 ```
 
 ### 3. Define Your Workflow
@@ -74,18 +73,18 @@ agents:
 Edit `config/workflow.yaml`:
 
 ```yaml
-id: "fashion-recommendation"
+id: "multi-agent-workflow"
 steps:
-  - id: "extract-profile"
-    name: "Extract User Preferences"
+  - id: "analyze-input"
+    name: "Analyze Input"
     agent_type: "top"
-    input: "Extract preferences: {{.input}}"
-    
-  - id: "recommend-tops"
-    name: "Recommend Top Wear"
+    input: "Analyze user requirements from: {{.input}}"
+
+  - id: "research-topic-a"
+    name: "Research Topic A"
     agent_type: "top"
-    depends_on: ["extract-profile"]
-    input: "Recommend tops based on {{.extract-profile}}"
+    depends_on: ["analyze-input"]
+    input: "Based on analysis from {{.analyze-input}}, research and compile findings"
 ```
 
 ### 4. Run
@@ -106,11 +105,11 @@ steps:
   - id: "step1"
     name: "First Step"
     agent_type: "top"
-    
+
   - id: "step2"
     name: "Parallel Step 1"
     depends_on: ["step1"]
-    
+
   - id: "step3"
     name: "Parallel Step 2"
     depends_on: ["step1"]  # Runs in parallel with step2
@@ -123,11 +122,11 @@ steps:
   - id: "step1"
     name: "First Step"
     agent_type: "top"
-    
+
   - id: "step2"
     name: "Second Step"
     depends_on: ["step1"]
-    
+
   - id: "step3"
     name: "Third Step"
     depends_on: ["step2"]  # Runs after step2
@@ -140,22 +139,22 @@ steps:
   - id: "analyze"
     name: "Analyze"
     agent_type: "leader"
-    
+
   - id: "code"
     name: "Generate Code"
     depends_on: ["analyze"]
     agent_type: "code"
-    
+
   - id: "test"
     name: "Generate Tests"
     depends_on: ["code"]
     agent_type: "test"
-    
+
   - id: "docs"
     name: "Generate Docs"
     depends_on: ["analyze"]
     agent_type: "docs"
-    
+
   - id: "review"
     name: "Review"
     depends_on: ["code", "docs"]  # Waits for both
@@ -183,15 +182,15 @@ Use `{{.step_id}}` to reference output from previous steps:
 
 ```yaml
 steps:
-  - id: "extract-profile"
-    name: "Extract Profile"
+  - id: "analyze-input"
+    name: "Analyze Input"
     agent_type: "top"
-    input: "Extract from: {{.input}}"
-    
-  - id: "recommend"
-    name: "Recommend"
-    depends_on: ["extract-profile"]
-    input: "Recommend based on: {{.extract-profile}}"
+    input: "Analyze from: {{.input}}"
+
+  - id: "process"
+    name: "Process"
+    depends_on: ["analyze-input"]
+    input: "Process based on: {{.analyze-input}}"
 ```
 
 ### Retry Policy
@@ -217,15 +216,15 @@ retry_policy:
 ## Example Output
 
 ```
-=== GoAgent Fashion Recommendation System with Workflow ===
+=== GoAgent Multi-Agent Workflow Example ===
 
 === Configured Agents ===
-  - agent-top (top): Top Wear Recommender
-  - agent-bottom (bottom): Bottom Wear Recommender
-  - agent-shoes (shoes): Shoes Recommender
+  - agent-researcher-a (top): Researcher A
+  - agent-researcher-b (bottom): Researcher B
+  - agent-analyzer (top): Data Analyzer
 
 === User Query ===
-I want casual clothes for daily commute...
+Analyze the latest tech trends in AI and cloud computing...
 
 === Executing Workflow ===
 
@@ -235,37 +234,37 @@ Status: completed
 Duration: 45s
 Total Steps: 5
 
-=== Step Results ===
+=== Task Results ===
 
-✓ Step: Extract User Preferences
+Analyze Input:
   Status: completed
   Duration: 5s
-  Output: {"style": ["casual"], "budget": {"min": 500, "max": 1000}}
+  Output: {"domains": ["AI", "cloud computing"], "priority": "high"}
 
-✓ Step: Recommend Top Wear
+Research Topic A:
   Status: completed
   Duration: 12s
-  Output: {"items": [{"name": "Cotton T-Shirt", "price": 599}]}
+  Output: {"items": [{"name": "LLM Advances", "reason": "Key trend in AI"}]}
 
-✓ Step: Recommend Bottom Wear
+Research Topic B:
   Status: completed
-  Duration: 11s  # Ran in parallel with tops
+  Duration: 11s  # Ran in parallel with Research Topic A
 
-✓ Step: Recommend Shoes
+Research Topic C:
   Status: completed
-  Duration: 10s  # Ran in parallel with tops
+  Duration: 10s  # Ran in parallel with Research Topic A
 
-✓ Step: Aggregate Recommendations
+Aggregate Results:
   Status: completed
   Duration: 7s
-  Output: Complete outfit recommendation...
+  Output: Comprehensive analysis report...
 
 === Final Output ===
 {
-  "outfit": {
-    "top": "...",
-    "bottom": "...",
-    "shoes": "..."
+  "report": {
+    "summary": "...",
+    "key_findings": ["..."],
+    "priorities": ["..."]
   }
 }
 ```

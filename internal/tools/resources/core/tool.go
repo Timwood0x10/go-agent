@@ -16,7 +16,7 @@ const (
 	CategoryKnowledge ToolCategory = "knowledge"
 	// CategoryMemory represents memory-related tools
 	CategoryMemory ToolCategory = "memory"
-	// CategoryDomain represents domain-specific tools (fashion, weather, etc.)
+	// CategoryDomain represents domain-specific tools (weather, search, etc.)
 	CategoryDomain ToolCategory = "domain"
 )
 

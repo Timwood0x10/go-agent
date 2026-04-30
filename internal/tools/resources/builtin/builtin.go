@@ -59,7 +59,7 @@ func RegisterGeneralTools() error {
 		// Planning capability
 		builtin_planning.NewTaskPlanner(nil),
 
-		// Domain capability - removed: weather_check, style_recommend, fashion_search (not in 8 core capabilities)
+		// Domain capability - removed: weather_check, style_recommend (not in 8 core capabilities)
 	}
 
 	for _, tool := range tools {

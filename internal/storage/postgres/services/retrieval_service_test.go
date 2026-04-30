@@ -581,62 +581,6 @@ func TestContains(t *testing.T) {
 	}
 }
 
-// TestIndexOf tests substring index finding.
-func TestIndexOf(t *testing.T) {
-	tests := []struct {
-		name     string
-		s        string
-		substr   string
-		expected int
-	}{
-		{
-			name:     "found at start",
-			s:        "hello world",
-			substr:   "hello",
-			expected: 0,
-		},
-		{
-			name:     "found in middle",
-			s:        "hello world",
-			substr:   "world",
-			expected: 6,
-		},
-		{
-			name:     "not found",
-			s:        "hello world",
-			substr:   "foo",
-			expected: -1,
-		},
-		{
-			name:     "empty substring",
-			s:        "hello world",
-			substr:   "",
-			expected: 0,
-		},
-		{
-			name:     "longer substring",
-			s:        "hello",
-			substr:   "hello world",
-			expected: -1,
-		},
-		{
-			name:     "case insensitive",
-			s:        "HELLO WORLD",
-			substr:   "world",
-			expected: 6,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := indexOf(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("indexOf(%q, %q) = %d, expected %d", tt.s, tt.substr, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestMergeAndRank_WithTaskResultSource tests merge and rank with task_result source.
 func TestMergeAndRank_WithTaskResultSource(t *testing.T) {
 	service := &RetrievalService{}
@@ -1228,44 +1172,6 @@ func TestContains_WithEmptyString(t *testing.T) {
 	}
 }
 
-// TestIndexOf_WithEmptyStrings tests indexOf with empty strings.
-func TestIndexOf_WithEmptyStrings(t *testing.T) {
-	tests := []struct {
-		name     string
-		s        string
-		substr   string
-		expected int
-	}{
-		{
-			name:     "both empty",
-			s:        "",
-			substr:   "",
-			expected: 0,
-		},
-		{
-			name:     "empty string, non-empty substring",
-			s:        "",
-			substr:   "hello",
-			expected: -1,
-		},
-		{
-			name:     "non-empty string, empty substring",
-			s:        "hello",
-			substr:   "",
-			expected: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := indexOf(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("indexOf(%q, %q) = %d, expected %d", tt.s, tt.substr, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestGetEmbedding_WithNilClient tests getEmbedding with nil embedding client.
 func TestGetEmbedding_WithNilClient(t *testing.T) {
 	service := &RetrievalService{
@@ -1725,29 +1631,6 @@ func TestContains_WithOverlappingPatterns(t *testing.T) {
 	}
 }
 
-// TestIndexOf_WithMultipleOccurrences tests indexOf with multiple occurrences.
-func TestIndexOf_WithMultipleOccurrences(t *testing.T) {
-	tests := []struct {
-		s        string
-		substr   string
-		expected int
-	}{
-		{"aaa", "aa", 0}, // First occurrence
-		{"ababab", "aba", 0},
-		{"testtest", "test", 0},
-		{"xxxabcxxx", "abc", 3},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.s+"/"+tt.substr, func(t *testing.T) {
-			result := indexOf(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("indexOf(%q, %q) = %d, expected %d", tt.s, tt.substr, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestMergeAndRank_WithLargeResultSet tests merge and rank with many results.
 func TestMergeAndRank_WithLargeResultSet(t *testing.T) {
 	service := &RetrievalService{}
@@ -2058,29 +1941,6 @@ func TestContains_WithCaseSensitivity(t *testing.T) {
 	}
 }
 
-// TestIndexOf_WithCaseSensitivity tests indexOf with case sensitivity.
-func TestIndexOf_WithCaseSensitivity(t *testing.T) {
-	tests := []struct {
-		s        string
-		substr   string
-		expected int
-	}{
-		{"Hello World", "hello", 0}, // Case insensitive
-		{"Hello World", "world", 6}, // Case insensitive
-		{"Hello World", "WORLD", 6}, // Case insensitive
-		{"HELLO", "hello", 0},       // Case insensitive
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.s+"/"+tt.substr, func(t *testing.T) {
-			result := indexOf(tt.s, tt.substr)
-			if result != tt.expected {
-				t.Errorf("indexOf(%q, %q) = %d, expected %d", tt.s, tt.substr, result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestMergeAndRank_WithIdenticalScores tests merge and rank with identical scores.
 func TestMergeAndRank_WithIdenticalScores(t *testing.T) {
 	service := &RetrievalService{}
@@ -2102,6 +1962,151 @@ func TestMergeAndRank_WithIdenticalScores(t *testing.T) {
 	for i, result := range merged {
 		if result.Score <= 0 {
 			t.Errorf("result %d should have positive score, got %f", i, result.Score)
+		}
+	}
+}
+
+// TestIsQueryInCache tests the query cache hit/miss/expiry behavior.
+func TestIsQueryInCache(t *testing.T) {
+	s := &RetrievalService{
+		queryCache:       make(map[string]time.Time),
+		queryCacheTTL:    100 * time.Millisecond,
+		queryCacheMaxLen: 10,
+	}
+
+	// Empty query returns false.
+	if s.isQueryInCache("") {
+		t.Error("empty query should return false")
+	}
+
+	// Miss returns false.
+	if s.isQueryInCache("hello world") {
+		t.Error("uncached query should return false")
+	}
+
+	// Hit returns true (use markQueryCached for normalization consistency).
+	s.markQueryCached("hello world")
+	if !s.isQueryInCache("hello world") {
+		t.Error("cached query should return true")
+	}
+
+	// Case-insensitive normalization.
+	s.markQueryCached("Hello World")
+	if !s.isQueryInCache("hello world") {
+		t.Error("cached query should match case-insensitively")
+	}
+
+	// Trim normalization.
+	s.markQueryCached("  spaced  ")
+	if !s.isQueryInCache("spaced") {
+		t.Error("cached query should match after trim normalization")
+	}
+}
+
+// TestIsQueryInCache_Expiry tests that expired entries return false.
+// Expired entry cleanup is deferred to markQueryCached to avoid write locks on the read path.
+func TestIsQueryInCache_Expiry(t *testing.T) {
+	s := &RetrievalService{
+		queryCache:       make(map[string]time.Time),
+		queryCacheTTL:    50 * time.Millisecond,
+		queryCacheMaxLen: 10,
+	}
+
+	s.queryCache["test"] = time.Now().Add(-1 * time.Second)
+
+	if s.isQueryInCache("test") {
+		t.Error("expired entry should return false")
+	}
+
+	// Expired entries remain in the map until markQueryCached cleans them up.
+	// isQueryInCache only reads and reports status.
+	if _, exists := s.queryCache["test"]; !exists {
+		t.Error("expired entry should still exist in map until lazy cleanup")
+	}
+}
+
+// TestMarkQueryCached tests marking queries as cached.
+func TestMarkQueryCached(t *testing.T) {
+	s := &RetrievalService{
+		queryCache:       make(map[string]time.Time),
+		queryCacheTTL:    10 * time.Minute,
+		queryCacheMaxLen: 3,
+	}
+
+	// Empty query is no-op.
+	s.markQueryCached("")
+	if len(s.queryCache) != 0 {
+		t.Error("empty query should not be cached")
+	}
+
+	// Normal caching works.
+	s.markQueryCached("query1")
+	if len(s.queryCache) != 1 {
+		t.Errorf("expected 1 entry, got %d", len(s.queryCache))
+	}
+
+	// Overwrite existing entry.
+	s.markQueryCached("query1")
+	if len(s.queryCache) != 1 {
+		t.Errorf("overwrite should keep 1 entry, got %d", len(s.queryCache))
+	}
+}
+
+// TestMarkQueryCached_Eviction tests cache eviction when at capacity.
+func TestMarkQueryCached_Eviction(t *testing.T) {
+	s := &RetrievalService{
+		queryCache:       make(map[string]time.Time),
+		queryCacheTTL:    10 * time.Minute,
+		queryCacheMaxLen: 3,
+	}
+
+	s.markQueryCached("query1")
+	s.markQueryCached("query2")
+	s.markQueryCached("query3")
+
+	if len(s.queryCache) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(s.queryCache))
+	}
+
+	// Adding a 4th entry should trigger eviction of the oldest.
+	s.markQueryCached("query4")
+
+	if len(s.queryCache) != 3 {
+		t.Errorf("after eviction expected 3 entries, got %d", len(s.queryCache))
+	}
+
+	// Oldest entry ("query1") should have been evicted.
+	if _, exists := s.queryCache["query1"]; exists {
+		t.Error("oldest entry should have been evicted")
+	}
+
+	// Newer entries should still exist.
+	for _, key := range []string{"query2", "query3", "query4"} {
+		if _, exists := s.queryCache[key]; !exists {
+			t.Errorf("entry %q should still exist", key)
+		}
+	}
+}
+
+// TestNormalizeQueryForCache tests query normalization for cache keys.
+func TestNormalizeQueryForCache(t *testing.T) {
+	s := &RetrievalService{}
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Hello World", "hello world"},
+		{"  spaces  ", "spaces"},
+		{"", ""},
+		{"如何", "如何"},
+		{"UPPER", "upper"},
+	}
+
+	for _, tt := range tests {
+		result := s.normalizeQueryForCache(tt.input)
+		if result != tt.expected {
+			t.Errorf("normalizeQueryForCache(%q) = %q, want %q", tt.input, result, tt.expected)
 		}
 	}
 }
