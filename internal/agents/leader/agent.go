@@ -336,7 +336,7 @@ func (a *leaderAgent) finalizeMemory(ctx context.Context, sessionID, taskID stri
 		return
 	}
 	a.distillWg.Add(1)
-	go func() {
+	go func() { // #nosec G118 -- Background context needed for async distillation after client disconnects
 		defer a.distillWg.Done()
 
 		// Check if agent is stopped before starting.
@@ -349,7 +349,9 @@ func (a *leaderAgent) finalizeMemory(ctx context.Context, sessionID, taskID stri
 
 		// Create a detached context with its own timeout so distillation
 		// continues even if the parent request is cancelled.
-		distillCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		// Must use context.Background() — using ctx as parent would cause
+		// distillation to abort when the client disconnects.
+		distillCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
 		g, gCtx := errgroup.WithContext(distillCtx)

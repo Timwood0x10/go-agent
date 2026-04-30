@@ -55,7 +55,8 @@ func (h *StreamHandler) HandleStream(processor AgentProcessor) http.HandlerFunc 
 			return
 		}
 
-		// Parse request body
+		// Parse request body (limit to 1MB to prevent OOM).
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req StreamRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)

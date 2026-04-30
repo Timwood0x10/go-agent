@@ -79,7 +79,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, prompt string) (string, er
 		if err != nil {
 			return "", gerr.Wrap(err, "read response body")
 		}
-		return "", gerr.Newf("API request failed: ollama error: %s", respBody)
+		return "", gerr.Newf("API request failed with status %d: %s", resp.StatusCode, respBody)
 	}
 
 	var result map[string]interface{}
@@ -139,7 +139,11 @@ func (a *OllamaAdapter) GenerateStream(ctx context.Context, prompt string) (<-ch
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := a.client.Do(req)
+	// Use a client without Timeout for streaming: http.Client.Timeout covers
+	// the entire response body read, which would kill long-running streams.
+	// Instead, timeout is controlled via the request context.
+	streamClient := &http.Client{Transport: http.DefaultTransport}
+	resp, err := streamClient.Do(req)
 	if err != nil {
 		return nil, gerr.Wrap(err, "send stream request")
 	}

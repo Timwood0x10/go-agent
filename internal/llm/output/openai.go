@@ -79,7 +79,7 @@ func (a *OpenAIAdapter) Generate(ctx context.Context, prompt string) (string, er
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", errors.Wrap(errors.Newf("openai error: %s", respBody), "API request failed")
+		return "", errors.Newf("API request failed with status %d: %s", resp.StatusCode, respBody)
 	}
 
 	var result OpenAIChatResponse
@@ -191,7 +191,11 @@ func (a *OpenAIAdapter) GenerateStream(ctx context.Context, prompt string) (<-ch
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.config.APIKey)
 
-	resp, err := a.client.Do(req)
+	// Use a client without Timeout for streaming: http.Client.Timeout covers
+	// the entire response body read, which would kill long-running streams.
+	// Instead, timeout is controlled via the request context.
+	streamClient := &http.Client{Transport: http.DefaultTransport}
+	resp, err := streamClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send stream request")
 	}

@@ -76,7 +76,7 @@ func (a *OpenRouterAdapter) Generate(ctx context.Context, prompt string) (string
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return "", errors.Newf("openrouter error: %s", respBody)
+		return "", errors.Newf("API request failed with status %d: %s", resp.StatusCode, respBody)
 	}
 
 	var result OpenAIChatResponse
@@ -185,7 +185,11 @@ func (a *OpenRouterAdapter) GenerateStream(ctx context.Context, prompt string) (
 	req.Header.Set("HTTP-Referer", "https://github.com/goagent")
 	req.Header.Set("X-Title", "Agent Framework")
 
-	resp, err := a.client.Do(req)
+	// Use a client without Timeout for streaming: http.Client.Timeout covers
+	// the entire response body read, which would kill long-running streams.
+	// Instead, timeout is controlled via the request context.
+	streamClient := &http.Client{Transport: http.DefaultTransport}
+	resp, err := streamClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send stream request")
 	}

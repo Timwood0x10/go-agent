@@ -61,8 +61,9 @@ type Config struct {
 
 // Client represents an LLM client that supports multiple providers.
 type Client struct {
-	config     *Config
-	httpClient *http.Client
+	config       *Config
+	httpClient   *http.Client
+	streamClient *http.Client // No Timeout — streaming uses context for cancellation.
 }
 
 // NewClient creates a new LLM client.
@@ -79,6 +80,12 @@ func NewClient(config *Config) (*Client, error) {
 		config: config,
 		httpClient: &http.Client{
 			Timeout: time.Duration(config.Timeout) * time.Second,
+		},
+		// streamClient has no Timeout: for streaming, timeout is controlled
+		// entirely via context so that the goroutine reading the body is
+		// properly cancelled when the context expires.
+		streamClient: &http.Client{
+			Transport: http.DefaultTransport,
 		},
 	}, nil
 }
@@ -369,7 +376,7 @@ func (c *Client) streamOllama(ctx context.Context, prompt string) (<-chan Stream
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.streamClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send stream request")
 	}
@@ -451,7 +458,7 @@ func (c *Client) streamOpenRouter(ctx context.Context, prompt string) (<-chan St
 	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
 	req.Header.Set("X-Title", "GoAgent")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.streamClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send stream request")
 	}
