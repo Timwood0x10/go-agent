@@ -257,6 +257,37 @@ goagent/
 - [Embedding 服务文档](services/embedding/README.md) - Embedding 服务详细说明
 - [集成指南](docs/integration_guide.md) - 如何集成到现有项目
 
+## 升级指南 (v0.2)
+
+### 破坏性变更
+
+1. **`TaskPlanner.Plan()` 签名变更**
+   - 之前: `Plan(ctx, profile)` (2 个参数)
+   - 之后: `Plan(ctx, profile, inputText)` (3 个参数)
+   - 修复: 在所有 `Plan()` 调用中添加 `inputText` 参数。
+
+2. **`NewResultAggregator()` 需要 `sortBy` 参数**
+   - 之前: `NewResultAggregator(enableDedupe, maxItems)`
+   - 之后: `NewResultAggregator(enableDedupe, maxItems, sortBy)`
+   - 修复: 添加第三个参数 `leader.SortByNone`（或 `SortByPriority` / `SortByCreatedAt`）。
+
+3. **时尚领域常量已移除**
+   - 已移除: `AgentTypeShoes`, `AgentTypeHead`, `AgentTypeAccessory`, `StyleCasual`, `StyleFormal`, `StyleStreet`, `OccasionDaily`, `OccasionParty`, `OccasionDate`
+   - 修复: 使用 `models.StyleTag("...")` 和 `models.Occasion("...")` 字符串类型替代。
+
+4. **领域类型重命名** (`internal/tools/resources/types/`)
+   - `FashionFilters` → `ResourceFilters`
+   - `FashionItem` → `ResourceItem`
+   - `AgentProfile` → `AgentUserProfile`
+   - `AgentRecommendation` → `TaskRecommendation`
+   - `OutfitSuggestion` → `Suggestion`
+   - `AgentTrend` → `Trend`
+
+5. **验证默认 schema 类型变更**
+   - 之前: `"fashion"`
+   - 之后: `"default"`
+   - 修复: 如果配置中显式设置了 `validation.schema_type`，请更新为 `"default"`。
+
 ## 示例
 
 - [旅行规划](examples/travel/) - 多 Agent 协作
@@ -282,11 +313,12 @@ go test -cover ./...
 ### 构建项目
 
 ```bash
-# 构建主程序
-go build -o bin/goagent ./cmd/server
-
 # 构建示例
+go build -o bin/simple ./examples/simple
 go build -o bin/travel ./examples/travel
+
+# 构建 CLI 工具
+go build -o bin/migrate ./cmd/migrate_goagent
 ```
 
 ### 代码规范

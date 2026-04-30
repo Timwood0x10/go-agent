@@ -150,6 +150,12 @@ type RetrievalService struct {
 	embeddingCacheAccessList []string // LRU access list for eviction
 	synonymRules             map[string][]string
 
+	// Query result cache to skip redundant LLM rewrites.
+	queryCache       map[string]time.Time
+	queryCacheMu     sync.RWMutex
+	queryCacheTTL    time.Duration // TTL for cache entries
+	queryCacheMaxLen int           // Maximum cache entries
+
 	// Experience-specific services
 	distillationService *experience.DistillationService
 	rankingService      *experience.RankingService
@@ -192,6 +198,9 @@ func NewRetrievalService(
 		embeddingCacheSizeLimit:  1000, // Limit cache to 1000 entries (~8-12MB)
 		embeddingCacheAccessList: make([]string, 0, 1000),
 		synonymRules:             loadSynonymRules(),
+		queryCache:               make(map[string]time.Time),
+		queryCacheTTL:            10 * time.Minute, // Queries cached for 10 minutes
+		queryCacheMaxLen:         500,              // Limit cache to 500 entries
 	}
 }
 
@@ -322,6 +331,9 @@ func (s *RetrievalService) Search(ctx context.Context, req *SearchRequest) ([]*S
 		}
 	}
 
+	// 7. Mark query as cached to skip redundant rewrites.
+	s.markQueryCached(req.Query)
+
 	return finalResults, nil
 }
 
@@ -396,6 +408,10 @@ func (s *RetrievalService) searchPrecision(ctx context.Context, req *SearchReque
 		return nil, errors.Wrap(err, "vector search")
 	}
 	s.logger.Debug("Precision search: using vector fallback", "count", len(vector))
+
+	// Mark query as cached to skip redundant rewrites on repeated short queries.
+	s.markQueryCached(req.Query)
+
 	return vector, nil
 }
 
@@ -580,7 +596,9 @@ func (s *RetrievalService) getEmbeddingCached(ctx context.Context, query string)
 
 // shouldRewriteQuery determines if a query should be rewritten.
 func (s *RetrievalService) shouldRewriteQuery(query string) bool {
-	// Skip short queries
+	// Skip very short queries (byte-level check).
+	// Note: isPrecisionMode uses rune count for different semantics (precision trigger).
+	// Here we skip only trivially short inputs that cannot benefit from rewriting.
 	if len(query) < 10 {
 		return false
 	}
@@ -596,9 +614,8 @@ func (s *RetrievalService) shouldRewriteQuery(query string) bool {
 		"what", "how", "explain", "解释", "describe", "描述",
 	}
 
-	queryLower := toLower(query)
 	for _, pattern := range complexPatterns {
-		if contains(queryLower, toLower(pattern)) {
+		if contains(query, pattern) {
 			return true
 		}
 	}
@@ -606,13 +623,75 @@ func (s *RetrievalService) shouldRewriteQuery(query string) bool {
 	return false
 }
 
-// isQueryInCache checks if query results are already cached.
-// This implements query cache check as specified in design standard.
+// isQueryInCache checks if query results are already cached within TTL.
+// Uses RLock for the read path to minimize contention; expired entry cleanup
+// is deferred to markQueryCached to avoid write lock overhead on read-heavy paths.
 func (s *RetrievalService) isQueryInCache(query string) bool {
-	// Simple implementation - check if query was recently processed
-	// In production, this would check Redis cache or LRU cache
-	// For now, return false to enable all query rewrites
-	return false
+	if len(query) == 0 {
+		return false
+	}
+
+	normalized := s.normalizeQueryForCache(query)
+
+	s.queryCacheMu.RLock()
+	defer s.queryCacheMu.RUnlock()
+
+	cachedAt, exists := s.queryCache[normalized]
+	if !exists {
+		return false
+	}
+
+	// Expired entries are lazily cleaned up by markQueryCached.
+	// Here we simply report the cache status.
+	return time.Since(cachedAt) <= s.queryCacheTTL
+}
+
+// markQueryCached records a query as processed to skip future rewrites.
+// Thread-safe: acquires write lock for the entire operation.
+// Eviction strategy: first remove expired entries, then remove oldest if still at capacity.
+func (s *RetrievalService) markQueryCached(query string) {
+	if len(query) == 0 {
+		return
+	}
+
+	normalized := s.normalizeQueryForCache(query)
+
+	s.queryCacheMu.Lock()
+	defer s.queryCacheMu.Unlock()
+
+	// Evict expired entries if cache is at capacity.
+	if len(s.queryCache) >= s.queryCacheMaxLen {
+		now := time.Now()
+		for key, ts := range s.queryCache {
+			if now.Sub(ts) > s.queryCacheTTL {
+				delete(s.queryCache, key)
+			}
+		}
+	}
+
+	// Fallback: if still at capacity after expired eviction, remove oldest entry.
+	if len(s.queryCache) >= s.queryCacheMaxLen {
+		var oldestKey string
+		var oldestTime time.Time
+		for key, ts := range s.queryCache {
+			if oldestKey == "" || ts.Before(oldestTime) {
+				oldestKey = key
+				oldestTime = ts
+			}
+		}
+		if oldestKey != "" {
+			delete(s.queryCache, oldestKey)
+		}
+	}
+
+	s.queryCache[normalized] = time.Now()
+}
+
+// normalizeQueryForCache normalizes query text for cache key usage.
+// Strips whitespace and converts to lowercase for case-insensitive matching.
+func (s *RetrievalService) normalizeQueryForCache(query string) string {
+	trimmed := strings.TrimSpace(query)
+	return toLower(trimmed)
 }
 
 // queryRewrite rewrites a query for better retrieval.
@@ -1883,27 +1962,10 @@ func toLower(s string) string {
 	return strings.ToLower(s)
 }
 
+// contains reports whether substr is within s, using case-insensitive matching.
+// Uses strings.ToLower for Unicode-safe comparison.
 func contains(s, substr string) bool {
-	return indexOf(s, substr) >= 0
-}
-
-func indexOf(s, substr string) int {
-	if len(substr) == 0 {
-		return 0
-	}
-	if len(s) < len(substr) {
-		return -1
-	}
-
-	s = toLower(s)
-	substr = toLower(substr)
-
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 // normalizeEnglishQuery normalizes English queries by expanding contractions and standardizing format.

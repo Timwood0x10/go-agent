@@ -1,4 +1,4 @@
-# GoAgent Fashion Recommendation System Configuration
+# GoAgent Multi-Agent Workflow Example Configuration
 # Configure your agents and prompts here
 
 # LLM Configuration
@@ -19,76 +19,71 @@ api:
 agents:
   # Leader Agent coordinates all sub-agents
   leader:
-    id: "leader-fashion"
+    id: "leader-default"
     max_steps: 10
     max_parallel_tasks: 5
 
-  # Sub Agents - Each handles a specific category
+  # Sub Agents - Each handles a specific task domain
   sub:
-    # Top Wear Agent
-    - id: "agent-top"
+    # Researcher A Agent
+    - id: "agent-researcher-a"
       type: "top"
-      category: "tops"
-      name: "Top Wear Recommender"
+      name: "Researcher A"
       max_retries: 3
       timeout: 30
 
-    # Bottom Wear Agent
-    - id: "agent-bottom"
+    # Researcher B Agent
+    - id: "agent-researcher-b"
       type: "bottom"
-      category: "bottoms"
-      name: "Bottom Wear Recommender"
+      name: "Researcher B"
       max_retries: 3
       timeout: 30
 
-    # Shoes Agent
-    - id: "agent-shoes"
-      type: "shoes"
-      category: "shoes"
-      name: "Shoes Recommender"
+    # Data Analyzer Agent
+    - id: "agent-analyzer"
+      type: "top"
+      name: "Data Analyzer"
       max_retries: 3
       timeout: 30
 
-    # Accessories Agent
-    - id: "agent-accessory"
-      type: "accessory"
-      category: "accessories"
-      name: "Accessories Recommender"
+    # Result Summarizer Agent
+    - id: "agent-summarizer"
+      type: "bottom"
+      name: "Result Summarizer"
       max_retries: 3
       timeout: 30
 
 # Prompt Templates for Agents
 prompts:
-  # Prompt for extracting user preferences
-  profile_extraction: |
-    Extract fashion preferences from the user's request:
+  # Prompt for analyzing user requirements
+  input_analysis: |
+    Analyze the user's task requirements from the following request:
     {{.user_input}}
 
     Return JSON format only:
     {
-      "style": ["casual", "formal", etc.],
-      "occasions": ["daily", "work", etc.],
-      "budget": {"min": 0, "max": 1000},
-      "colors": ["black", "white", etc.]
+      "domains": ["domain1", "domain2"],
+      "priority": "high|medium|low",
+      "scope": {"depth": "standard|deep", "breadth": "narrow|wide"},
+      "keywords": ["keyword1", "keyword2"]
     }
 
-  # Prompt for generating recommendations
-  recommendation: |
-    You are a fashion expert specializing in {{.category}}.
+  # Prompt for executing tasks and generating results
+  task_execution: |
+    You are a domain expert specializing in {{.category}}.
 
-    User preferences:
-    - Style: {{.style}}
-    - Occasions: {{.occasions}}
-    - Budget: {{.budget}}
-    - Colors: {{.colors}}
+    Task requirements:
+    - Domains: {{.domains}}
+    - Priority: {{.priority}}
+    - Scope: {{.scope}}
+    - Keywords: {{.keywords}}
 
-    Recommend 3 items in JSON format:
+    Generate 3 findings in JSON format:
     {
       "items": [
         {
-          "name": "Product name",
-          "price": 999,
-          "reason": "Why this fits"
+          "name": "Finding title",
+          "reason": "Why this is relevant"
         }
       ]
     }

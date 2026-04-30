@@ -173,7 +173,7 @@ func (p *profileParser) parseResponse(response string) (*models.UserProfile, err
 	}
 
 	// Dynamically extract ALL fields from JSON response into Preferences
-	// This makes the parser flexible for any scenario (travel, fashion, etc.)
+	// This makes the parser flexible for any scenario (travel, research, etc.)
 	// The TaskPlanner then decides which agents to call based on triggers
 	for key, value := range data {
 		// Skip fields already parsed into dedicated fields

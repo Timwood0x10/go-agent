@@ -13,8 +13,9 @@ const defaultTraceID traceIDKey = "trace_id"
 
 var traceCounter uint64
 
-// NoopTracer is a no-op implementation of Tracer.
-// It can be used as a default tracer when observability is not needed.
+// NoopTracer is a lightweight tracer that manages trace IDs in context
+// without performing any external recording. Use this when observability
+// overhead should be minimal but trace ID propagation is still needed.
 type NoopTracer struct{}
 
 // NewNoopTracer creates a new NoopTracer.
@@ -22,27 +23,23 @@ func NewNoopTracer() Tracer {
 	return &NoopTracer{}
 }
 
-// RecordLLMCall implements Tracer.
+// RecordLLMCall implements Tracer. No-op: does not record.
 func (t *NoopTracer) RecordLLMCall(ctx context.Context, call *LLMCall) {
-	// No-op
 }
 
-// RecordToolCall implements Tracer.
+// RecordToolCall implements Tracer. No-op: does not record.
 func (t *NoopTracer) RecordToolCall(ctx context.Context, call *ToolCall) {
-	// No-op
 }
 
-// RecordAgentStep implements Tracer.
+// RecordAgentStep implements Tracer. No-op: does not record.
 func (t *NoopTracer) RecordAgentStep(ctx context.Context, step *AgentStep) {
-	// No-op
 }
 
-// RecordError implements Tracer.
+// RecordError implements Tracer. No-op: does not record.
 func (t *NoopTracer) RecordError(ctx context.Context, err *AgentError) {
-	// No-op
 }
 
-// GetTraceID returns the trace ID from context.
+// GetTraceID returns the trace ID from context if present.
 func (t *NoopTracer) GetTraceID(ctx context.Context) string {
 	if id, ok := ctx.Value(defaultTraceID).(string); ok {
 		return id
@@ -50,7 +47,7 @@ func (t *NoopTracer) GetTraceID(ctx context.Context) string {
 	return ""
 }
 
-// WithTrace returns a new context with a new trace ID.
+// WithTrace returns a new context with a generated trace ID.
 func (t *NoopTracer) WithTrace(ctx context.Context) context.Context {
 	return context.WithValue(ctx, defaultTraceID, generateTraceID())
 }

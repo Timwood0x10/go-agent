@@ -184,8 +184,8 @@ func (e *taskExecutor) executeWithLLM(ctx context.Context, task *models.Task, pr
 }
 
 func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Task, profile *models.UserProfile) ([]*models.RecommendItem, error) {
-	// Render prompt - support both fashion and travel profiles
-	// Use lowercase keys to match template's {{index . "key"}} syntax
+	// Render prompt - support generic profile fields.
+	// Use lowercase keys to match template's {{index . "key"}} syntax.
 	promptData := map[string]any{
 		"Category": string(task.AgentType), // Uppercase to match template
 	}
@@ -198,7 +198,7 @@ func (e *taskExecutor) executeWithLLMSingle(ctx context.Context, task *models.Ta
 		}
 	}
 
-	// Always include budget from profile.Budget (for fashion/travel compatibility)
+	// Include budget from profile.Budget for backward compatibility.
 	promptData["budget"] = formatBudget(profile.Budget)
 
 	// Also set style from profile

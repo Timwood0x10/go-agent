@@ -73,7 +73,7 @@ type LeaderConfig struct {
 // SubAgentConfig holds Sub Agent configuration.
 type SubAgentConfig struct {
 	ID         string   `yaml:"id"`
-	Type       string   `yaml:"type"` // "top", "bottom", "shoes", "head", "accessory"
+	Type       string   `yaml:"type"` // Agent type identifier (e.g., "top", "bottom", "custom")
 	Category   string   `yaml:"category"`
 	Triggers   []string `yaml:"triggers"` // Profile fields that trigger this agent
 	MaxRetries int      `yaml:"max_retries"`
@@ -137,7 +137,7 @@ type Field struct {
 // ValidationConfig holds validation configuration.
 type ValidationConfig struct {
 	Enabled      bool          `yaml:"enabled"`       // Enable/disable validation
-	SchemaType   string        `yaml:"schema_type"`   // "fashion", "travel", "custom"
+	SchemaType   string        `yaml:"schema_type"`   // Schema type for validation (e.g., "default", "travel", "custom")
 	RetryOnFail  bool          `yaml:"retry_on_fail"` // Retry LLM call on validation failure
 	MaxRetries   int           `yaml:"max_retries"`   // Max retry attempts
 	StrictMode   bool          `yaml:"strict_mode"`   // If true, fail on validation error
@@ -330,7 +330,7 @@ func (c *Config) setDefaults() {
 		c.LLM.Provider = "ollama"
 	}
 	if c.LLM.Model == "" {
-		c.LLM.Model = "llama3"
+		c.LLM.Model = "llama3.2"
 	}
 	if c.LLM.Timeout == 0 {
 		c.LLM.Timeout = 60
@@ -381,7 +381,7 @@ func (c *Config) setDefaults() {
 	}
 	// Validation defaults
 	if c.Validation.SchemaType == "" {
-		c.Validation.SchemaType = "fashion" // "fashion", "travel", "custom"
+		c.Validation.SchemaType = "default" // "default", "travel", "custom"
 	}
 	if c.Validation.MaxRetries == 0 {
 		c.Validation.MaxRetries = 3

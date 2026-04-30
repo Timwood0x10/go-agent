@@ -11,7 +11,7 @@ const (
 	GenderOther  Gender = "other"
 )
 
-// StyleTag represents fashion style tags.
+// StyleTag represents user preference style tags.
 type StyleTag string
 
 const (

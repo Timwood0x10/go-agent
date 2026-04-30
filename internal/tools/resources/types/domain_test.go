@@ -5,85 +5,85 @@ import (
 	"time"
 )
 
-// TestFashionFilters tests FashionFilters structure.
-func TestFashionFilters(t *testing.T) {
+// TestResourceFilters tests ResourceFilters structure.
+func TestResourceFilters(t *testing.T) {
 	tests := []struct {
 		name    string
-		filters FashionFilters
+		filters ResourceFilters
 	}{
 		{
 			name: "fully populated filters",
-			filters: FashionFilters{
-				Category:         "shoes",
-				AgentPreferences: []string{"casual", "comfortable"},
+			filters: ResourceFilters{
+				Category:         "technology",
+				AgentPreferences: []string{"performance", "reliable"},
 				PriceMin:         50.0,
 				PriceMax:         200.0,
-				Colors:           []string{"black", "white"},
-				Brands:           []string{"Nike", "Adidas"},
-				Occasion:         "daily",
-				Season:           "summer",
+				Tags:             []string{"cloud", "ai"},
+				Labels:           []string{"enterprise", "open-source"},
+				Context:          "production",
+				Season:           "Q1",
 			},
 		},
 		{
 			name: "minimal filters",
-			filters: FashionFilters{
-				Category: "clothing",
+			filters: ResourceFilters{
+				Category: "software",
 			},
 		},
 		{
 			name:    "empty filters",
-			filters: FashionFilters{},
+			filters: ResourceFilters{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Verify that filters can be created without errors
+			// Verify that filters can be created without errors.
 			_ = tt.filters
 		})
 	}
 }
 
-// TestFashionItem tests FashionItem structure.
-func TestFashionItem(t *testing.T) {
+// TestResourceItem tests ResourceItem structure.
+func TestResourceItem(t *testing.T) {
 	tests := []struct {
 		name string
-		item FashionItem
+		item ResourceItem
 	}{
 		{
 			name: "fully populated item",
-			item: FashionItem{
+			item: ResourceItem{
 				ItemID:           "item-123",
-				Name:             "Running Shoes",
-				Brand:            "Nike",
-				Category:         "shoes",
+				Name:             "Cloud Service",
+				Brand:            "TechCorp",
+				Category:         "compute",
 				Price:            120.50,
 				URL:              "https://example.com/item/123",
 				ImageURL:         "https://example.com/images/123.jpg",
-				AgentPreferences: []string{"athletic", "comfortable"},
-				Colors:           []string{"black", "white"},
-				Occasion:         "sports",
+				AgentPreferences: []string{"scalable", "secure"},
+				Tags:             []string{"cloud", "enterprise"},
+				Context:          "production",
 				Season:           "all",
 				Metadata: map[string]interface{}{
-					"material": "synthetic",
-					"weight":   "light",
+					"region": "us-east-1",
+					"tier":   "premium",
 				},
 			},
 		},
 		{
 			name: "minimal item",
-			item: FashionItem{
+			item: ResourceItem{
 				ItemID:   "item-456",
-				Name:     "T-Shirt",
-				Category: "clothing",
+				Name:     "API Gateway",
+				Category: "networking",
 			},
 		},
 		{
 			name: "item with nil metadata",
-			item: FashionItem{
+			item: ResourceItem{
 				ItemID:   "item-789",
-				Name:     "Jeans",
-				Category: "clothing",
+				Name:     "Load Balancer",
+				Category: "networking",
 				Metadata: nil,
 			},
 		},
@@ -101,33 +101,33 @@ func TestFashionItem(t *testing.T) {
 	}
 }
 
-// TestAgentProfile tests AgentProfile structure.
-func TestAgentProfile(t *testing.T) {
+// TestAgentUserProfile tests AgentUserProfile structure.
+func TestAgentUserProfile(t *testing.T) {
 	tests := []struct {
 		name    string
-		profile AgentProfile
+		profile AgentUserProfile
 	}{
 		{
 			name: "fully populated profile",
-			profile: AgentProfile{
-				Gender:           "female",
+			profile: AgentUserProfile{
+				Gender:           "unspecified",
 				AgeRange:         "25-35",
-				BodyType:         "slim",
-				StylePreferences: []string{"minimalist", "elegant"},
-				ColorPreferences: []string{"black", "white", "beige"},
+				BodyType:         "",
+				StylePreferences: []string{"minimalist", "efficient"},
+				ColorPreferences: []string{"dark", "light"},
 				BudgetRange: &BudgetRange{
 					Min: 50.0,
 					Max: 500.0,
 				},
-				Occasion: "work",
+				Context:  "work",
 				Season:   "spring",
 				Location: "New York",
 			},
 		},
 		{
 			name: "profile with nil budget range",
-			profile: AgentProfile{
-				Gender:           "male",
+			profile: AgentUserProfile{
+				Gender:           "unspecified",
 				AgeRange:         "20-30",
 				StylePreferences: []string{"casual"},
 				BudgetRange:      nil,
@@ -135,7 +135,7 @@ func TestAgentProfile(t *testing.T) {
 		},
 		{
 			name: "minimal profile",
-			profile: AgentProfile{
+			profile: AgentUserProfile{
 				Gender: "unspecified",
 			},
 		},
@@ -191,30 +191,30 @@ func TestBudgetRange(t *testing.T) {
 	}
 }
 
-// TestAgentRecommendation tests AgentRecommendation structure.
-func TestAgentRecommendation(t *testing.T) {
+// TestTaskRecommendation tests TaskRecommendation structure.
+func TestTaskRecommendation(t *testing.T) {
 	tests := []struct {
 		name string
-		rec  AgentRecommendation
+		rec  TaskRecommendation
 	}{
 		{
 			name: "fully populated recommendation",
-			rec: AgentRecommendation{
-				PrimaryStyle:    "minimalist",
-				SecondaryStyles: []string{"modern", "clean"},
-				ColorPalette:    []string{"black", "white", "gray"},
-				Outfits: []OutfitSuggestion{
+			rec: TaskRecommendation{
+				PrimaryCategory:     "infrastructure",
+				SecondaryCategories: []string{"compute", "storage"},
+				Tags:                []string{"cloud", "scalable"},
+				Suggestions: []Suggestion{
 					{
-						Name:        "Business Casual",
-						Items:       []string{"blazer", "pants", "shirt"},
-						Occasion:    "work",
+						Name:        "Auto Scaling Setup",
+						Items:       []string{"EC2", "ALB", "CloudWatch"},
+						Context:     "production",
 						MatchScore:  0.95,
-						Description: "Professional yet comfortable outfit",
+						Description: "Configure auto scaling for production workloads",
 					},
 				},
 				Tips: []string{
-					"Stick to neutral colors",
-					"Choose well-fitted clothes",
+					"Monitor CPU utilization",
+					"Set appropriate cooldown periods",
 				},
 				Metadata: map[string]interface{}{
 					"generated_at": "2024-01-01",
@@ -224,56 +224,56 @@ func TestAgentRecommendation(t *testing.T) {
 		},
 		{
 			name: "minimal recommendation",
-			rec: AgentRecommendation{
-				PrimaryStyle: "casual",
-				Outfits:      []OutfitSuggestion{},
-				Tips:         []string{},
+			rec: TaskRecommendation{
+				PrimaryCategory: "networking",
+				Suggestions:     []Suggestion{},
+				Tips:            []string{},
 			},
 		},
 		{
 			name: "recommendation with nil metadata",
-			rec: AgentRecommendation{
-				PrimaryStyle: "elegant",
-				Metadata:     nil,
+			rec: TaskRecommendation{
+				PrimaryCategory: "security",
+				Metadata:        nil,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.rec.PrimaryStyle == "" {
-				t.Error("PrimaryStyle should not be empty")
+			if tt.rec.PrimaryCategory == "" {
+				t.Error("PrimaryCategory should not be empty")
 			}
 		})
 	}
 }
 
-// TestOutfitSuggestion tests OutfitSuggestion structure.
-func TestOutfitSuggestion(t *testing.T) {
+// TestSuggestion tests Suggestion structure.
+func TestSuggestion(t *testing.T) {
 	tests := []struct {
 		name string
-		os   OutfitSuggestion
+		s    Suggestion
 	}{
 		{
-			name: "fully populated outfit suggestion",
-			os: OutfitSuggestion{
-				Name:        "Summer Casual",
-				Items:       []string{"t-shirt", "shorts", "sandals"},
-				Occasion:    "casual",
+			name: "fully populated suggestion",
+			s: Suggestion{
+				Name:        "Database Migration",
+				Items:       []string{"schema", "data", "validation"},
+				Context:     "production",
 				MatchScore:  0.88,
-				Description: "Light and comfortable for hot weather",
+				Description: "Migrate database to new schema version",
 			},
 		},
 		{
-			name: "minimal outfit suggestion",
-			os: OutfitSuggestion{
-				Name:  "Simple",
-				Items: []string{"dress"},
+			name: "minimal suggestion",
+			s: Suggestion{
+				Name:  "Simple Task",
+				Items: []string{"step1"},
 			},
 		},
 		{
-			name: "outfit with empty items",
-			os: OutfitSuggestion{
+			name: "suggestion with empty items",
+			s: Suggestion{
 				Name:  "Template",
 				Items: []string{},
 			},
@@ -282,44 +282,44 @@ func TestOutfitSuggestion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.os.Name == "" {
+			if tt.s.Name == "" {
 				t.Error("Name should not be empty")
 			}
-			if tt.os.MatchScore < 0 || tt.os.MatchScore > 1 {
-				t.Errorf("MatchScore should be between 0 and 1, got %f", tt.os.MatchScore)
+			if tt.s.MatchScore < 0 || tt.s.MatchScore > 1 {
+				t.Errorf("MatchScore should be between 0 and 1, got %f", tt.s.MatchScore)
 			}
 		})
 	}
 }
 
-// TestAgentTrend tests AgentTrend structure.
-func TestAgentTrend(t *testing.T) {
+// TestTrend tests Trend structure.
+func TestTrend(t *testing.T) {
 	tests := []struct {
 		name  string
-		trend AgentTrend
+		trend Trend
 	}{
 		{
 			name: "fully populated trend",
-			trend: AgentTrend{
+			trend: Trend{
 				TrendID:     "trend-2024-001",
-				Name:        "Sustainable Fashion",
-				Category:    "lifestyle",
+				Name:        "Edge Computing",
+				Category:    "infrastructure",
 				Popularity:  0.85,
-				Season:      "spring",
-				KeyElements: []string{"organic materials", "recycled fabrics"},
-				Description: "Fashion trend focusing on sustainability",
+				Season:      "Q1",
+				KeyElements: []string{"low-latency", "distributed"},
+				Description: "Processing data closer to the source",
 			},
 		},
 		{
 			name: "minimal trend",
-			trend: AgentTrend{
+			trend: Trend{
 				TrendID: "trend-001",
 				Name:    "Test Trend",
 			},
 		},
 		{
 			name: "trend with popularity 0",
-			trend: AgentTrend{
+			trend: Trend{
 				TrendID:    "trend-002",
 				Name:       "New Trend",
 				Popularity: 0.0,
@@ -402,32 +402,32 @@ func TestWeatherData(t *testing.T) {
 	}
 }
 
-// TestFashionFiltersEdgeCases tests edge cases for FashionFilters.
-func TestFashionFiltersEdgeCases(t *testing.T) {
+// TestResourceFiltersEdgeCases tests edge cases for ResourceFilters.
+func TestResourceFiltersEdgeCases(t *testing.T) {
 	tests := []struct {
 		name    string
-		filters FashionFilters
+		filters ResourceFilters
 	}{
 		{
 			name: "negative price range",
-			filters: FashionFilters{
+			filters: ResourceFilters{
 				PriceMin: -10.0,
 				PriceMax: 100.0,
 			},
 		},
 		{
 			name: "max less than min",
-			filters: FashionFilters{
+			filters: ResourceFilters{
 				PriceMin: 200.0,
 				PriceMax: 100.0,
 			},
 		},
 		{
 			name: "empty arrays",
-			filters: FashionFilters{
+			filters: ResourceFilters{
 				AgentPreferences: []string{},
-				Colors:           []string{},
-				Brands:           []string{},
+				Tags:             []string{},
+				Labels:           []string{},
 			},
 		},
 	}

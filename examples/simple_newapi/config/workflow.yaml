@@ -1,23 +1,23 @@
-# Fashion Recommendation Workflow
+# Multi-Agent Task Processing Workflow
 # Demonstrates DAG-based agent orchestration
 
-id: "fashion-recommendation"
-name: "Fashion Recommendation Workflow"
+id: "multi-agent-workflow"
+name: "Multi-Agent Task Processing Workflow"
 version: "1.0.0"
-description: "Multi-agent fashion recommendation system with parallel execution"
+description: "Generic multi-agent system with parallel task execution"
 
 # Variables that can be referenced in steps
 variables:
-  default_budget: "1000"
-  default_style: "casual"
+  default_priority: "medium"
+  default_depth: "standard"
 
 # Workflow steps with dependencies
 steps:
-  # Step 1: Extract user preferences (no dependencies, runs first)
-  - id: "extract-profile"
-    name: "Extract User Preferences"
+  # Step 1: Analyze user input (no dependencies, runs first)
+  - id: "analyze-input"
+    name: "Analyze Input"
     agent_type: "top"
-    input: "Extract fashion preferences from user request: {{.input}}"
+    input: "Analyze user requirements from: {{.input}}"
     timeout: 30s
     retry_policy:
       max_attempts: 3
@@ -28,51 +28,51 @@ steps:
       category: "preprocessing"
       priority: "high"
 
-  # Step 2: Recommend tops (depends on profile extraction)
-  - id: "recommend-tops"
-    name: "Recommend Top Wear"
+  # Step 2: Research topic A (depends on input analysis)
+  - id: "research-topic-a"
+    name: "Research Topic A"
     agent_type: "top"
-    input: "Based on user profile from {{.extract-profile}}, recommend 3 top items"
+    input: "Based on analysis from {{.analyze-input}}, research and compile findings"
     depends_on:
-      - "extract-profile"
+      - "analyze-input"
     timeout: 30s
     retry_policy:
       max_attempts: 2
       initial_delay: 1s
 
-  # Step 3: Recommend bottoms (depends on profile extraction)
-  - id: "recommend-bottoms"
-    name: "Recommend Bottom Wear"
+  # Step 3: Research topic B (depends on input analysis)
+  - id: "research-topic-b"
+    name: "Research Topic B"
     agent_type: "bottom"
-    input: "Based on user profile from {{.extract-profile}}, recommend 3 bottom items"
+    input: "Based on analysis from {{.analyze-input}}, investigate and gather data"
     depends_on:
-      - "extract-profile"
+      - "analyze-input"
     timeout: 30s
     retry_policy:
       max_attempts: 2
       initial_delay: 1s
 
-  # Step 4: Recommend shoes (depends on profile extraction)
-  - id: "recommend-shoes"
-    name: "Recommend Shoes"
-    agent_type: "shoes"
-    input: "Based on user profile from {{.extract-profile}}, recommend 3 shoe items"
+  # Step 4: Research topic C (depends on input analysis)
+  - id: "research-topic-c"
+    name: "Research Topic C"
+    agent_type: "top"
+    input: "Based on analysis from {{.analyze-input}}, explore and document insights"
     depends_on:
-      - "extract-profile"
+      - "analyze-input"
     timeout: 30s
     retry_policy:
       max_attempts: 2
       initial_delay: 1s
 
-  # Step 5: Aggregate all recommendations (depends on all recommendation steps)
+  # Step 5: Aggregate all results (depends on all research steps)
   - id: "aggregate-results"
-    name: "Aggregate Recommendations"
-    agent_type: "accessory"
-    input: "Aggregate recommendations from {{.recommend-tops}}, {{.recommend-bottoms}}, and {{.recommend-shoes}} into a complete outfit"
+    name: "Aggregate Results"
+    agent_type: "bottom"
+    input: "Combine findings from {{.research-topic-a}}, {{.research-topic-b}}, and {{.research-topic-c}} into a comprehensive report"
     depends_on:
-      - "recommend-tops"
-      - "recommend-bottoms"
-      - "recommend-shoes"
+      - "research-topic-a"
+      - "research-topic-b"
+      - "research-topic-c"
     timeout: 45s
     retry_policy:
       max_attempts: 1
@@ -83,4 +83,4 @@ steps:
 metadata:
   author: "GoAgent Team"
   created_date: "2026-03-21"
-  tags: ["fashion", "recommendation", "multi-agent"]
+  tags: ["multi-agent", "workflow", "task-processing"]

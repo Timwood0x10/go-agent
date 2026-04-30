@@ -65,6 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `TaskPlanner.Plan` signature changed: added `inputText string` parameter
 - **Breaking**: `ResultAggregator.Aggregate` signature changed: added `tasks []*models.Task` parameter
 - Data model (RecommendResult/RecommendItem) documented as generic Agent output structure; Price/Brand/ImageURL are now optional domain-specific fields
+- **Breaking**: Domain types renamed: `FashionFilters` → `ResourceFilters`, `FashionItem` → `ResourceItem`, `AgentProfile` → `AgentUserProfile`, `AgentRecommendation` → `TaskRecommendation`, `OutfitSuggestion` → `Suggestion`, `AgentTrend` → `Trend`
+- **Breaking**: Validation default schema type changed from `"fashion"` to `"default"`
+- Default LLM model changed from `llama3` to `llama3.2` across code and config defaults
+- Default OpenRouter model changed from vendor-specific `minimax/minimax-m2-her` to generic `openai/gpt-3.5-turbo`
+
+### Fixed
+- README build command referenced non-existent `cmd/server`; updated to use example entry points
+- `simple_newapi` example fully generalised from fashion recommendation to generic multi-agent workflow
+- `isQueryInCache` was a stub always returning `false`; now implements TTL-based query cache with lazy eviction
+- Two skipped tests in `secret_repository_test.go` (List, UpdateMetadata) restored with improved assertions and isolated tenant IDs
+- Fashion residual references cleaned from validator.go, config.go, executor.go, template.go, types.go
+- Hardcoded URLs and model names in client.go extracted to named constants (`DefaultOllamaBaseURL`, `DefaultOpenRouterBaseURL`, `DefaultOllamaModel`, `DefaultOpenRouterModel`)
+- Hardcoded `HTTP-Referer: example.com` header removed from OpenRouter requests
+- NoopTracer doc comments corrected to accurately describe its context-based trace ID behaviour
+- Migration Guide (v0.2) added to both README.md and README_zh.md with all breaking changes documented
 
 ## [0.1.0] - 2026-04-19
 

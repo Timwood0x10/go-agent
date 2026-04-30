@@ -40,8 +40,8 @@ type SubAgentConfig struct {
 
 // taskPlanner creates tasks based on user profile and config.
 type taskPlanner struct {
-	maxTasks        int
-	subAgents       []SubAgentConfig
+	maxTasks          int
+	subAgents         []SubAgentConfig
 	fallbackOnNoMatch bool // When true, include all subAgents if no triggers match. Default: true.
 }
 

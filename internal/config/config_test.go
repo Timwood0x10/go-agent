@@ -19,7 +19,7 @@ server:
 
 llm:
   provider: "ollama"
-  model: "llama3"
+  model: "llama3.2"
   timeout: 60
   max_tokens: 4096
 
@@ -44,7 +44,7 @@ output:
 
 validation:
   enabled: true
-  schema_type: "fashion"
+  schema_type: "default"
   retry_on_fail: true
   max_retries: 3
   strict_mode: false
@@ -104,8 +104,8 @@ memory:
 	if cfg.LLM.Provider != "ollama" {
 		t.Errorf("LLM.Provider = %v, want ollama", cfg.LLM.Provider)
 	}
-	if cfg.LLM.Model != "llama3" {
-		t.Errorf("LLM.Model = %v, want llama3", cfg.LLM.Model)
+	if cfg.LLM.Model != "llama3.2" {
+		t.Errorf("LLM.Model = %v, want llama3.2", cfg.LLM.Model)
 	}
 	if cfg.Agents.Leader.MaxSteps != 10 {
 		t.Errorf("Agents.Leader.MaxSteps = %v, want 10", cfg.Agents.Leader.MaxSteps)
@@ -355,8 +355,8 @@ func TestSetDefaults(t *testing.T) {
 	if cfg.LLM.Provider != "ollama" {
 		t.Errorf("LLM.Provider default = %v, want ollama", cfg.LLM.Provider)
 	}
-	if cfg.LLM.Model != "llama3" {
-		t.Errorf("LLM.Model default = %v, want llama3", cfg.LLM.Model)
+	if cfg.LLM.Model != "llama3.2" {
+		t.Errorf("LLM.Model default = %v, want llama3.2", cfg.LLM.Model)
 	}
 	if cfg.LLM.Timeout != 60 {
 		t.Errorf("LLM.Timeout default = %v, want 60", cfg.LLM.Timeout)
@@ -394,8 +394,8 @@ func TestSetDefaults(t *testing.T) {
 	if cfg.Memory.UserProfile.Storage != "memory" {
 		t.Errorf("Memory.UserProfile.Storage default = %v, want memory", cfg.Memory.UserProfile.Storage)
 	}
-	if cfg.Validation.SchemaType != "fashion" {
-		t.Errorf("Validation.SchemaType default = %v, want fashion", cfg.Validation.SchemaType)
+	if cfg.Validation.SchemaType != "default" {
+		t.Errorf("Validation.SchemaType default = %v, want default", cfg.Validation.SchemaType)
 	}
 	if cfg.Validation.MaxRetries != 3 {
 		t.Errorf("Validation.MaxRetries default = %v, want 3", cfg.Validation.MaxRetries)

@@ -33,6 +33,18 @@ type ProviderType string
 const (
 	ProviderOpenRouter ProviderType = "openrouter"
 	ProviderOllama     ProviderType = "ollama"
+
+	// DefaultOllamaBaseURL is the default base URL for Ollama provider.
+	DefaultOllamaBaseURL = "http://localhost:11434"
+
+	// DefaultOpenRouterBaseURL is the default base URL for OpenRouter provider.
+	DefaultOpenRouterBaseURL = "https://openrouter.ai/api/v1"
+
+	// DefaultOllamaModel is the default model for Ollama provider.
+	DefaultOllamaModel = "llama3.2"
+
+	// DefaultOpenRouterModel is the default model for OpenRouter provider.
+	DefaultOpenRouterModel = "openai/gpt-3.5-turbo"
 )
 
 // Config holds LLM client configuration.
@@ -133,9 +145,8 @@ func (c *Client) generateOpenRouter(ctx context.Context, prompt string) (string,
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-	// Privacy: Use generic referer to avoid exposing repository details
-	req.Header.Set("HTTP-Referer", "https://example.com")
-	req.Header.Set("X-Title", "LLM Client")
+	// Privacy: Omit referer to avoid exposing repository details.
+	req.Header.Set("X-Title", "GoAgent")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -190,7 +201,7 @@ func (c *Client) generateOllama(ctx context.Context, prompt string) (string, err
 
 	baseURL := c.config.BaseURL
 	if baseURL == "" {
-		baseURL = "http://localhost:11434"
+		baseURL = DefaultOllamaBaseURL
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/generate", bytes.NewBuffer(jsonBody))
@@ -276,16 +287,16 @@ func NewClientFromEnv() (*Client, error) {
 	}
 	if config.BaseURL == "" {
 		if config.Provider == "openrouter" {
-			config.BaseURL = "https://openrouter.ai/api/v1"
+			config.BaseURL = DefaultOpenRouterBaseURL
 		} else {
-			config.BaseURL = "http://localhost:11434"
+			config.BaseURL = DefaultOllamaBaseURL
 		}
 	}
 	if config.Model == "" {
 		if config.Provider == "ollama" {
-			config.Model = "llama3"
+			config.Model = DefaultOllamaModel
 		} else {
-			config.Model = "minimax/minimax-m2-her"
+			config.Model = DefaultOpenRouterModel
 		}
 	}
 

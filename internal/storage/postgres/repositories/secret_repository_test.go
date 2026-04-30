@@ -208,11 +208,7 @@ func TestSecretRepository_Delete_NotFound(t *testing.T) {
 }
 
 // TestSecretRepository_List tests listing all secrets for a tenant.
-// TODO: This test needs investigation - List method works in other tests but fails here.
-// The issue appears to be related to test data or timing, not the actual List method.
 func TestSecretRepository_List(t *testing.T) {
-	t.Skip("Temporarily disabled - List method works in Export test, investigation needed")
-
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -229,7 +225,7 @@ func TestSecretRepository_List(t *testing.T) {
 	repo := NewSecretRepository(db, encryptionKey)
 	ctx := context.Background()
 
-	// Store multiple secrets and verify each one
+	// Store multiple secrets and verify each one.
 	secrets := map[string]string{
 		"list_key1": "value1",
 		"list_key2": "value2",
@@ -237,27 +233,32 @@ func TestSecretRepository_List(t *testing.T) {
 	}
 
 	for key, value := range secrets {
-		err := repo.Set(ctx, key, value, "tenant-1")
+		err := repo.Set(ctx, key, value, "tenant-list-test")
 		require.NoError(t, err, "Failed to set secret %s", key)
 
-		// Verify the secret was actually stored
-		retrieved, err := repo.Get(ctx, key, "tenant-1")
+		// Verify the secret was actually stored.
+		retrieved, err := repo.Get(ctx, key, "tenant-list-test")
 		require.NoError(t, err, "Failed to get secret %s after set", key)
 		assert.Equal(t, value, retrieved, "Retrieved value doesn't match for key %s", key)
 	}
 
-	// List secrets
-	secretList, err := repo.List(ctx, "tenant-1")
+	// List secrets.
+	secretList, err := repo.List(ctx, "tenant-list-test")
 	require.NoError(t, err, "Failed to list secrets")
 	assert.Len(t, secretList, 3, "Should return 3 secrets")
 
-	// Verify keys are present (without values)
+	// Verify keys are present (without values).
 	keys := make([]string, len(secretList))
 	for i, secret := range secretList {
 		keys[i] = secret.Key
 		assert.NotEmpty(t, secret.ID, "ID should not be empty")
-		assert.Equal(t, "tenant-1", secret.TenantID, "Tenant ID should match")
+		assert.Equal(t, "tenant-list-test", secret.TenantID, "Tenant ID should match")
 		assert.Greater(t, secret.KeyVersion, 0, "Key version should be positive")
+	}
+
+	// Verify all expected keys are present.
+	for key := range secrets {
+		assert.Contains(t, keys, key, "Key %s should be in the list", key)
 	}
 }
 
@@ -344,11 +345,7 @@ func TestSecretRepository_SetWithExpiration_Expired(t *testing.T) {
 }
 
 // TestSecretRepository_UpdateMetadata tests updating secret metadata.
-// TODO: This test needs investigation - UpdateMetadata works but verification fails.
-// The issue appears to be related to test data or timing, not the actual UpdateMetadata method.
 func TestSecretRepository_UpdateMetadata(t *testing.T) {
-	t.Skip("Temporarily disabled - UpdateMetadata method works, verification issue needs investigation")
-
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -365,30 +362,44 @@ func TestSecretRepository_UpdateMetadata(t *testing.T) {
 	repo := NewSecretRepository(db, encryptionKey)
 	ctx := context.Background()
 
-	// Store a secret
-	err := repo.Set(ctx, "metadata_test_key", "metadata_value", "tenant-1")
+	// Store a secret.
+	err := repo.Set(ctx, "metadata_test_key", "metadata_value", "tenant-meta-test")
 	require.NoError(t, err)
 
-	// Update metadata
+	// Update metadata.
 	metadata := map[string]interface{}{
 		"owner":      "user1",
 		"purpose":    "testing",
 		"created_by": "system",
 	}
-	err = repo.UpdateMetadata(ctx, "metadata_test_key", "tenant-1", metadata)
+	err = repo.UpdateMetadata(ctx, "metadata_test_key", "tenant-meta-test", metadata)
 	require.NoError(t, err)
 
-	// Verify metadata was updated (list to check if metadata exists)
-	secretList, err := repo.List(ctx, "tenant-1")
+	// Verify the secret still exists and is retrievable after metadata update.
+	value, err := repo.Get(ctx, "metadata_test_key", "tenant-meta-test")
+	require.NoError(t, err, "Secret should still be accessible after metadata update")
+	assert.Equal(t, "metadata_value", value, "Secret value should be unchanged")
+
+	// Verify the secret appears in the list.
+	secretList, err := repo.List(ctx, "tenant-meta-test")
 	require.NoError(t, err)
 	found := false
 	for _, secret := range secretList {
 		if secret.Key == "metadata_test_key" {
 			found = true
+			assert.Equal(t, "tenant-meta-test", secret.TenantID)
 			break
 		}
 	}
-	assert.True(t, found, "Secret should exist after metadata update")
+	assert.True(t, found, "Secret should exist in list after metadata update")
+
+	// Verify updating metadata again (overwrite) works.
+	updatedMetadata := map[string]interface{}{
+		"owner":   "user2",
+		"version": "2.0",
+	}
+	err = repo.UpdateMetadata(ctx, "metadata_test_key", "tenant-meta-test", updatedMetadata)
+	require.NoError(t, err, "Second metadata update should succeed")
 }
 
 // TestSecretRepository_UpdateMetadata_NotFound tests updating metadata for non-existent secret.
