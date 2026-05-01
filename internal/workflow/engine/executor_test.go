@@ -398,9 +398,10 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		}
 
 		completed := make(map[string]bool)
+		var mu sync.Mutex
 		result := executor.executeStep(context.Background(), &Workflow{
 			Steps: []*Step{step},
-		}, "step1", "initial input", completed, outputStore)
+		}, "step1", "initial input", completed, outputStore, &mu)
 
 		if result.Status != StepStatusCompleted {
 			t.Errorf("Expected status %s, got %s", StepStatusCompleted, result.Status)
@@ -446,9 +447,10 @@ func TestExecutorHelperFunctionsCoverage(t *testing.T) {
 		}
 
 		completed := make(map[string]bool)
+		var mu sync.Mutex
 		result := executor.executeStep(context.Background(), &Workflow{
 			Steps: []*Step{step},
-		}, "step1", "initial input", completed, outputStore)
+		}, "step1", "initial input", completed, outputStore, &mu)
 
 		if result.Status == StepStatusCompleted {
 			t.Error("Expected failure due to timeout")

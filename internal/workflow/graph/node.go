@@ -48,7 +48,10 @@ func (n *AgentNode) Execute(ctx context.Context, state *State) error {
 		return fmt.Errorf("agent node is not initialized")
 	}
 
-	input, _ := state.Get("input")
+	input, exists := state.Get("input")
+	if !exists || input == nil {
+		return fmt.Errorf("agent %s: input not found in state", n.ID())
+	}
 	result, err := n.agent.Process(ctx, input)
 	if err != nil {
 		return errors.Wrapf(err, "agent %s execution failed", n.ID())

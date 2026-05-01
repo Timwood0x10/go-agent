@@ -165,9 +165,12 @@ func (q *MessageQueue) Capacity() int {
 	return q.opts.MaxSize
 }
 
-// IsEmpty checks if the queue is empty.
+// IsEmpty checks if the queue is empty (including backup buffer).
 func (q *MessageQueue) IsEmpty() bool {
-	return len(q.messages) == 0
+	q.backupMu.Lock()
+	empty := len(q.messages) == 0 && len(q.backupBuffer) == 0
+	q.backupMu.Unlock()
+	return empty
 }
 
 // IsFull checks if the queue is full.
@@ -175,9 +178,12 @@ func (q *MessageQueue) IsFull() bool {
 	return len(q.messages) >= q.opts.MaxSize
 }
 
-// Available returns the number of available slots.
+// Available returns the number of available slots (accounting for backup buffer).
 func (q *MessageQueue) Available() int {
-	return q.opts.MaxSize - len(q.messages)
+	q.backupMu.Lock()
+	backupSize := len(q.backupBuffer)
+	q.backupMu.Unlock()
+	return q.opts.MaxSize - len(q.messages) - backupSize
 }
 
 // AgentID returns the agent ID associated with this queue.

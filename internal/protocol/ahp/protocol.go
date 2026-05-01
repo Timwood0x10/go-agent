@@ -76,14 +76,18 @@ func (p *Protocol) SendMessage(ctx context.Context, msg *AHPMessage) error {
 	}
 
 	queue := p.GetQueue(msg.TargetAgent)
-	if queue.IsFull() {
+
+	// Try Enqueue directly — do NOT check IsFull first to avoid TOCTOU race
+	// where the queue fills up between the check and the actual enqueue.
+	err := queue.Enqueue(ctx, msg)
+	if err != nil {
 		if p.dlq != nil {
-			p.dlq.Add(msg, errors.ErrQueueFull, "queue_full")
+			p.dlq.Add(msg, err, "queue_full")
 		}
 		return errors.ErrTaskQueueFull
 	}
 
-	return queue.Enqueue(ctx, msg)
+	return nil
 }
 
 // ReceiveMessage receives a message for an agent.

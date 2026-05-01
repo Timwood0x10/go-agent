@@ -89,6 +89,10 @@ func (m *HeartbeatMonitor) CheckTimeouts() []string {
 	now := time.Now()
 
 	for agentID, hb := range m.agentStatus {
+		// Skip agents already marked offline to avoid repeated timeout reporting.
+		if hb.Status == models.AgentStatusOffline {
+			continue
+		}
 		if now.Sub(hb.LastSeen) > m.config.Timeout {
 			hb.MissedCount++
 			if hb.MissedCount >= m.config.MaxMissed {

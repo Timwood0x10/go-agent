@@ -281,6 +281,7 @@ func TestAgentNodeWithError(t *testing.T) {
 
 	node := NewAgentNode(agent)
 	state := NewState()
+	state.Set("input", "test input")
 	err := node.Execute(context.Background(), state)
 	if err == nil {
 		t.Error("expected error")

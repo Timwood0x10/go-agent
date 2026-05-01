@@ -55,13 +55,23 @@ func (g *ReportGenerator) GenerateMarkdown(suite TestSuite, results []TestResult
 	sb.WriteString("| Test ID | Name | Duration | Tokens | Status |\n")
 	sb.WriteString("|---------|------|----------|--------|--------|\n")
 
-	for i, result := range results {
+	// Build a lookup map from TestCaseID to TestCase name for safe access.
+	tcNames := make(map[string]string, len(suite.TestCases))
+	for _, tc := range suite.TestCases {
+		tcNames[tc.ID] = tc.Name
+	}
+
+	for _, result := range results {
 		status := "✓ Pass"
 		if result.Error != "" {
 			status = "✗ Fail"
 		}
+		name := tcNames[result.TestCaseID]
+		if name == "" {
+			name = "unknown"
+		}
 		fmt.Fprintf(&sb, "| %s | %s | %v | %d | %s |\n",
-			result.TestCaseID, suite.TestCases[i].Name, result.Duration, result.TokensUsed, status)
+			result.TestCaseID, name, result.Duration, result.TokensUsed, status)
 	}
 
 	// Metric scores
@@ -175,10 +185,19 @@ func RunEvaluation(ctx context.Context, loader *Loader, runner TestRunner, evalu
 		return nil, nil, fmt.Errorf("run tests: %w", err)
 	}
 
-	// Evaluate results
+	// Evaluate results — use TestCaseID lookup instead of index alignment.
+	tcMap := make(map[string]TestCase, len(suite.TestCases))
+	for _, tc := range suite.TestCases {
+		tcMap[tc.ID] = tc
+	}
+
 	scores := make([][]EvalScore, len(results))
 	for i, result := range results {
-		evalScores, err := evaluator.Evaluate(ctx, suite.TestCases[i], result)
+		tc, ok := tcMap[result.TestCaseID]
+		if !ok {
+			return nil, nil, fmt.Errorf("evaluate result: no test case found for result %q", result.TestCaseID)
+		}
+		evalScores, err := evaluator.Evaluate(ctx, tc, result)
 		if err != nil {
 			return nil, nil, fmt.Errorf("evaluate result: %w", err)
 		}

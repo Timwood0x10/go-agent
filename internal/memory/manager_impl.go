@@ -157,6 +157,8 @@ func (m *memoryManager) Stop(ctx context.Context) error {
 		m.cleanupCancel = nil
 	}
 
+	m.taskMemory.Stop()
+
 	if err := m.sessionMemory.Close(ctx); err != nil {
 		slog.Warn("Failed to close session memory", "error", err)
 	}

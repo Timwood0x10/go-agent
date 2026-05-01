@@ -335,17 +335,20 @@ func (a *leaderAgent) finalizeMemory(ctx context.Context, sessionID, taskID stri
 	if taskID == "" {
 		return
 	}
+
+	// Check if agent is stopped BEFORE adding to WaitGroup.
+	// If agent is stopped, distillWg.Wait() may have already returned;
+	// calling Add(1) after Wait() returns causes a panic.
+	select {
+	case <-a.stopCh:
+		slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
+		return
+	default:
+	}
+
 	a.distillWg.Add(1)
 	go func() { // #nosec G118 -- Background context needed for async distillation after client disconnects
 		defer a.distillWg.Done()
-
-		// Check if agent is stopped before starting.
-		select {
-		case <-a.stopCh:
-			slog.Debug("Distillation skipped: agent stopping", "task_id", taskID)
-			return
-		default:
-		}
 
 		// Create a detached context with its own timeout so distillation
 		// continues even if the parent request is cancelled.

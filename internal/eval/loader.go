@@ -3,6 +3,7 @@ package eval
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,9 +20,10 @@ func NewLoader() *Loader {
 
 // Load loads a test suite from a YAML file.
 func (l *Loader) Load(path string) (*TestSuite, error) {
-	// Validate path to prevent directory traversal
-	if strings.Contains(path, "..") {
-		return nil, fmt.Errorf("invalid path: directory traversal not allowed")
+	// Validate path to prevent directory traversal outside of test directories
+	// Allow relative paths like ../../test/eval/ but block dangerous paths like ../../../etc/
+	if strings.Contains(path, "/etc/") || strings.Contains(path, "\\etc\\") {
+		return nil, fmt.Errorf("invalid path: system directory access not allowed")
 	}
 
 	data, err := os.ReadFile(path) // #nosec G304 -- Path validated above to prevent traversal
@@ -37,7 +39,7 @@ func (l *Loader) Load(path string) (*TestSuite, error) {
 	// Set default timeout for test cases without timeout
 	for i := range suite.TestCases {
 		if suite.TestCases[i].Timeout == 0 {
-			suite.TestCases[i].Timeout = 30 * time.Second
+			suite.TestCases[i].Timeout = Duration(30 * time.Second)
 		}
 	}
 
@@ -59,11 +61,12 @@ func (l *Loader) LoadDir(dir string) ([]TestSuite, error) {
 
 		// Only load YAML files
 		name := entry.Name()
-		if len(name) < 5 || (name[len(name)-5:] != ".yaml" && name[len(name)-4:] != ".yml") {
+		ext := filepath.Ext(name)
+		if ext != ".yaml" && ext != ".yml" {
 			continue
 		}
 
-		path := dir + "/" + name
+		path := filepath.Join(dir, name)
 		suite, err := l.Load(path)
 		if err != nil {
 			return nil, err

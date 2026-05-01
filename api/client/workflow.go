@@ -283,16 +283,16 @@ func (e *WorkflowAgentExecutor) ProcessStream(ctx context.Context, input any) (<
 			return
 		}
 
-		// Send task complete event
+		// Send task complete event with result data
 		select {
 		case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: e.agentID, Data: result}:
 		case <-ctx.Done():
 			return
 		}
 
-		// Send final result
+		// Send final completion event (no data — result already in EventTaskComplete)
 		select {
-		case ch <- base.AgentEvent{Type: base.EventComplete, Source: e.agentID, Data: result}:
+		case ch <- base.AgentEvent{Type: base.EventComplete, Source: e.agentID}:
 		case <-ctx.Done():
 		}
 	}()

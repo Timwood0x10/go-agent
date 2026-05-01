@@ -2,8 +2,12 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrNilExecutor is returned when a nil executor is provided.
+var ErrNilExecutor = errors.New("executor is nil")
 
 // AgentTestRunner runs test cases against an agent.
 type AgentTestRunner struct {
@@ -11,8 +15,11 @@ type AgentTestRunner struct {
 }
 
 // NewAgentTestRunner creates a new agent test runner.
-func NewAgentTestRunner(executor AgentExecutor) *AgentTestRunner {
-	return &AgentTestRunner{executor: executor}
+func NewAgentTestRunner(executor AgentExecutor) (*AgentTestRunner, error) {
+	if executor == nil {
+		return nil, ErrNilExecutor
+	}
+	return &AgentTestRunner{executor: executor}, nil
 }
 
 // RunSuite runs all test cases in a suite.
@@ -39,7 +46,7 @@ func (r *AgentTestRunner) RunSingle(ctx context.Context, testCase TestCase) (Tes
 	}
 
 	// Create timeout context
-	timeout := testCase.Timeout
+	timeout := testCase.Timeout.ToDuration()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}

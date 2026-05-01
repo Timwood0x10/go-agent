@@ -199,7 +199,8 @@ func (b *GraphBuilder) parseCondition(condition string) (wfgraph.Condition, erro
 		}
 	}
 
-	for _, op := range []string{"==", "!=", ">=", "<=", ">", "<"} {
+	// Try multi-character operators first to avoid "==" matching inside ">=" or "<=".
+	for _, op := range []string{">=", "<=", "!=", "==", ">", "<"} {
 		parts := strings.SplitN(condition, op, 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])

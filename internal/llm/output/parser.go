@@ -178,22 +178,29 @@ func (p *Parser) extractJSON(output string) string {
 
 // fixJSONString attempts to fix common JSON errors.
 func (p *Parser) fixJSONString(jsonStr string) (string, error) {
+	// If already valid JSON, return as-is to avoid corrupting string values
+	// with regex-based "fixes" that don't respect JSON string boundaries.
+	if json.Valid([]byte(jsonStr)) {
+		return jsonStr, nil
+	}
+
 	fixed := jsonStr
 
-	// Remove trailing commas
+	// Remove trailing commas (safe: operates on structural characters only)
 	fixed = trailingComma.ReplaceAllString(fixed, "$1")
 
-	// Remove comments
+	// Remove comments (CAUTION: may corrupt string values containing "//").
+	// Applied only when initial JSON is invalid, as a best-effort fix.
 	fixed = singleLineComment.ReplaceAllString(fixed, "")
 	fixed = multiLineComment.ReplaceAllString(fixed, "")
 
-	// Fix unquoted keys
+	// Fix unquoted keys (CAUTION: may match inside string values).
 	fixed = unquotedKey.ReplaceAllString(fixed, "$1\"$2\":")
 
-	// Fix single-quoted strings
+	// Fix single-quoted strings (CAUTION: may corrupt string values containing apostrophes).
 	fixed = singleQuote.ReplaceAllString(fixed, "\"$1\"")
 
-	// Check if it's valid JSON
+	// Check if it's valid JSON after fixes
 	if !json.Valid([]byte(fixed)) {
 		return "", errors.New("failed to fix JSON")
 	}

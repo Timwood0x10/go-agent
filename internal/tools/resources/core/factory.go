@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"sync"
 )
 
 // ToolFactory defines the interface for creating tool instances.
@@ -37,7 +38,9 @@ type PluginConfig struct {
 }
 
 // PluginRegistry manages tool factories and plugin instances.
+// All methods are safe for concurrent use.
 type PluginRegistry struct {
+	mu        sync.RWMutex
 	factories map[string]ToolFactory
 	tools     map[string]Tool
 }
@@ -62,6 +65,9 @@ func (r *PluginRegistry) RegisterFactory(factory ToolFactory) error {
 		return ErrEmptyFactoryName
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if _, exists := r.factories[name]; exists {
 		return ErrFactoryAlreadyExists
 	}
@@ -73,9 +79,16 @@ func (r *PluginRegistry) RegisterFactory(factory ToolFactory) error {
 // LoadPlugins instantiates tools from plugin configurations.
 // Only enabled plugins are loaded.
 func (r *PluginRegistry) LoadPlugins(configs []PluginConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	for _, cfg := range configs {
 		if !cfg.Enabled {
 			continue
+		}
+
+		if cfg.Name == "" {
+			return ErrEmptyPluginName
 		}
 
 		factory, exists := r.factories[cfg.Factory]
@@ -92,6 +105,10 @@ func (r *PluginRegistry) LoadPlugins(configs []PluginConfig) error {
 			return err
 		}
 
+		if _, exists := r.tools[cfg.Name]; exists {
+			return ErrPluginAlreadyExists
+		}
+
 		r.tools[cfg.Name] = tool
 	}
 	return nil
@@ -99,12 +116,16 @@ func (r *PluginRegistry) LoadPlugins(configs []PluginConfig) error {
 
 // GetTool retrieves a tool by name.
 func (r *PluginRegistry) GetTool(name string) (Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	tool, exists := r.tools[name]
 	return tool, exists
 }
 
 // ListPlugins returns the names of all loaded plugins.
 func (r *PluginRegistry) ListPlugins() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	names := make([]string, 0, len(r.tools))
 	for name := range r.tools {
 		names = append(names, name)
@@ -114,6 +135,8 @@ func (r *PluginRegistry) ListPlugins() []string {
 
 // ListFactories returns the names of all registered factories.
 func (r *PluginRegistry) ListFactories() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	names := make([]string, 0, len(r.factories))
 	for name := range r.factories {
 		names = append(names, name)
@@ -127,6 +150,8 @@ var (
 	ErrEmptyFactoryName     = errors.New("factory name is empty")
 	ErrFactoryAlreadyExists = errors.New("factory already exists")
 	ErrFactoryNotFound      = errors.New("factory not found")
+	ErrEmptyPluginName      = errors.New("plugin name is empty")
+	ErrPluginAlreadyExists  = errors.New("plugin already exists")
 )
 
 // ToolLifecycle defines optional lifecycle hooks for tools.

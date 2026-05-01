@@ -257,7 +257,7 @@ func (e *Executor) runSteps(
 				}
 			}()
 
-			result := e.executeStep(stepCtx, workflow, sid, initialInput, completed, outputStore)
+			result := e.executeStep(stepCtx, workflow, sid, initialInput, completed, outputStore, &mu)
 
 			mu.Lock()
 			processed[sid] = true
@@ -351,6 +351,7 @@ func (e *Executor) executeStep(
 	initialInput string,
 	completed map[string]bool,
 	outputStore *OutputStore,
+	mu *sync.Mutex,
 ) *StepResult {
 	step := e.findStep(workflow.Steps, stepID)
 	if step == nil {
@@ -363,10 +364,13 @@ func (e *Executor) executeStep(
 
 	startTime := time.Now()
 
-	completedCopy := make(map[string]bool)
+	// Copy completed map under lock to avoid data race with main loop.
+	mu.Lock()
+	completedCopy := make(map[string]bool, len(completed))
 	for k, v := range completed {
 		completedCopy[k] = v
 	}
+	mu.Unlock()
 	input := e.resolveInput(step, initialInput, completedCopy, outputStore)
 
 	output, err := e.executeWithRetry(ctx, step, input)

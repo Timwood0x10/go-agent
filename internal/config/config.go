@@ -386,6 +386,10 @@ func (c *Config) setDefaults() {
 	if c.Validation.MaxRetries == 0 {
 		c.Validation.MaxRetries = 3
 	}
+	// Workflow defaults
+	if c.Workflow.ReloadInterval == 0 && c.Workflow.AutoReload {
+		c.Workflow.ReloadInterval = 30 // seconds
+	}
 }
 
 // Validate validates the configuration values.

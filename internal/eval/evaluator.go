@@ -21,6 +21,7 @@ func NewExactMatchEvaluator() *ExactMatchEvaluator {
 
 // Evaluate returns a score based on exact match.
 func (e *ExactMatchEvaluator) Evaluate(ctx context.Context, testCase TestCase, result TestResult) ([]EvalScore, error) {
+	_ = ctx // reserved for future use (e.g., LLM-based evaluation)
 	if testCase.ExpectedOutput == "" {
 		return []EvalScore{{Metric: "exact_match", Score: 1.0, Details: "no expected output specified"}}, nil
 	}
@@ -49,6 +50,7 @@ func NewSubstringMatchEvaluator() *SubstringMatchEvaluator {
 
 // Evaluate returns a score based on substring match.
 func (e *SubstringMatchEvaluator) Evaluate(ctx context.Context, testCase TestCase, result TestResult) ([]EvalScore, error) {
+	_ = ctx // reserved for future use
 	if testCase.ExpectedOutput == "" {
 		return []EvalScore{{Metric: "substring_match", Score: 1.0, Details: "no expected output specified"}}, nil
 	}

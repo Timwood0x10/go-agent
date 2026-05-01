@@ -92,7 +92,11 @@ func exampleEvaluationFramework(ctx context.Context) {
 	fmt.Println("✓ Created agent executor")
 
 	// 4. Create a test runner
-	runner := eval.NewAgentTestRunner(executor)
+	runner, err := eval.NewAgentTestRunner(executor)
+	if err != nil {
+		fmt.Printf("✗ Failed to create test runner: %v\n", err)
+		return
+	}
 	fmt.Println("✓ Created test runner")
 
 	// 5. Run the test suite

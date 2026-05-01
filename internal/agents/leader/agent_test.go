@@ -189,6 +189,17 @@ func TestTaskDispatcher_Dispatch(t *testing.T) {
 	}
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
 
+	dispatcher.RegisterExecutor(models.AgentTypeTop, func(ctx context.Context, task *models.Task) (*models.TaskResult, error) {
+		result := models.NewTaskResult(task.TaskID, task.AgentType)
+		result.SetSuccess([]*models.RecommendItem{{ItemID: "item1", Name: "test item"}}, "ok")
+		return result, nil
+	})
+	dispatcher.RegisterExecutor(models.AgentTypeBottom, func(ctx context.Context, task *models.Task) (*models.TaskResult, error) {
+		result := models.NewTaskResult(task.TaskID, task.AgentType)
+		result.SetSuccess([]*models.RecommendItem{{ItemID: "item2", Name: "test item"}}, "ok")
+		return result, nil
+	})
+
 	profile := &models.UserProfile{
 		Style:     []models.StyleTag{models.StyleTag("casual")},
 		Occasions: []models.Occasion{models.Occasion("daily")},
@@ -312,8 +323,15 @@ func TestLeaderAgent_Process(t *testing.T) {
 		3,
 	)
 	planner := NewTaskPlanner(3)
-	registry := map[models.AgentType]string{}
+	registry := map[models.AgentType]string{
+		models.AgentTypeTop: "agent_top",
+	}
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
+	dispatcher.RegisterExecutor(models.AgentTypeTop, func(ctx context.Context, task *models.Task) (*models.TaskResult, error) {
+		result := models.NewTaskResult(task.TaskID, task.AgentType)
+		result.SetSuccess([]*models.RecommendItem{{ItemID: "item1", Name: "test item"}}, "ok")
+		return result, nil
+	})
 	aggregator := NewResultAggregator(true, 10, SortByNone)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)
@@ -335,8 +353,15 @@ func TestLeaderAgent_ProcessNotReady(t *testing.T) {
 		3,
 	)
 	planner := NewTaskPlanner(3)
-	registry := map[models.AgentType]string{}
+	registry := map[models.AgentType]string{
+		models.AgentTypeTop: "agent_top",
+	}
 	dispatcher := NewTaskDispatcher(registry, 2, 30, nil)
+	dispatcher.RegisterExecutor(models.AgentTypeTop, func(ctx context.Context, task *models.Task) (*models.TaskResult, error) {
+		result := models.NewTaskResult(task.TaskID, task.AgentType)
+		result.SetSuccess([]*models.RecommendItem{{ItemID: "item1", Name: "test item"}}, "ok")
+		return result, nil
+	})
 	aggregator := NewResultAggregator(true, 10, SortByNone)
 
 	agent := New("leader1", parser, planner, dispatcher, aggregator, nil, nil, nil, nil)

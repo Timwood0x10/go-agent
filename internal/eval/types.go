@@ -2,8 +2,59 @@ package eval
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+// Duration is a time.Duration that supports YAML unmarshaling from
+// human-readable strings like "30s", "1m30s", "1h".
+type Duration time.Duration
+
+// UnmarshalYAML implements yaml.Unmarshaler for human-readable duration strings.
+func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	*d = Duration(parsed)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler for duration strings.
+func (d *Duration) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		// Also accept numeric nanoseconds for backward compatibility.
+		var ns int64
+		if err2 := json.Unmarshal(data, &ns); err2 != nil {
+			return err
+		}
+		*d = Duration(time.Duration(ns))
+		return nil
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	*d = Duration(parsed)
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+// ToDuration returns the standard time.Duration value.
+func (d Duration) ToDuration() time.Duration {
+	return time.Duration(d)
+}
 
 // TestCase represents a single evaluation test case.
 type TestCase struct {
@@ -18,7 +69,7 @@ type TestCase struct {
 	// ExpectedTools is the list of tools expected to be used.
 	ExpectedTools []string `json:"expected_tools,omitempty" yaml:"expected_tools,omitempty"`
 	// Timeout is the maximum duration for this test case.
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Timeout Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	// Metadata contains additional test case metadata.
 	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	// Tags for selective test execution.

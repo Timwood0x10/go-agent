@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "date": "2026-04-30",
+    "platform": "darwin/arm64",
+    "cpu": "Apple M3 Max",
+    "go_version": "go1.24"
+  },
+  "benchmarks": {
+    "evaluation_framework": {
+      "exact_match_evaluator": {
+        "name": "ExactMatchEvaluator_Evaluate",
+        "ops_per_sec": 388681486,
+        "ns_per_op": 2.856,
+        "bytes_per_op": 0,
+        "allocs_per_op": 0,
+        "rating": "excellent"
+      },
+      "tool_usage_evaluator": {
+        "name": "ToolUsageEvaluator_Evaluate",
+        "ops_per_sec": 46017416,
+        "ns_per_op": 26.06,
+        "bytes_per_op": 0,
+        "allocs_per_op": 0,
+        "rating": "excellent"
+      },
+      "agent_test_runner": {
+        "name": "AgentTestRunner_RunSingle",
+        "ops_per_sec": 4197496,
+        "ns_per_op": 291.0,
+        "bytes_per_op": 320,
+        "allocs_per_op": 5,
+        "rating": "good"
+      },
+      "report_generator": {
+        "name": "ReportGenerator_GenerateMarkdown",
+        "ops_per_sec": 375682,
+        "ns_per_op": 3076,
+        "bytes_per_op": 3642,
+        "allocs_per_op": 73,
+        "rating": "acceptable"
+      },
+      "loader": {
+        "name": "Loader_Load",
+        "ops_per_sec": 26883,
+        "ns_per_op": 44602,
+        "bytes_per_op": 33181,
+        "allocs_per_op": 586,
+        "rating": "acceptable"
+      }
+    },
+    "streaming_handler": {
+      "handle_stream": {
+        "name": "StreamHandler_HandleStream",
+        "ops_per_sec": 326365,
+        "ns_per_op": 3701,
+        "bytes_per_op": 9314,
+        "allocs_per_op": 62,
+        "rating": "good"
+      },
+      "convert_event": {
+        "name": "StreamHandler_ConvertEvent",
+        "ops_per_sec": 254292465,
+        "ns_per_op": 4.678,
+        "bytes_per_op": 0,
+        "allocs_per_op": 0,
+        "rating": "excellent"
+      },
+      "multiple_events_100": {
+        "name": "StreamHandler_MultipleEvents",
+        "ops_per_sec": 51309,
+        "ns_per_op": 23352,
+        "bytes_per_op": 37408,
+        "allocs_per_op": 358,
+        "rating": "good"
+      }
+    }
+  },
+  "summary": {
+    "total_benchmarks": 8,
+    "excellent_count": 3,
+    "good_count": 3,
+    "acceptable_count": 2,
+    "zero_allocation_count": 3,
+    "avg_evaluator_latency_ns": 14.46,
+    "avg_streaming_latency_ns": 9008.89
+  },
+  "performance_tiers": {
+    "excellent": {
+      "threshold_ns": 100,
+      "description": "Ultra-fast operations suitable for hot paths"
+    },
+    "good": {
+      "threshold_ns": 1000,
+      "description": "Fast operations with minimal overhead"
+    },
+    "acceptable": {
+      "threshold_ns": 100000,
+      "description": "Operations with reasonable latency"
+    }
+  }
+}
