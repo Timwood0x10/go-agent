@@ -57,17 +57,14 @@ func (l *SemaphoreLimiter) Release(key string) {
 	}
 }
 
-// Allow checks if a request is allowed without blocking.
+// Allow checks if a request is allowed without blocking or acquiring a slot.
 func (l *SemaphoreLimiter) Allow(ctx context.Context) (bool, error) {
 	select {
-	case l.sem <- struct{}{}:
-		l.mu.Lock()
-		l.acquired["default"]++
-		l.mu.Unlock()
-		return true, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
 	default:
-		return false, nil
 	}
+	return len(l.sem) < cap(l.sem), nil
 }
 
 // Wait blocks until a request can be processed.
@@ -137,7 +134,7 @@ func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimite
 
 // Acquire acquires weighted slots.
 // Uses sync.Cond for efficient waiting without busy-looping.
-// Context cancellation is checked at each wake-up.
+// Context cancellation is propagated via context.AfterFunc to wake cond.Wait().
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
 	if weight <= 0 {
 		return fmt.Errorf("weight must be positive, got %d", weight)
@@ -151,19 +148,13 @@ func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weig
 			return err
 		}
 
-		done := make(chan struct{})
-		go func() {
-			select {
-			case <-ctx.Done():
-				l.mu.Lock()
-				l.cond.Broadcast()
-				l.mu.Unlock()
-			case <-done:
-			}
-		}()
-
+		stop := context.AfterFunc(ctx, func() {
+			l.mu.Lock()
+			l.cond.Broadcast()
+			l.mu.Unlock()
+		})
 		l.cond.Wait()
-		close(done)
+		stop()
 
 		if err := ctx.Err(); err != nil {
 			return err

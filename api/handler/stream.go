@@ -8,12 +8,15 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"goagent/internal/agents/base"
 )
 
 // StreamHandler handles SSE streaming requests.
-type StreamHandler struct{}
+type StreamHandler struct {
+	counter atomic.Uint64
+}
 
 // NewStreamHandler creates a new stream handler.
 func NewStreamHandler() *StreamHandler {
@@ -72,7 +75,9 @@ func (h *StreamHandler) HandleStream(processor AgentProcessor) http.HandlerFunc 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		// Flush helper
 		flusher, ok := w.(http.Flusher)
@@ -161,6 +166,9 @@ func (h *StreamHandler) sendSSE(w io.Writer, flusher http.Flusher, event string,
 	// Write SSE format
 	if _, err := fmt.Fprintf(w, "event: %s\n", event); err != nil {
 		return fmt.Errorf("write SSE event: %w", err)
+	}
+	if _, err := fmt.Fprintf(w, "id: %d\n", h.counter.Add(1)); err != nil {
+		return fmt.Errorf("write SSE id: %w", err)
 	}
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", jsonData); err != nil {
 		return fmt.Errorf("write SSE data: %w", err)

@@ -153,7 +153,7 @@ func (s *SimpleRetrievalService) isPrecisionMode(query string) bool {
 	}
 
 	// Core expression patterns: containing equals sign or mathematical operators
-	if strings.ContainsAny(query, "=+-*/:") {
+	if strings.ContainsAny(query, "=+-*/") {
 		return true
 	}
 

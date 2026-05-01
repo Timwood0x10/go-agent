@@ -4,6 +4,8 @@ package memory
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -59,6 +61,15 @@ type SessionData struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	MessageCount int
+}
+
+// generateSessionID creates a cryptographically random session ID.
+func generateSessionID() string {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("session_%d", time.Now().UnixNano())
+	}
+	return "sess_" + hex.EncodeToString(b)
 }
 
 // NewProductionMemoryManager creates a new production-grade MemoryManager.
@@ -254,7 +265,7 @@ func (m *ProductionMemoryManager) Stop(ctx context.Context) error {
 // userID - user identifier.
 // Returns session ID or error if creation fails.
 func (m *ProductionMemoryManager) CreateSession(ctx context.Context, userID string) (string, error) {
-	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
+	sessionID := generateSessionID()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -328,6 +339,8 @@ func (m *ProductionMemoryManager) AddMessage(ctx context.Context, sessionID, rol
 	// If user ID not found in cache, use a default value
 	// In production, you might want to extract this from context or other sources
 	if userID == "" {
+		slog.Warn("session not found in cache, message assigned to anonymous user",
+			"session_id", sessionID)
 		userID = "anonymous"
 	}
 

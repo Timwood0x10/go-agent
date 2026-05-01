@@ -46,7 +46,9 @@ type PluginConfig struct {
 #### PluginRegistry
 ```go
 registry := core.NewPluginRegistry()
-registry.RegisterFactory(factory)           // Register a factory
+if err := registry.RegisterFactory(factory); err != nil {
+    log.Fatalf("failed to register factory: %v", err)
+}
 registry.LoadPlugins(configs)                // Load plugins from config
 registry.GetTool(name)                       // Get a tool by name
 registry.ListPlugins()                       // List all loaded plugins
@@ -154,7 +156,9 @@ results, scores, err := eval.RunEvaluation(
 ### Example 1: Plugin System
 ```go
 registry := core.NewPluginRegistry()
-registry.RegisterFactory(&MyToolFactory{})
+if err := registry.RegisterFactory(&MyToolFactory{}); err != nil {
+    log.Fatalf("failed to register factory: %v", err)
+}
 registry.LoadPlugins([]core.PluginConfig{
     {Name: "tool1", Factory: "my-factory", Enabled: true},
 })
@@ -167,7 +171,7 @@ result, _ := tool.Execute(ctx, params)
 loader := eval.NewLoader()
 suite, _ := loader.Load("test/eval/basic.yaml")
 runner := eval.NewAgentTestRunner(myAgent)
-results, _ := runner.RunSuite(ctx, *suite)
+results, err := runner.RunSuite(ctx, suite)
 
 evaluator := eval.NewExactMatchEvaluator()
 for i, result := range results {

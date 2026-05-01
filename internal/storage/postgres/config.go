@@ -109,7 +109,7 @@ func (c *Config) DSN() string {
 	return fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable&client_encoding=UTF8",
 		url.QueryEscape(c.User),
 		url.QueryEscape(c.Password),
-		c.Host,
+		url.QueryEscape(c.Host),
 		c.Port,
 		c.Database)
 }

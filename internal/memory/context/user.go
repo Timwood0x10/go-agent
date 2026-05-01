@@ -84,6 +84,13 @@ func (m *UserMemory) Set(ctx context.Context, userID string, profile *models.Use
 		m.evictLeastUsed()
 	}
 
+	if existing, exists := m.users[userID]; exists {
+		existing.Profile = profile
+		existing.LastUpdated = time.Now()
+		m.users[userID] = existing
+		return nil
+	}
+
 	user := &UserData{
 		UserID:         userID,
 		Profile:        profile,

@@ -1,3 +1,5 @@
+// Package eval provides LLM evaluation and benchmarking capabilities,
+// including test suite execution, result reporting, and agent performance metrics.
 package eval
 
 import (

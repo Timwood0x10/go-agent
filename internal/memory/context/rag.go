@@ -235,18 +235,13 @@ func (r *RAG) IsPersistent() bool {
 
 // evictOldest removes entries when capacity is reached.
 func (r *RAG) evictOldest() {
-	for id := range r.entries {
-		entry := r.entries[id]
-		delete(r.entries, id)
-
-		for i, e := range r.index.entries {
-			if e.ID == entry.ID {
-				r.index.entries = append(r.index.entries[:i], r.index.entries[i+1:]...)
-				break
-			}
-		}
-		break
+	if len(r.index.entries) == 0 {
+		return
 	}
+
+	oldest := r.index.entries[0]
+	delete(r.entries, oldest.ID)
+	r.index.entries = r.index.entries[1:]
 }
 
 // cosineSimilarity calculates cosine similarity between two vectors.

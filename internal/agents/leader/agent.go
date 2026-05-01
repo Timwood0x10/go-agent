@@ -375,11 +375,12 @@ func (a *leaderAgent) finalizeMemory(ctx context.Context, sessionID, taskID stri
 
 // Process handles user input and orchestrates the recommendation workflow with automatic memory management.
 func (a *leaderAgent) Process(ctx context.Context, input any) (any, error) {
-	if a.Status() != models.AgentStatusReady && a.Status() != models.AgentStatusOffline {
+	status := a.Status()
+	if status != models.AgentStatusReady && status != models.AgentStatusOffline {
 		return nil, coreerrors.ErrAgentNotReady
 	}
 
-	if a.Status() == models.AgentStatusOffline {
+	if status == models.AgentStatusOffline {
 		if err := a.Start(ctx); err != nil {
 			return nil, err
 		}
@@ -559,35 +560,34 @@ func (a *leaderAgent) ProcessStream(ctx context.Context, input any) (<-chan base
 		}
 		slog.Info("Leader tasks created", "module", "leader", "count", len(tasks))
 
-		// Dispatch tasks and emit events
-		var allResults []*models.TaskResult
-		for i, task := range tasks {
+		for _, task := range tasks {
 			select {
 			case ch <- base.AgentEvent{Type: base.EventTaskStart, Source: a.id, Data: task}:
 			case <-ctx.Done():
 				return
 			}
+		}
 
-			// Execute task
-			result, err := a.dispatcher.Dispatch(ctx, []*models.Task{task})
-			if err != nil {
+		results, err := a.dispatcher.Dispatch(ctx, tasks)
+		if err != nil {
+			for _, task := range tasks {
 				select {
 				case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: &models.TaskResult{TaskID: task.TaskID, Success: false, Error: err.Error()}}:
 				case <-ctx.Done():
 					return
 				}
-				continue
 			}
+			return
+		}
 
-			if len(result) > 0 {
-				select {
-				case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: result[0]}:
-				case <-ctx.Done():
-					return
-				}
-				allResults = append(allResults, result...)
+		var allResults []*models.TaskResult
+		for _, result := range results {
+			allResults = append(allResults, result)
+			select {
+			case ch <- base.AgentEvent{Type: base.EventTaskComplete, Source: a.id, Data: result}:
+			case <-ctx.Done():
+				return
 			}
-			slog.Debug("Task completed", "index", i, "task_id", task.TaskID)
 		}
 
 		// Aggregate results

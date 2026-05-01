@@ -188,8 +188,8 @@ func (m *AHPMessage) GetProgress() (float64, bool) {
 
 // getRandomSuffix returns a random suffix for extra uniqueness.
 func getRandomSuffix() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
-	return fmt.Sprintf("%04d", n.Int64())
+	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+	return fmt.Sprintf("%06d", n.Int64())
 }
 
 func generateMessageID() string {

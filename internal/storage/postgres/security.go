@@ -106,22 +106,15 @@ func validateUserInput(input string, maxLength int) error {
 
 // containsSQLInjectionPatterns checks for common SQL injection patterns.
 func containsSQLInjectionPatterns(input string) bool {
-	// Common SQL injection patterns
 	dangerousPatterns := []string{
 		" OR ",
-		" AND ",
-		" --",
+		"--",
 		";",
 		"/*",
 		"*/",
-		"DROP",
-		"DELETE",
-		"UPDATE",
-		"INSERT",
-		"EXEC",
-		"UNION",
-		"SELECT",
-		"WHERE",
+		"DROP ",
+		"EXEC ",
+		"UNION ",
 		"1=1",
 		"1=2",
 	}
