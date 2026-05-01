@@ -400,17 +400,19 @@ func (r *ToolRepository) SearchByVector(ctx context.Context, embedding []float64
 // limit - maximum number of results to return.
 // Returns list of matching tools ordered by relevance.
 func (r *ToolRepository) SearchByKeyword(ctx context.Context, query, tenantID string, limit int) ([]*storage_models.Tool, error) {
-	sqlQuery := `
-		SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
-			   agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
-		FROM tools
-		WHERE (name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
-		  AND tenant_id = $2
-		ORDER BY usage_count DESC, success_rate DESC
-		LIMIT $3
-	`
+	escapedQuery := postgres.EscapeILIKEPattern(query)
 
-	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
+	sqlQuery := `
+        SELECT id, tenant_id, name, description, embedding::text, embedding_model, embedding_version,
+               agent_type, tags, usage_count, success_rate, last_used_at, metadata::text, created_at
+        FROM tools
+        WHERE (name ILIKE '%' || $1 || '%' ESCAPE '\' OR description ILIKE '%' || $1 || '%' ESCAPE '\')
+          AND tenant_id = $2
+        ORDER BY usage_count DESC, success_rate DESC
+        LIMIT $3
+    `
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, escapedQuery, tenantID, limit)
 	if err != nil {
 		return nil, errors.Wrap(err, "keyword search")
 	}

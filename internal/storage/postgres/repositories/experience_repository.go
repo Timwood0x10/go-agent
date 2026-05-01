@@ -329,18 +329,20 @@ func (r *ExperienceRepository) SearchByKeyword(ctx context.Context, query, tenan
 		return []*storage_models.Experience{}, nil
 	}
 
-	sqlQuery := `
-		SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
-			   score, success, agent_id, metadata::text, decay_at, created_at
-		FROM experiences_1024
-		WHERE (input ILIKE '%' || $1 || '%' OR output ILIKE '%' || $1 || '%')
-		  AND tenant_id = $2
-		  AND (decay_at IS NULL OR decay_at > NOW())
-		ORDER BY score DESC, created_at DESC
-		LIMIT $3
-	`
+	escapedQuery := postgres.EscapeILIKEPattern(query)
 
-	rows, err := r.db.QueryContext(ctx, sqlQuery, query, tenantID, limit)
+	sqlQuery := `
+        SELECT id, tenant_id, type, input, output, embedding::text, embedding_model, embedding_version,
+               score, success, agent_id, metadata::text, decay_at, created_at
+        FROM experiences_1024
+        WHERE (input ILIKE '%' || $1 || '%' ESCAPE '\' OR output ILIKE '%' || $1 || '%' ESCAPE '\')
+          AND tenant_id = $2
+          AND (decay_at IS NULL OR decay_at > NOW())
+        ORDER BY score DESC, created_at DESC
+        LIMIT $3
+    `
+
+	rows, err := r.db.QueryContext(ctx, sqlQuery, escapedQuery, tenantID, limit)
 	if err != nil {
 		return nil, errors.Wrap(err, "keyword search")
 	}
