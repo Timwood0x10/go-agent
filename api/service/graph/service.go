@@ -4,6 +4,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -142,7 +143,7 @@ func (s *Service) Execute(ctx context.Context, g *wfgraph.Graph, request *Execut
 			State:    state.ToParams(),
 			Duration: time.Duration(0),
 			Error:    err.Error(),
-		}, nil
+		}, fmt.Errorf("execute graph %s: %w", g.ID(), err)
 	}
 
 	slog.InfoContext(ctx, "graph execution completed",

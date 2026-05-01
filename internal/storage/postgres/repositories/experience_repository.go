@@ -159,7 +159,7 @@ func (r *ExperienceRepository) GetByID(ctx context.Context, id string) (*storage
 	}
 
 	// Parse embedding string to float64 array
-	exp.Embedding, err = parseVectorString(embeddingStr)
+	exp.Embedding, err = postgres.ParseVectorString(embeddingStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse embedding")
 	}
@@ -287,7 +287,7 @@ func (r *ExperienceRepository) SearchByVector(ctx context.Context, embedding []f
 		}
 
 		// Parse embedding string to float64 array
-		exp.Embedding, err = parseVectorString(embeddingStr)
+		exp.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			continue
 		}
@@ -363,7 +363,7 @@ func (r *ExperienceRepository) SearchByKeyword(ctx context.Context, query, tenan
 		}
 
 		// Parse embedding string to float64 array
-		exp.Embedding, err = parseVectorString(embeddingStr)
+		exp.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			continue
 		}
@@ -426,7 +426,7 @@ func (r *ExperienceRepository) ListByType(ctx context.Context, expType, tenantID
 		}
 
 		// Parse embedding string to float64 array
-		exp.Embedding, err = parseVectorString(embeddingStr)
+		exp.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			continue
 		}
@@ -519,7 +519,7 @@ func (r *ExperienceRepository) ListByAgent(ctx context.Context, agentID, tenantI
 		}
 
 		// Parse embedding string to float64 array
-		exp.Embedding, err = parseVectorString(embeddingStr)
+		exp.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			continue
 		}

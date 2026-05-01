@@ -170,6 +170,9 @@ func (e *WorkflowAgentExecutor) Stop(ctx context.Context) error {
 // Process executes a workflow step.
 
 func (e *WorkflowAgentExecutor) Process(ctx context.Context, input any) (any, error) {
+	if e.llmService == nil {
+		return nil, fmt.Errorf("llmService is not configured for agent %s", e.agentID)
+	}
 
 	inputStr, ok := input.(string)
 

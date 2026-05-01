@@ -17,6 +17,9 @@ type SemaphoreLimiter struct {
 
 // NewSemaphoreLimiter creates a new SemaphoreLimiter.
 func NewSemaphoreLimiter(config *LimiterConfig) *SemaphoreLimiter {
+	if config == nil {
+		config = &LimiterConfig{Burst: 1}
+	}
 	return &SemaphoreLimiter{
 		sem:      make(chan struct{}, config.Burst),
 		acquired: make(map[string]int),
@@ -97,7 +100,7 @@ func (l *SemaphoreLimiter) Rate() float64 {
 
 // Available returns the number of available slots.
 func (l *SemaphoreLimiter) Available() int {
-	return len(l.sem)
+	return cap(l.sem) - len(l.sem)
 }
 
 // Acquired returns the number of acquired slots for a key.
@@ -120,6 +123,9 @@ type WeightedSemaphoreLimiter struct {
 
 // NewWeightedSemaphoreLimiter creates a new WeightedSemaphoreLimiter.
 func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimiter {
+	if config == nil {
+		config = &LimiterConfig{Burst: 1}
+	}
 	limiter := &WeightedSemaphoreLimiter{
 		available: config.Burst,
 		weighted:  make(map[string]int),
@@ -133,7 +139,6 @@ func NewWeightedSemaphoreLimiter(config *LimiterConfig) *WeightedSemaphoreLimite
 // Uses sync.Cond for efficient waiting without busy-looping.
 // Context cancellation is checked at each wake-up.
 func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weight int) error {
-	// Validate weight to prevent semaphore violation
 	if weight <= 0 {
 		return fmt.Errorf("weight must be positive, got %d", weight)
 	}
@@ -142,18 +147,27 @@ func (l *WeightedSemaphoreLimiter) Acquire(ctx context.Context, key string, weig
 	defer l.mu.Unlock()
 
 	for l.available < weight {
-		// Check context cancellation before waiting
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		// Wait() releases the lock and waits for signal, then reacquires lock on wake-up
-		l.cond.Wait()
-	}
+		done := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+				l.mu.Lock()
+				l.cond.Broadcast()
+				l.mu.Unlock()
+			case <-done:
+			}
+		}()
 
-	// Check context one more time after acquiring the lock
-	if err := ctx.Err(); err != nil {
-		return err
+		l.cond.Wait()
+		close(done)
+
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 	}
 
 	l.available -= weight

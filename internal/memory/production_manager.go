@@ -80,6 +80,10 @@ func NewProductionMemoryManager(
 		return nil, fmt.Errorf("database pool is required")
 	}
 
+	if embeddingClient == nil {
+		return nil, fmt.Errorf("embedding client is required")
+	}
+
 	// Create tenant guard
 	tenantGuard := postgres.NewTenantGuard(dbPool)
 
@@ -186,6 +190,11 @@ func (m *ProductionMemoryManager) Start(ctx context.Context) error {
 
 	if m.started {
 		return nil
+	}
+
+	// Allow restart after stop by resetting the stopped flag
+	if m.stopped {
+		m.stopped = false
 	}
 
 	// Create a new context for the memory manager lifecycle

@@ -141,7 +141,9 @@ func (m *UserMemory) GetPreferences(ctx context.Context, userID string) ([]Prefe
 		return nil, ErrUserNotFound
 	}
 
-	return user.Preferences, nil
+	result := make([]Preference, len(user.Preferences))
+	copy(result, user.Preferences)
+	return result, nil
 }
 
 // AddInteraction adds a user interaction.
@@ -176,7 +178,9 @@ func (m *UserMemory) GetHistory(ctx context.Context, userID string) ([]Interacti
 		return nil, ErrUserNotFound
 	}
 
-	return user.History, nil
+	result := make([]Interaction, len(user.History))
+	copy(result, user.History)
+	return result, nil
 }
 
 // UpdateStyleEvolution updates style preference evolution.
@@ -210,7 +214,9 @@ func (m *UserMemory) GetStyleEvolution(ctx context.Context, userID string) ([]St
 		return nil, ErrUserNotFound
 	}
 
-	return user.StyleEvolution, nil
+	result := make([]StyleEntry, len(user.StyleEvolution))
+	copy(result, user.StyleEvolution)
+	return result, nil
 }
 
 // Delete removes user data.

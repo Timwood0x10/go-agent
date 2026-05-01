@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"goagent/internal/errors"
@@ -39,10 +38,8 @@ type DistilledMemoryRepository struct {
 	dbPool *sql.DB
 }
 
-// Ensure DistilledMemoryRepository implements DistilledMemoryRepositoryInterface.
 var _ DistilledMemoryRepositoryInterface = (*DistilledMemoryRepository)(nil)
 
-// NewDistilledMemoryRepository creates a new DistilledMemoryRepository.
 func NewDistilledMemoryRepository(db postgres.DBTX, dbPool *sql.DB) *DistilledMemoryRepository {
 	return &DistilledMemoryRepository{
 		db:     db,
@@ -191,7 +188,7 @@ func (r *DistilledMemoryRepository) SearchByVector(ctx context.Context, embeddin
 				continue
 			}
 
-			memory.Embedding, err = parseDistilledVectorString(embeddingStr)
+			memory.Embedding, err = postgres.ParseVectorString(embeddingStr)
 			if err != nil {
 				slog.WarnContext(ctx, "Failed to parse embedding in search result", "memory_id", memory.ID, "error", err)
 				continue
@@ -260,7 +257,7 @@ func (r *DistilledMemoryRepository) GetByUserID(ctx context.Context, tenantID, u
 				continue
 			}
 
-			memory.Embedding, err = parseDistilledVectorString(embeddingStr)
+			memory.Embedding, err = postgres.ParseVectorString(embeddingStr)
 			if err != nil {
 				slog.WarnContext(ctx, "Failed to parse embedding", "memory_id", memory.ID, "error", err)
 				continue
@@ -352,7 +349,7 @@ func (r *DistilledMemoryRepository) GetByMemoryType(ctx context.Context, tenantI
 				return errors.Wrap(err, "scan memory")
 			}
 
-			memory.Embedding, err = parseDistilledVectorString(embeddingStr)
+			memory.Embedding, err = postgres.ParseVectorString(embeddingStr)
 			if err != nil {
 				return errors.Wrap(err, "parse embedding")
 			}
@@ -412,7 +409,7 @@ func (r *DistilledMemoryRepository) Update(ctx context.Context, memory *Distille
 	}
 
 	return r.withTenantTx(ctx, memory.TenantID, func(tx *sql.Tx) error {
-		embeddingStr := float64ToVectorString(memory.Embedding)
+		embeddingStr := postgres.FormatVector(memory.Embedding)
 
 		query := `
             UPDATE distilled_memories
@@ -478,33 +475,6 @@ func (r *DistilledMemoryRepository) Delete(ctx context.Context, tenantID, id str
 
 		return nil
 	})
-}
-
-// parseVectorString converts pgvector string format to []float64.
-// Note: This function is also defined in knowledge_repository.go to avoid import cycles.
-func parseDistilledVectorString(vecStr string) ([]float64, error) {
-	if len(vecStr) == 0 {
-		return []float64{}, nil
-	}
-
-	vecStr = strings.Trim(vecStr, "[]")
-	if vecStr == "" {
-		return []float64{}, nil
-	}
-
-	parts := strings.Split(vecStr, ",")
-	result := make([]float64, len(parts))
-	for i, part := range parts {
-		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse vector component")
-		}
-		if val != 1 {
-			return nil, fmt.Errorf("failed to parse vector component: expected 1 match, got %d", val)
-		}
-	}
-
-	return result, nil
 }
 
 // truncateString truncates a string to the specified maximum length.

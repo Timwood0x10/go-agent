@@ -229,3 +229,136 @@
 | F37 | `QueryRow` 连接泄漏 | `pool.go` |
 | F38 | 错误消息缺少 StatusCode | `ollama/openai/openrouter.go` |
 | F39 | `filepath.Join` 替代字符串拼接 | `loader.go` |
+
+---
+
+## 🔴 Critical（第二轮扫描新增）
+
+### C3. `LogTracer` Record 方法对 nil 指针解引用 panic
+- **文件**: `internal/observability/log.go:31-107`
+- **问题**: `RecordLLMCall`/`RecordToolCall`/`RecordAgentStep`/`RecordError` 均未对传入参数做 nil 检查。tracer 通常在 defer 或错误处理路径中被调用，nil 指针会导致原始错误信息丢失
+- **建议**: 每个方法开头添加 `if call == nil { return }` 等检查
+
+### C4. `CacheWithTTL.Get` 锁升级导致竞态条件
+- **文件**: `internal/memory/context/cache.go:221-239`
+- **问题**: 先 `RLock` 读取，发现过期后释放 `RLock` 再获取 `Lock` 删除。在两次锁之间，另一个 goroutine 可能已删除该 key 或替换为新值，导致删除有效的新条目
+- **建议**: 不在 `Get` 中删除过期项，交给 cleanup goroutine 惰性清理；或始终使用 `Lock()`
+
+### C5. `RAG.Add`/`RAG.Delete` 内存与持久存储不一致
+- **文件**: `internal/memory/context/rag.go:87-107, 196-216`
+- **问题**: 条目先添加到内存 map，再尝试持久化。如果持久化失败返回 error，内存中已存在该条目，导致内存与数据库不一致
+- **建议**: 先持久化再更新内存，或持久化失败时回滚内存
+
+### C6. `TaskMemory.Stop` 不等待清理 goroutine 退出
+- **文件**: `internal/memory/context/task.go:81-85`
+- **问题**: `Stop` 使用 `sync.Once` 关闭 `cleanupStopCh` 但不调用 `wg.Wait()`。对比 `SessionMemory.StopCleanup` 会等待 goroutine 退出。关闭后立即销毁 `TaskMemory` 会导致 use-after-free
+- **建议**: 添加 `wg.Wait()` 调用
+
+### C7. `TaskMemory.Distill` 释放锁后访问内部指针（数据竞争）
+- **文件**: `internal/memory/context/task.go:312-338`
+- **问题**: `RLock` 获取 `task` 指针后立即 `RUnlock`，然后在无锁状态下访问 `task.Input`、`task.Output` 等字段。另一个 goroutine 可能同时通过 `Set` 覆盖或 `Delete` 删除该 task
+- **建议**: 在持有锁时复制所有需要的字段到局部变量
+
+### C8. `ProductionMemoryManager` Start/Stop 状态机损坏
+- **文件**: `internal/memory/production_manager.go:183-240`
+- **问题**: `started` 和 `stopped` 是独立标志。`Start` → `Stop` → `Start` 序列中，第二次 `Start` 因 `stopped=true` 不执行，但 `started` 仍为 `true`。状态机无法正确重启
+- **建议**: 使用单一状态字段或状态枚举
+
+---
+
+## 🟡 Medium（第二轮扫描新增）
+
+### M11. `SemaphoreLimiter.Available()` 返回值语义完全相反
+- **文件**: `internal/ratelimit/semaphore.go:99-101`
+- **问题**: `len(l.sem)` 返回已获取的槽位数，但方法名 `Available` 语义应为可用槽位数。应返回 `cap(l.sem) - len(l.sem)`
+- **影响**: 调用方依赖此值做决策时会得到相反的结果
+
+### M12. `SemaphoreLimiter.Allow` 获取信号量后无法释放
+- **文件**: `internal/ratelimit/semaphore.go:58-68`
+- **问题**: `Allow` 获取槽位但 `Limiter` 接口没有 `Release` 方法，导致信号量泄漏
+- **建议**: `Allow` 应仅检查是否有可用槽位，不实际获取
+
+### M13. `Factory.Register` / `DefaultFactory` 无并发保护
+- **文件**: `internal/ratelimit/limiter.go:81-83, 106`
+- **问题**: `creators` map 在 `Register` 写入、`Create` 读取时无锁保护。运行时注册会导致 panic
+
+### M14. `Backpressure.processLoop` 单线程串行处理，`maxActive` 形同虚设
+- **文件**: `internal/ratelimit/backpressure.go:153-176`
+- **问题**: 单 goroutine 串行处理请求，`active` 永远不超过 1。`maxActive` 参数未起到限制并发的作用
+- **建议**: 使用 worker pool 模式
+
+### M15. `AdaptiveLimiter.Increase/Decrease` 替换整个 limiter 丢失状态
+- **文件**: `internal/ratelimit/backpressure.go:308-343`
+- **问题**: 每次创建新的 `TokenBucketLimiter`，旧 limiter 中等待中的请求永远等下去
+- **建议**: 使用 `SetRate` 方法修改速率
+
+### M16. `RAG.evictOldest` 使用 Go map 随机迭代，不驱逐最旧条目
+- **文件**: `internal/memory/context/rag.go:242-255`
+- **问题**: 函数名为 `evictOldest` 但 Go map 迭代顺序随机，实际驱逐任意条目
+- **建议**: 维护按时间排序的有序数据结构
+
+### M17. `RAG.Search` 在持锁状态下执行网络 I/O
+- **文件**: `internal/memory/context/rag.go:119-138`
+- **问题**: `RLock` 下调用 `r.vectorSearch.Search`（Postgres 查询），数据库慢时阻塞所有其他操作
+- **建议**: 在锁外执行数据库查询
+
+### M18. `SimpleRetrievalService.SetConfig` 无并发保护
+- **文件**: `internal/storage/postgres/services/simple_retrieval_service.go:303-305`
+- **问题**: `s.config = config` 无锁保护，与 `Search` 并发读写导致数据竞争
+
+### M19. `TaskMemory.GetSteps`/`GetResults` 返回内部切片引用
+- **文件**: `internal/memory/context/task.go:205-244`
+- **问题**: 返回内部切片允许调用者修改，与 `AddStep` 并发时产生数据竞争
+- **建议**: 返回副本
+
+### M20. `UserMemory.GetPreferences`/`GetHistory`/`GetStyleEvolution` 返回内部切片
+- **文件**: `internal/memory/context/user.go:135-213`
+- **问题**: 同 M19
+
+### M21. `ProductionMemoryManager.CreateSession` session ID 可预测且可能碰撞
+- **文件**: `internal/memory/production_manager.go:248`
+- **问题**: `fmt.Sprintf("session_%d", time.Now().UnixNano())` 在高并发下可能碰撞
+- **建议**: 使用 UUID
+
+### M22. `ProductionMemoryManager.AddMessage` 匿名用户静默降级
+- **文件**: `internal/memory/production_manager.go:321-323`
+- **问题**: 会话不在缓存中时，消息被分配给 "anonymous"，静默丢失用户关联
+- **建议**: 记录警告或返回错误
+
+---
+
+## 🟢 Minor（第二轮扫描新增）
+
+### m17. `RAG.Search` 使用冒泡排序 O(n²)
+- **文件**: `internal/memory/context/rag.go:159-165`
+- **建议**: 使用 `sort.Slice`
+
+### m18. `RAG.contains` 自定义实现，空子串返回 false（`strings.Contains` 返回 true）
+- **文件**: `internal/memory/context/rag.go:280-291`
+
+### m19. `UserMemory.Set` 覆盖现有用户不保留数据
+- **文件**: `internal/memory/context/user.go:79-99`
+
+### m20. `isPrecisionMode` 对包含 `:` 的普通文本过于激进
+- **文件**: `internal/storage/postgres/services/simple_retrieval_service.go:154`
+
+### m21. `WeightedSemaphoreLimiter` 的 `cond.Wait` 不响应 context 取消
+- **文件**: `internal/ratelimit/semaphore.go:135-163`
+
+### m22. `Cache.cleanupLoop` 当 `ttl` 极小时 `time.NewTicker(0)` 会 panic
+- **文件**: `internal/memory/context/cache.go:129`
+
+### m23. `LogTracer.WithTrace` 每次生成新 ID，不继承已有 trace ID
+- **文件**: `internal/observability/noop.go:51-53, log.go:118-121`
+
+### m24. `base.DefaultConfig` 未设置 ID 字段
+- **文件**: `internal/agents/base/agent.go:86-93`
+
+### m25. `AgentEvent` 缺少 `EventError` 类型
+- **文件**: `internal/agents/base/agent.go:30-39`
+
+### m26. `ProductionMemoryManager` 未验证 `embeddingClient` 是否为 nil
+- **文件**: `internal/memory/production_manager.go`
+
+### m27. `NewTokenBucketLimiter`/`NewSlidingWindowLimiter`/`NewSemaphoreLimiter` 未校验 nil config
+- **文件**: `internal/ratelimit/token_bucket.go:21, sliding_window.go:21, semaphore.go:19`

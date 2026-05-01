@@ -2,6 +2,7 @@ package base
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"goagent/internal/core/models"
@@ -24,6 +25,8 @@ const (
 	EventAggregating
 	// EventComplete indicates the agent has completed processing.
 	EventComplete
+	// EventError indicates an error occurred during processing.
+	EventError
 )
 
 // AgentEvent represents an event emitted during agent processing.
@@ -85,6 +88,7 @@ type Config struct {
 // DefaultConfig returns default agent configuration.
 func DefaultConfig(agentType models.AgentType) *Config {
 	return &Config{
+		ID:                fmt.Sprintf("agent-%d", time.Now().UnixNano()),
 		Type:              agentType,
 		HeartbeatInterval: 30 * time.Second,
 		MaxRetries:        3,

@@ -232,11 +232,8 @@ func (e *Executor) runSteps(
 		sid := stepID
 
 		wg.Add(1)
-		// Create local errgroup for this step execution
-		stepG, stepCtx := errgroup.WithContext(ctx)
-		stepG.Go(func() error {
+		go func() {
 			defer func() {
-				// Release semaphore and notify wait group
 				<-sem
 				wg.Done()
 
@@ -252,12 +249,12 @@ func (e *Executor) runSteps(
 					}
 					select {
 					case resultChan <- result:
-					case <-stepCtx.Done():
+					case <-ctx.Done():
 					}
 				}
 			}()
 
-			result := e.executeStep(stepCtx, workflow, sid, initialInput, completed, outputStore, &mu)
+			result := e.executeStep(ctx, workflow, sid, initialInput, completed, outputStore, &mu)
 
 			mu.Lock()
 			processed[sid] = true
@@ -268,14 +265,11 @@ func (e *Executor) runSteps(
 
 			select {
 			case resultChan <- result:
-			case <-stepCtx.Done():
-				return stepCtx.Err()
+			case <-ctx.Done():
 			}
-			return nil
-		})
+		}()
 
 		// Don't wait for individual step, continue to next step
-		// The stepG.Wait() will be called when needed for deadlock detection
 	}
 
 	// Wait for all step goroutines to complete
@@ -386,13 +380,13 @@ func (e *Executor) executeStep(
 	if err != nil {
 		result.Status = StepStatusFailed
 		result.Error = err.Error()
+	} else {
+		outputStore.Set(stepID, &StepOutput{
+			StepID:    stepID,
+			Output:    output,
+			Variables: make(map[string]interface{}),
+		})
 	}
-
-	outputStore.Set(stepID, &StepOutput{
-		StepID:    stepID,
-		Output:    output,
-		Variables: make(map[string]interface{}),
-	})
 
 	return result
 }

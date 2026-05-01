@@ -51,32 +51,6 @@ func float64ToVectorString(vec []float64) string {
 	return "[" + strings.Join(strs, ",") + "]"
 }
 
-// parseVectorString converts pgvector string format to []float64.
-func parseVectorString(vecStr string) ([]float64, error) {
-	// pgvector stores vectors in text format like "[0.1,0.2,0.3,...]"
-	// or in binary format which needs special handling
-	if len(vecStr) == 0 {
-		return []float64{}, nil
-	}
-
-	// Remove brackets and split by comma
-	vecStr = strings.Trim(vecStr, "[]")
-	if vecStr == "" {
-		return []float64{}, nil
-	}
-
-	parts := strings.Split(vecStr, ",")
-	result := make([]float64, len(parts))
-	for i, part := range parts {
-		val, err := fmt.Sscanf(strings.TrimSpace(part), "%f", &result[i])
-		if err != nil || val != 1 {
-			return nil, errors.Wrap(err, "failed to parse vector component")
-		}
-	}
-
-	return result, nil
-}
-
 // Create inserts a new knowledge chunk into the database.
 // Args:
 // ctx - database operation context.
@@ -327,7 +301,7 @@ func (r *KnowledgeRepository) GetByID(ctx context.Context, id string) (*storage_
 	}
 
 	// Parse embedding string to float64 array
-	chunk.Embedding, err = parseVectorString(embeddingStr)
+	chunk.Embedding, err = postgres.ParseVectorString(embeddingStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse embedding")
 	}
@@ -488,7 +462,7 @@ func (r *KnowledgeRepository) SearchByVector(ctx context.Context, embedding []fl
 		}
 
 		// Parse embedding string to []float64
-		chunk.Embedding, err = parseVectorString(embeddingStr)
+		chunk.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			slog.Warn("Failed to parse embedding", "row", rowCount, "error", err)
 			continue
@@ -571,7 +545,7 @@ func (r *KnowledgeRepository) SearchByKeyword(ctx context.Context, query, tenant
 			continue
 		}
 
-		chunk.Embedding, err = parseVectorString(embeddingStr)
+		chunk.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to parse embedding in keyword search", "error", err)
 			continue
@@ -640,7 +614,7 @@ func (r *KnowledgeRepository) ListByDocument(ctx context.Context, documentID, te
 			continue
 		}
 
-		chunk.Embedding, err = parseVectorString(embeddingStr)
+		chunk.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to parse embedding in ListByDocument", "error", err)
 			continue
@@ -719,7 +693,7 @@ func (r *KnowledgeRepository) SearchBySubstring(ctx context.Context, query, tena
 			continue
 		}
 
-		chunk.Embedding, err = parseVectorString(embeddingStr)
+		chunk.Embedding, err = postgres.ParseVectorString(embeddingStr)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to parse embedding in SearchBySubstring", "error", err)
 			continue

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+	"sync"
 
 	"goagent/internal/errors"
 	"goagent/internal/storage/postgres/embedding"
@@ -35,6 +36,7 @@ type SimpleSearchResult struct {
 // - No query rewrites
 // - Simple and effective for single knowledge base scenarios
 type SimpleRetrievalService struct {
+	mu        sync.RWMutex
 	repo      *repositories.KnowledgeRepository
 	embedding *embedding.EmbeddingClient
 	config    *SimpleRetrievalConfig
@@ -301,10 +303,14 @@ func (s *SimpleRetrievalService) searchVector(ctx context.Context, tenantID, que
 
 // SetConfig updates the retrieval configuration
 func (s *SimpleRetrievalService) SetConfig(config *SimpleRetrievalConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.config = config
 }
 
 // GetConfig returns the current configuration
 func (s *SimpleRetrievalService) GetConfig() *SimpleRetrievalConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.config
 }

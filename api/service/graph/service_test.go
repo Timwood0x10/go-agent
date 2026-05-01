@@ -111,12 +111,14 @@ func TestExecuteWithTimeout(t *testing.T) {
 	}
 
 	response, err := service.Execute(context.Background(), g, request)
-	if err != nil {
-		t.Fatalf("execution failed: %v", err)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
 	}
-
+	if response == nil {
+		t.Fatal("expected non-nil response")
+	}
 	if response.Error == "" {
-		t.Error("expected timeout error")
+		t.Error("expected error message in response")
 	}
 }
 

@@ -49,6 +49,7 @@ func (d *DLQ) Add(msg *AHPMessage, err error, reason string) {
 
 	// Remove oldest if full
 	if len(d.messages) >= d.maxSize {
+		d.messages[0] = nil
 		d.messages = d.messages[1:]
 	}
 
