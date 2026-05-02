@@ -1,5 +1,17 @@
 # GoAgent
 
+```shell
+
+   >===>                            >>                                       >=>   
+ >>    >=>                         >>=>                                      >=>   
+>=>            >=>                >> >=>        >=>      >==>    >==>>==>  >=>>==> 
+>=>          >=>  >=>  >====>    >=>  >=>     >=>  >=> >>   >=>   >=>  >=>   >=>   
+>=>   >===> >=>    >=>          >=====>>=>   >=>   >=> >>===>>=>  >=>  >=>   >=>   
+ >=>    >>   >=>  >=>          >=>      >=>   >=>  >=> >>         >=>  >=>   >=>   
+  >====>       >=>            >=>        >=>      >=>   >====>   >==>  >=>    >=>  
+                                               >=>                                 
+```
+
 GoAgent is a generic multi-agent framework implemented in Go, supporting multi-agent collaboration, memory management, and tool invocation.
 
 ## Architecture Diagram
